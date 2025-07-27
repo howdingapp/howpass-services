@@ -3,6 +3,10 @@ import fs from 'fs-extra';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
+export const VIDEO_BUCKET= "vidéos";
+export const IMAGE_BUCKET= "images";
+export const SOUND_BUCKET= "sounds";
+
 export interface SupabaseConfig {
   url: string;
   serviceKey: string;
@@ -11,12 +15,10 @@ export interface SupabaseConfig {
 
 export class SupabaseService {
   private supabase;
-  private bucketName: string;
 
   constructor() {
     const url = process.env['SUPABASE_URL'];
     const serviceKey = process.env['SUPABASE_SERVICE_KEY'];
-    this.bucketName = process.env['SUPABASE_BUCKET_NAME'] || 'videos';
 
     if (!url || !serviceKey) {
       throw new Error('Configuration Supabase manquante: SUPABASE_URL et SUPABASE_SERVICE_KEY requis');
@@ -25,17 +27,14 @@ export class SupabaseService {
     this.supabase = createClient(url, serviceKey);
   }
 
-  async download(publicUrl: string, localPath: string): Promise<void> {
+  async download(bucketName: string, bucketPath: string, localPath: string): Promise<void> {
     try {
-      // Extraire le chemin du fichier depuis l'URL publique
-      const urlParts = publicUrl.split('/');
-      const filePath = urlParts.slice(-2).join('/'); // Prend les 2 derniers segments
-
-      console.log(`📥 Téléchargement de ${filePath} vers ${localPath}`);
+ 
+      console.log(`📥 Téléchargement de ${bucketName}/${bucketPath} vers ${localPath}`);
 
       const { data, error } = await this.supabase.storage
-        .from(this.bucketName)
-        .download(filePath);
+        .from(bucketName)
+        .download(bucketPath);
 
       if (error) {
         throw new Error(`Erreur lors du téléchargement: ${error.message}`);
@@ -62,16 +61,16 @@ export class SupabaseService {
     }
   }
 
-  async uploadVideo(localPath: string, fileName: string): Promise<string> {
+  async upload(bucketName: string, localPath: string, fileName: string): Promise<string> {
     try {
-      console.log(`📤 Upload de ${localPath} vers ${fileName}`);
+      console.log(`📤 Upload de ${localPath} vers ${fileName} dans ${bucketName}`);
 
       // Lire le fichier local
       const fileBuffer = await fs.readFile(localPath);
 
       // Upload vers Supabase
       const { data, error } = await this.supabase.storage
-        .from(this.bucketName)
+        .from(bucketName)
         .upload(fileName, fileBuffer, {
           contentType: 'video/mp4',
           upsert: true
@@ -87,7 +86,7 @@ export class SupabaseService {
 
       // Générer l'URL publique
       const { data: publicUrlData } = this.supabase.storage
-        .from(this.bucketName)
+        .from(bucketName)
         .getPublicUrl(data.path);
 
       const publicUrl = publicUrlData.publicUrl;
@@ -102,12 +101,12 @@ export class SupabaseService {
     }
   }
 
-  async deleteVideo(fileName: string): Promise<void> {
+  async delete(bucketName: string, fileName: string): Promise<void> {
     try {
       console.log(`🗑️ Suppression de ${fileName}`);
 
       const { error } = await this.supabase.storage
-        .from(this.bucketName)
+        .from(bucketName)
         .remove([fileName]);
 
       if (error) {
@@ -128,10 +127,9 @@ export class SupabaseService {
     return `${prefix}_${timestamp}_${randomId}.mp4`;
   }
 
-  getPublicUrl(filePath: string, bucketName?: string): string {
-    const targetBucket = bucketName || this.bucketName;
+  getPublicUrl(filePath: string, bucketName: string): string {
     const { data } = this.supabase.storage
-      .from(targetBucket)
+      .from(bucketName)
       .getPublicUrl(filePath);
     
     return data.publicUrl;

@@ -2,13 +2,13 @@ import ffmpeg from 'fluent-ffmpeg';
 import fs from 'fs-extra';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { SupabaseService } from './SupabaseService';
+import { SupabaseService, VIDEO_BUCKET, SOUND_BUCKET } from './SupabaseService';
 
 export interface MergeRequest {
-  prefixVideo1Url: string; // Première vidéo préfixe (qr_code_scene1_part1.mp4)
-  prefixVideo2Url: string; // Deuxième vidéo préfixe (qr_code_scene1_part2.mp4)
+  prefixVideo1BucketPath: string; // Première vidéo préfixe (qr_code_scene1_part1.mp4)
+  prefixVideo2BucketPath: string; // Deuxième vidéo préfixe (qr_code_scene1_part2.mp4)
   postfixVideoUrl: string; // Vidéo fournie par le webhook
-  audioUrl?: string; // Son optionnel (ytmp3free.cc_playa-blanca-dream-youtubemp3free.org.mp3)
+  audioBucketPath?: string; // Son optionnel (ytmp3free.cc_playa-blanca-dream-youtubemp3free.org.mp3)
   quality?: 'low' | 'medium' | 'high';
   resolution?: string;
   fps?: number;
@@ -42,7 +42,7 @@ export interface JobStatus {
 export interface FFmpegOptions {
   prefixVideo1Path: string; // Chemin vers la première vidéo préfixe
   prefixVideo2Path: string; // Chemin vers la deuxième vidéo préfixe
-  postfixVideoPath: string; // Chemin vers la vidéo postfixe
+  postfixPath: string; // Chemin vers la vidéo postfixe
   audioPath?: string; // Chemin vers le fichier audio
   outputPath: string;
   quality?: string | undefined;
@@ -135,18 +135,18 @@ export class VideoService {
 
     try {
       console.log(`🎬 Début du job de fusion ${jobId}`);
-      console.log(`📹 Prefix Video 1: ${request.prefixVideo1Url}`);
-      console.log(`📹 Prefix Video 2: ${request.prefixVideo2Url}`);
+      console.log(`📹 Prefix Video 1: ${request.prefixVideo1BucketPath}`);
+      console.log(`📹 Prefix Video 2: ${request.prefixVideo2BucketPath}`);
       console.log(`📹 Postfix: ${request.postfixVideoUrl}`);
-      if (request.audioUrl) {
-        console.log(`🎵 Audio: ${request.audioUrl}`);
+      if (request.audioBucketPath) {
+        console.log(`🎵 Audio: ${request.audioBucketPath}`);
       }
 
       // Générer les chemins locaux
       const prefixVideo1Path = path.join(this.tempPath, `prefix1_${jobId}.mp4`);
       const prefixVideo2Path = path.join(this.tempPath, `prefix2_${jobId}.mp4`);
       const postfixPath = path.join(this.tempPath, `postfix_${jobId}.mp4`);
-      const audioPath = request.audioUrl ? path.join(this.tempPath, `audio_${jobId}.mp3`) : undefined;
+      const audioPath = request.audioBucketPath ? path.join(this.tempPath, `audio_${jobId}.mp3`) : undefined;
       const outputPath = path.join(this.tempPath, `merged_${jobId}.mp4`);
 
       // Mettre à jour le statut
@@ -155,24 +155,28 @@ export class VideoService {
       job.updatedAt = new Date();
 
       // Télécharger l'audio si fourni
-      if (request.audioUrl && audioPath) {
+      if (request.audioBucketPath && audioPath) {
         console.log('🎵 Téléchargement de l\'audio...');
-        await this.supabaseService.download(request.audioUrl, audioPath);
+        await this.supabaseService.download(SOUND_BUCKET, request.audioBucketPath, audioPath);
         job.progress = 50;
         job.updatedAt = new Date();
       }
 
       // Télécharger les vidéos depuis Supabase
       console.log('📥 Téléchargement des vidéos...');
-      await this.supabaseService.download(request.prefixVideo1Url, prefixVideo1Path);
+      await this.supabaseService.download(VIDEO_BUCKET, request.prefixVideo1BucketPath, prefixVideo1Path);
       job.progress = 20;
       job.updatedAt = new Date();
 
-      await this.supabaseService.download(request.prefixVideo2Url, prefixVideo2Path);
+      await this.supabaseService.download(VIDEO_BUCKET, request.prefixVideo2BucketPath, prefixVideo2Path);
       job.progress = 30;
       job.updatedAt = new Date();
 
-      await this.supabaseService.download(request.postfixVideoUrl, postfixPath);
+      // Extraire le chemin du fichier depuis l'URL publique
+      const urlParts = request.postfixVideoUrl.split('/');
+      const filePath = urlParts.slice(-2).join('/'); // Prend les 2 derniers segments
+      
+      await this.supabaseService.download(VIDEO_BUCKET, filePath, postfixPath);
       job.progress = 40;
       job.updatedAt = new Date();
 
@@ -182,7 +186,7 @@ export class VideoService {
       const ffmpegOptions: FFmpegOptions = {
         prefixVideo1Path,
         prefixVideo2Path,
-        postfixVideoPath: postfixPath,
+        postfixPath,
         outputPath,
         quality: request.quality || undefined,
         resolution: request.resolution || undefined,
@@ -212,7 +216,7 @@ export class VideoService {
       // Upload du résultat vers Supabase
       console.log('📤 Upload du résultat...');
       const fileName = this.supabaseService.generateFileName('merged');
-      const outputUrl = await this.supabaseService.uploadVideo(outputPath, fileName);
+      const outputUrl = await this.supabaseService.upload(VIDEO_BUCKET, outputPath, fileName);
       job.progress = 95;
       job.updatedAt = new Date();
 
@@ -262,7 +266,7 @@ export class VideoService {
       // Ajouter les fichiers d'entrée dans l'ordre
       command = command.input(options.prefixVideo1Path); // [0]
       command = command.input(options.prefixVideo2Path); // [1]
-      command = command.input(options.postfixVideoPath); // [2]
+      command = command.input(options.postfixPath); // [2]
       
       // Ajouter l'audio si disponible
       if (options.audioPath) {
@@ -374,19 +378,6 @@ export class VideoService {
   }
 
   async cleanupJob(jobId: string): Promise<void> {
-    const job = this.jobs.get(jobId);
-    if (job?.outputUrl) {
-      try {
-        // Extraire le nom du fichier de l'URL
-        const urlParts = job.outputUrl.split('/');
-        const fileName = urlParts[urlParts.length - 1];
-        if (fileName) {
-          await this.supabaseService.deleteVideo(fileName);
-        }
-      } catch (error) {
-        console.error(`Erreur lors du nettoyage du fichier Supabase:`, error);
-      }
-    }
     this.jobs.delete(jobId);
   }
 
@@ -431,7 +422,7 @@ export class VideoService {
       }
 
       // Uploader le fichier vers Supabase
-      await this.supabaseService.uploadVideo(localFilePath, destinationPath);
+      await this.supabaseService.upload(VIDEO_BUCKET,localFilePath, destinationPath);
 
       console.log('✅ Upload vers Supabase terminé:', { destinationPath });
 
