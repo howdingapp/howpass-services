@@ -154,27 +154,29 @@ export class VideoService {
       job.progress = 10;
       job.updatedAt = new Date();
 
-      // Télécharger les vidéos depuis Supabase
-      console.log('📥 Téléchargement des vidéos...');
-      await this.supabaseService.downloadVideo(request.prefixVideo1Url, prefixVideo1Path);
-      job.progress = 20;
-      job.updatedAt = new Date();
-
-      await this.supabaseService.downloadVideo(request.prefixVideo2Url, prefixVideo2Path);
-      job.progress = 30;
-      job.updatedAt = new Date();
-
-      await this.supabaseService.downloadVideo(request.postfixVideoUrl, postfixPath);
-      job.progress = 40;
-      job.updatedAt = new Date();
-
       // Télécharger l'audio si fourni
       if (request.audioUrl && audioPath) {
         console.log('🎵 Téléchargement de l\'audio...');
-        await this.supabaseService.downloadVideo(request.audioUrl, audioPath);
+        await this.supabaseService.download(request.audioUrl, audioPath);
         job.progress = 50;
         job.updatedAt = new Date();
       }
+
+      // Télécharger les vidéos depuis Supabase
+      console.log('📥 Téléchargement des vidéos...');
+      await this.supabaseService.download(request.prefixVideo1Url, prefixVideo1Path);
+      job.progress = 20;
+      job.updatedAt = new Date();
+
+      await this.supabaseService.download(request.prefixVideo2Url, prefixVideo2Path);
+      job.progress = 30;
+      job.updatedAt = new Date();
+
+      await this.supabaseService.download(request.postfixVideoUrl, postfixPath);
+      job.progress = 40;
+      job.updatedAt = new Date();
+
+
 
       // Préparer les options FFmpeg
       const ffmpegOptions: FFmpegOptions = {

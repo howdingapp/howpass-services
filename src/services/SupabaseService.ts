@@ -25,7 +25,7 @@ export class SupabaseService {
     this.supabase = createClient(url, serviceKey);
   }
 
-  async downloadVideo(publicUrl: string, localPath: string): Promise<void> {
+  async download(publicUrl: string, localPath: string): Promise<void> {
     try {
       // Extraire le chemin du fichier depuis l'URL publique
       const urlParts = publicUrl.split('/');
@@ -39,6 +39,7 @@ export class SupabaseService {
 
       if (error) {
         throw new Error(`Erreur lors du téléchargement: ${error.message}`);
+        console.log(error)
       }
 
       if (!data) {
