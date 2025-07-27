@@ -26,8 +26,12 @@ jobs:
         service_account_key: ${{ secrets.GCP_SA_KEY }}
         export_default_credentials: true
 
-    - name: Configure Docker for GCR
-      run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+    - name: Authenticate Docker to Artifact Registry
+      run: |
+        echo "${{ secrets.GCP_SA_KEY }}" > ${HOME}/gcp-key.json
+        gcloud auth activate-service-account --key-file=${HOME}/gcp-key.json
+        gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+        gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 
     - name: Build and push Docker image
       run: |
@@ -43,7 +47,7 @@ jobs:
         image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
         region: ${{ env.REGION }}
         flags: |
-          --allow-unauthenticated
+          --no-allow-unauthenticated
           --memory=2Gi
           --cpu=2
           --timeout=900
@@ -61,4 +65,4 @@ jobs:
       run: |
         gcloud run services describe ${{ env.SERVICE_NAME }} \
           --region=${{ env.REGION }} \
-          --format='value(status.url)' 
+          --format='value(status.url)'
