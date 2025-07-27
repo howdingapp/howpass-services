@@ -48,7 +48,7 @@ jobs:
         image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
         region: ${{ env.REGION }}
         flags: |
-          --no-allow-unauthenticated
+          --allow-unauthenticated
           --memory=2Gi
           --cpu=2
           --timeout=900
