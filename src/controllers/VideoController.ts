@@ -174,7 +174,7 @@ export class VideoController {
     }
   }
 
-  async getHealth(req: Request, res: Response): Promise<void> {
+  async getHealth(_req: Request, res: Response): Promise<void> {
     res.json({
       success: true,
       message: 'Service vidéo opérationnel',
