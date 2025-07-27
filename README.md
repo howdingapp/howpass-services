@@ -38,7 +38,23 @@ gcloud config set project PROJECT_ID
 # Active les APIs nécessaires
 gcloud services enable run.googleapis.com
 gcloud services enable artifactregistry.googleapis.com
+
+# Vérifier l'existence du repo
+gcloud auth login
+gcloud artifacts repositories list --location=europe-west1
+
+# Créer le repo si besoin
+gcloud artifacts repositories create howpass-services \
+  --repository-format=docker \
+  --location=europe-west1 \
+  --description="Dépôt Docker pour Cloud Run"
+
 ```
+
+
+gcloud artifacts repositories create howpass-services \
+  --repository-format=docker \
+  --location=europe-west1
 
 ### Prérequis
 
