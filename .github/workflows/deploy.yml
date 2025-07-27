@@ -8,8 +8,8 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: europe-west1
-  SERVICE_NAME: howpass-service
-  IMAGE_NAME: gcr.io/${{ secrets.GCP_PROJECT_ID }}/howpass-service
+  SERVICE_NAME: howpass-services
+  IMAGE_NAME: gcr.io/${{ secrets.GCP_PROJECT_ID }}/howpass-services
 
 jobs:
   deploy:
