@@ -209,6 +209,8 @@ gcloud run services update howpass-video-service \
   --set-env-vars NODE_ENV=production,MAX_FILE_SIZE=100MB
 ```
 
+Se rendre sur GCP pour récupérer un clé associée à un compte de service et valoriser dans l'environnement des gitactions (GCP_SA_KEY)
+
 ## 📊 Utilisation
 
 ### Exemple avec cURL
