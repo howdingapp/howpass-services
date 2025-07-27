@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { VideoService, MergeRequest } from '../services/VideoService';
+import { SupabaseService } from '../services/SupabaseService';
 
 interface DatabaseWebhookPayload {
   type: string;
@@ -10,9 +11,11 @@ interface DatabaseWebhookPayload {
 
 export class VideoController {
   private videoService: VideoService;
+  private supabaseService: SupabaseService;
 
   constructor() {
     this.videoService = new VideoService();
+    this.supabaseService = new SupabaseService();
   }
 
   async handleDatabaseWebhook(req: Request, res: Response): Promise<void> {
@@ -57,16 +60,10 @@ export class VideoController {
         return;
       }
 
-      // Récupérer la vidéo prefix depuis les variables d'environnement
-      const prefixVideoUrl = process.env['PREFIX_VIDEO_URL'];
-      if (!prefixVideoUrl) {
-        console.error('❌ Variable d\'environnement PREFIX_VIDEO_URL non définie');
-        res.status(500).json({
-          success: false,
-          error: 'Configuration manquante: PREFIX_VIDEO_URL'
-        });
-        return;
-      }
+      // Obtenir les URLs publiques des vidéos préfixes et de l'audio via le service Supabase
+      const prefixVideo1Url = this.supabaseService.getPublicUrl('qr_codes/qr_code_scene1_part1.mp4', 'vidéos');
+      const prefixVideo2Url = this.supabaseService.getPublicUrl('qr_codes/qr_code_scene1_part2.mp4', 'vidéos');
+      const audioUrl = this.supabaseService.getPublicUrl('ytmp3free.cc_playa-blanca-dream-youtubemp3free.org.mp3', 'sounds');
 
       // Construire l'URL de la vidéo postfix depuis Supabase
       const postfixVideoUrl = record.presentation_video_public_url;
@@ -74,13 +71,17 @@ export class VideoController {
       console.log('🎬 Préparation de la fusion:', {
         table,
         recordId: record.id,
-        prefixVideoUrl,
-        postfixVideoUrl
+        prefixVideo1Url,
+        prefixVideo2Url,
+        postfixVideoUrl,
+        audioUrl: audioUrl || 'Aucun audio'
       });
 
       const mergeRequest: MergeRequest = {
-        prefixVideoUrl,
+        prefixVideo1Url,
+        prefixVideo2Url,
         postfixVideoUrl,
+        audioUrl,
         quality: 'medium', // Qualité par défaut
         resolution: '1920x1080', // Résolution par défaut
         fps: 30, // FPS par défaut

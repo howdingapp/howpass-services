@@ -49,8 +49,9 @@ gcloud artifacts repositories create howpass-services \
   --location=europe-west1 \
   --description="Dépôt Docker pour Cloud Run"
 
-```
 
+```
+Autoriser l'accès public du service sur 
 
 gcloud artifacts repositories create howpass-services \
   --repository-format=docker \

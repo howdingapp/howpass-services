@@ -5,8 +5,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { SupabaseService } from './SupabaseService';
 
 export interface MergeRequest {
-  prefixVideoUrl: string;
-  postfixVideoUrl: string;
+  prefixVideo1Url: string; // Première vidéo préfixe (qr_code_scene1_part1.mp4)
+  prefixVideo2Url: string; // Deuxième vidéo préfixe (qr_code_scene1_part2.mp4)
+  postfixVideoUrl: string; // Vidéo fournie par le webhook
+  audioUrl?: string; // Son optionnel (ytmp3free.cc_playa-blanca-dream-youtubemp3free.org.mp3)
   quality?: 'low' | 'medium' | 'high';
   resolution?: string;
   fps?: number;
@@ -38,8 +40,10 @@ export interface JobStatus {
 }
 
 export interface FFmpegOptions {
-  prefixPath: string;
-  postfixPath: string;
+  prefixVideo1Path: string; // Chemin vers la première vidéo préfixe
+  prefixVideo2Path: string; // Chemin vers la deuxième vidéo préfixe
+  postfixVideoPath: string; // Chemin vers la vidéo postfixe
+  audioPath?: string; // Chemin vers le fichier audio
   outputPath: string;
   quality?: string | undefined;
   resolution?: string | undefined;
@@ -131,12 +135,18 @@ export class VideoService {
 
     try {
       console.log(`🎬 Début du job de fusion ${jobId}`);
-      console.log(`📹 Prefix: ${request.prefixVideoUrl}`);
+      console.log(`📹 Prefix Video 1: ${request.prefixVideo1Url}`);
+      console.log(`📹 Prefix Video 2: ${request.prefixVideo2Url}`);
       console.log(`📹 Postfix: ${request.postfixVideoUrl}`);
+      if (request.audioUrl) {
+        console.log(`🎵 Audio: ${request.audioUrl}`);
+      }
 
       // Générer les chemins locaux
-      const prefixPath = path.join(this.tempPath, `prefix_${jobId}.mp4`);
+      const prefixVideo1Path = path.join(this.tempPath, `prefix1_${jobId}.mp4`);
+      const prefixVideo2Path = path.join(this.tempPath, `prefix2_${jobId}.mp4`);
       const postfixPath = path.join(this.tempPath, `postfix_${jobId}.mp4`);
+      const audioPath = request.audioUrl ? path.join(this.tempPath, `audio_${jobId}.mp3`) : undefined;
       const outputPath = path.join(this.tempPath, `merged_${jobId}.mp4`);
 
       // Mettre à jour le statut
@@ -146,18 +156,31 @@ export class VideoService {
 
       // Télécharger les vidéos depuis Supabase
       console.log('📥 Téléchargement des vidéos...');
-      await this.supabaseService.downloadVideo(request.prefixVideoUrl, prefixPath);
+      await this.supabaseService.downloadVideo(request.prefixVideo1Url, prefixVideo1Path);
+      job.progress = 20;
+      job.updatedAt = new Date();
+
+      await this.supabaseService.downloadVideo(request.prefixVideo2Url, prefixVideo2Path);
       job.progress = 30;
       job.updatedAt = new Date();
 
       await this.supabaseService.downloadVideo(request.postfixVideoUrl, postfixPath);
-      job.progress = 50;
+      job.progress = 40;
       job.updatedAt = new Date();
+
+      // Télécharger l'audio si fourni
+      if (request.audioUrl && audioPath) {
+        console.log('🎵 Téléchargement de l\'audio...');
+        await this.supabaseService.downloadVideo(request.audioUrl, audioPath);
+        job.progress = 50;
+        job.updatedAt = new Date();
+      }
 
       // Préparer les options FFmpeg
       const ffmpegOptions: FFmpegOptions = {
-        prefixPath,
-        postfixPath,
+        prefixVideo1Path,
+        prefixVideo2Path,
+        postfixVideoPath: postfixPath,
         outputPath,
         quality: request.quality || undefined,
         resolution: request.resolution || undefined,
@@ -167,6 +190,11 @@ export class VideoService {
         threads: parseInt(process.env['FFMPEG_THREADS'] || '4'),
         timeout: parseInt(process.env['FFMPEG_TIMEOUT'] || '300000')
       };
+
+      // Ajouter l'audio si disponible
+      if (audioPath) {
+        ffmpegOptions.audioPath = audioPath;
+      }
 
       // Exécuter la fusion
       console.log('🎬 Fusion des vidéos...');
@@ -187,7 +215,11 @@ export class VideoService {
       job.updatedAt = new Date();
 
       // Nettoyer les fichiers temporaires
-      await this.cleanupTempFiles([prefixPath, postfixPath, outputPath]);
+      const tempFiles = [prefixVideo1Path, prefixVideo2Path, postfixPath, outputPath];
+      if (audioPath) {
+        tempFiles.push(audioPath);
+      }
+      await this.cleanupTempFiles(tempFiles);
 
       // Mettre à jour le job
       job.status = 'completed';
@@ -211,13 +243,6 @@ export class VideoService {
 
       console.error(`❌ Erreur lors de la fusion:`, error);
 
-      // Nettoyer les fichiers temporaires en cas d'erreur
-      await this.cleanupTempFiles([
-        path.join(this.tempPath, `prefix_${jobId}.mp4`),
-        path.join(this.tempPath, `postfix_${jobId}.mp4`),
-        path.join(this.tempPath, `merged_${jobId}.mp4`)
-      ]);
-
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Erreur inconnue',
@@ -232,14 +257,38 @@ export class VideoService {
 
       let command = ffmpeg();
 
-      // Ajouter les fichiers d'entrée
-      command = command.input(options.prefixPath);
-      command = command.input(options.postfixPath);
+      // Ajouter les fichiers d'entrée dans l'ordre
+      command = command.input(options.prefixVideo1Path); // [0]
+      command = command.input(options.prefixVideo2Path); // [1]
+      command = command.input(options.postfixVideoPath); // [2]
+      
+      // Ajouter l'audio si disponible
+      if (options.audioPath) {
+        command = command.input(options.audioPath); // [3]
+      }
 
-      // Configurer la sortie avec concat
+      // Construire le filtre complexe selon la présence d'audio
+      let filterComplex: string;
+      
+      if (options.audioPath) {
+        // Avec audio : concaténer les 3 vidéos, puis ajouter l'audio sur prefix2+postfix
+        filterComplex = [
+          // Concaténer les 3 vidéos
+          '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[concatv][concata]',
+          // Ajouter l'audio sur la partie prefix2+postfix (à partir de la durée de prefix1)
+          '[concatv][concata][3:a]amix=inputs=2:duration=longest[outa]',
+          // La vidéo reste inchangée
+          '[concatv]copy[outv]'
+        ].join(';');
+      } else {
+        // Sans audio : simplement concaténer les 3 vidéos
+        filterComplex = '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]';
+      }
+
+      // Configurer la sortie avec le filtre complexe
       command
         .outputOptions([
-          '-filter_complex', '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]',
+          '-filter_complex', filterComplex,
           '-map', '[outv]',
           '-map', '[outa]'
         ])
@@ -306,14 +355,14 @@ export class VideoService {
           resolve();
         })
         .on('error', (err: any) => {
-          console.error('❌ Erreur FFmpeg:', err.message);
+          console.error('❌ Erreur FFmpeg:', err);
           reject(new Error(`Erreur FFmpeg: ${err.message}`));
         })
-        .on('stderr', (stderrLine: any) => {
-          console.log('FFmpeg stderr:', stderrLine);
+        .on('stderr', (stderrLine: string) => {
+          console.log('🔧 FFmpeg:', stderrLine);
         });
 
-      // Démarrer la commande
+      // Lancer la commande
       command.run();
     });
   }

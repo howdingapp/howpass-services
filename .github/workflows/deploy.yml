@@ -61,7 +61,6 @@ jobs:
           --set-env-vars=FFMPEG_TIMEOUT=300000
           --set-env-vars=FFMPEG_THREADS=4
           --set-env-vars=CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
-          --set-env-vars=PREFIX_VIDEO_URL=${{ secrets.PREFIX_VIDEO_URL }}
 
     - name: Show service URL
       run: |

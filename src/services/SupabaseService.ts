@@ -122,9 +122,18 @@ export class SupabaseService {
   }
 
   generateFileName(prefix: string = 'merged'): string {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const uniqueId = uuidv4().substring(0, 8);
-    return `${prefix}_${timestamp}_${uniqueId}.mp4`;
+    const timestamp = Date.now();
+    const randomId = uuidv4().substring(0, 8);
+    return `${prefix}_${timestamp}_${randomId}.mp4`;
+  }
+
+  getPublicUrl(filePath: string, bucketName?: string): string {
+    const targetBucket = bucketName || this.bucketName;
+    const { data } = this.supabase.storage
+      .from(targetBucket)
+      .getPublicUrl(filePath);
+    
+    return data.publicUrl;
   }
 
   async cleanupLocalFile(filePath: string): Promise<void> {
