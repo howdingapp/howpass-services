@@ -31,7 +31,6 @@ jobs:
 
     - name: Build and push Docker image
       run: |
-        cd howpass-services
         docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
         docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
         docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
