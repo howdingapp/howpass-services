@@ -369,4 +369,24 @@ export class VideoService {
       console.error('Erreur lors du nettoyage des fichiers temporaires:', error);
     }
   }
+
+  async uploadToSupabase(localFilePath: string, bucketName: string, destinationPath: string): Promise<void> {
+    try {
+      console.log('📤 Début de l\'upload vers Supabase:', { localFilePath, bucketName, destinationPath });
+
+      // Vérifier que le fichier local existe
+      if (!await fs.pathExists(localFilePath)) {
+        throw new Error(`Fichier local non trouvé: ${localFilePath}`);
+      }
+
+      // Uploader le fichier vers Supabase
+      await this.supabaseService.uploadVideo(localFilePath, destinationPath);
+
+      console.log('✅ Upload vers Supabase terminé:', { destinationPath });
+
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'upload vers Supabase:', error);
+      throw error;
+    }
+  }
 } 

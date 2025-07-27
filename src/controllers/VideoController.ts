@@ -91,43 +91,19 @@ export class VideoController {
         }
       };
 
-      const result = await this.videoService.mergeVideos(mergeRequest);
-
-      if (result.success) {
-        console.log('✅ Fusion démarrée avec succès pour:', {
+      // Retourner immédiatement pour indiquer que le webhook est accepté
+      res.status(200).json({
+        success: true,
+        message: 'Webhook accepté, fusion en cours',
+        metadata: {
           table,
           recordId: record.id,
-          jobId: result.jobId
-        });
+          operation: type
+        }
+      });
 
-        res.json({
-          success: true,
-          jobId: result.jobId,
-          message: 'Fusion démarrée avec succès',
-          metadata: {
-            table,
-            recordId: record.id,
-            operation: type
-          }
-        });
-      } else {
-        console.error('❌ Échec de la fusion pour:', {
-          table,
-          recordId: record.id,
-          error: result.error
-        });
-
-        res.status(500).json({
-          success: false,
-          error: result.error,
-          jobId: result.jobId,
-          metadata: {
-            table,
-            recordId: record.id,
-            operation: type
-          }
-        });
-      }
+      // Lancer le merge en arrière-plan
+      this.processMergeInBackground(mergeRequest, table, record.id);
 
     } catch (error) {
       console.error('❌ Erreur lors du traitement du webhook:', error);
@@ -135,6 +111,39 @@ export class VideoController {
         success: false,
         error: error instanceof Error ? error.message : 'Erreur interne du serveur'
       });
+    }
+  }
+
+  private async processMergeInBackground(mergeRequest: MergeRequest, table: string, recordId: string | number): Promise<void> {
+    try {
+      console.log('🔄 Démarrage du merge en arrière-plan pour:', { table, recordId });
+
+      const result = await this.videoService.mergeVideos(mergeRequest);
+
+      if (result.success && result.outputUrl) {
+        console.log('✅ Merge terminé avec succès pour:', { table, recordId, jobId: result.jobId });
+
+        // Construire le chemin de destination dans le bucket
+        const bucketName = process.env['SUPABASE_BUCKET_NAME'];
+        if (!bucketName) {
+          console.error('❌ Variable d\'environnement SUPABASE_BUCKET_NAME non définie');
+          return;
+        }
+
+        const destinationPath = `${table}/${recordId}.mp4`;
+        console.log('📤 Upload vers Supabase:', { bucketName, destinationPath });
+
+        // Uploader le fichier fusionné vers Supabase
+        await this.videoService.uploadToSupabase(result.outputUrl, bucketName, destinationPath);
+
+        console.log('✅ Upload vers Supabase terminé pour:', { table, recordId, destinationPath });
+
+      } else {
+        console.error('❌ Échec du merge pour:', { table, recordId, error: result.error });
+      }
+
+    } catch (error) {
+      console.error('❌ Erreur lors du traitement en arrière-plan:', error);
     }
   }
 
