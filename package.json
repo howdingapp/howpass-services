@@ -1,7 +1,7 @@
 {
-  "name": "howpass-video-service",
+  "name": "howpass-service",
   "version": "1.0.0",
-  "description": "Service de fusion vidéo pour HowPass",
+  "description": "Services pour HowPass",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

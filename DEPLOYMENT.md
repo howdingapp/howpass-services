@@ -92,7 +92,7 @@ Le déploiement se déclenche automatiquement quand :
 
 ### Logs Cloud Run
 ```bash
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=howpass-video-service"
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=howpass-service"
 ```
 
 ### Métriques
@@ -108,12 +108,12 @@ Si nécessaire, vous pouvez déployer manuellement :
 ```bash
 # Build et push de l'image
 cd howpass-services
-docker build -t gcr.io/YOUR_PROJECT_ID/howpass-video-service .
-docker push gcr.io/YOUR_PROJECT_ID/howpass-video-service
+docker build -t gcr.io/YOUR_PROJECT_ID/howpass-service .
+docker push gcr.io/YOUR_PROJECT_ID/howpass-service
 
 # Déploiement
-gcloud run deploy howpass-video-service \
-  --image gcr.io/YOUR_PROJECT_ID/howpass-video-service \
+gcloud run deploy howpass-service \
+  --image gcr.io/YOUR_PROJECT_ID/howpass-service \
   --platform managed \
   --region europe-west1 \
   --allow-unauthenticated \
@@ -137,10 +137,10 @@ gcloud run deploy howpass-video-service \
 
 ```bash
 # Logs du service
-gcloud run services logs read howpass-video-service --region=europe-west1
+gcloud run services logs read howpass-service --region=europe-west1
 
 # Logs des builds
-gcloud builds list --filter="source.repoSource.repoName=howpass-video-service"
+gcloud builds list --filter="source.repoSource.repoName=howpass-service"
 ```
 
 ## 📝 Variables d'environnement

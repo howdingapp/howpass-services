@@ -97,7 +97,7 @@ describe('VideoController', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.status).toBe('healthy');
-      expect(response.body.service).toBe('howpass-video-service');
+      expect(response.body.service).toBe('howpass-service');
     });
   });
 

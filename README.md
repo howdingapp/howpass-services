@@ -170,12 +170,12 @@ DELETE /api/video/job/:jobId
 
 ### Build de l'image
 ```bash
-docker build -t howpass-video-service .
+docker build -t howpass-service .
 ```
 
 ### Exécution locale
 ```bash
-docker run -p 3000:3000 howpass-video-service
+docker run -p 3000:3000 howpass-service
 ```
 
 ## ☁️ Déploiement Google Cloud Run
@@ -186,14 +186,14 @@ docker run -p 3000:3000 howpass-video-service
 gcloud auth configure-docker
 
 # Build et push
-docker build -t gcr.io/PROJECT_ID/howpass-video-service .
-docker push gcr.io/PROJECT_ID/howpass-video-service
+docker build -t gcr.io/PROJECT_ID/howpass-service .
+docker push gcr.io/PROJECT_ID/howpass-service
 ```
 
 ### 2. Déploiement sur Cloud Run
 ```bash
-gcloud run deploy howpass-video-service \
-  --image gcr.io/PROJECT_ID/howpass-video-service \
+gcloud run deploy howpass-service \
+  --image gcr.io/PROJECT_ID/howpass-service \
   --platform managed \
   --region europe-west1 \
   --allow-unauthenticated \
@@ -205,7 +205,7 @@ gcloud run deploy howpass-video-service \
 
 ### 3. Configuration des variables d'environnement
 ```bash
-gcloud run services update howpass-video-service \
+gcloud run services update howpass-service \
   --set-env-vars NODE_ENV=production,MAX_FILE_SIZE=100MB
 ```
 
@@ -250,7 +250,7 @@ curl -O http://localhost:3000/api/video/download/merged_JOB_ID.mp4
 ### Logs
 ```bash
 # Logs Cloud Run
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=howpass-video-service"
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=howpass-service"
 ```
 
 ### Métriques

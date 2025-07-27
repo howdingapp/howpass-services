@@ -11,14 +11,17 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Installer les dépendances
-RUN npm install --only=production
+# Installer toutes les dépendances (incluant devDependencies pour le build)
+RUN npm install
 
 # Copier le code source
 COPY src/ ./src/
 
 # Compiler TypeScript
 RUN npm run build
+
+# Supprimer les devDependencies après le build pour optimiser l'image
+RUN npm prune --production
 
 # Créer les répertoires pour les fichiers temporaires
 RUN mkdir -p /app/temp /app/uploads /app/output

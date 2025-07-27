@@ -143,7 +143,7 @@ export class VideoController {
         success: true,
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        service: 'howpass-video-service',
+        service: 'howpass-service',
         version: '1.0.0'
       });
     } catch (error) {
