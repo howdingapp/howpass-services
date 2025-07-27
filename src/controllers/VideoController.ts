@@ -137,24 +137,6 @@ export class VideoController {
     }
   }
 
-  async getHealth(req: Request, res: Response): Promise<void> {
-    try {
-      res.json({
-        success: true,
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        service: 'howpass-service',
-        version: '1.0.0'
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        status: 'unhealthy',
-        error: error instanceof Error ? error.message : 'Erreur interne du serveur'
-      });
-    }
-  }
-
   private isValidUrl(url: string): boolean {
     try {
       new URL(url);

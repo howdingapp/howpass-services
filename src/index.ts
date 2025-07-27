@@ -36,12 +36,11 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/api/video', videoRoutes);
 
 // Route racine
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   res.json({
     message: 'HowPass Video Service API',
     version: '1.0.0',
     endpoints: {
-      health: '/api/video/health',
       merge: '/api/video/merge'
     }
   });
@@ -78,7 +77,7 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason, _promise) => {
   console.error('❌ Promesse rejetée non gérée:', reason);
   process.exit(1);
 }); 
