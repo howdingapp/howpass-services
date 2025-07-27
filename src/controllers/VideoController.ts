@@ -1,6 +1,13 @@
 import { Request, Response } from 'express';
 import { VideoService, MergeRequest } from '../services/VideoService';
 
+interface DatabaseWebhookPayload {
+  type: string;
+  table: string;
+  record: any;
+  old_record?: any;
+}
+
 export class VideoController {
   private videoService: VideoService;
 
@@ -8,92 +15,122 @@ export class VideoController {
     this.videoService = new VideoService();
   }
 
-  async mergeVideos(req: Request, res: Response): Promise<void> {
+  async handleDatabaseWebhook(req: Request, res: Response): Promise<void> {
     try {
-      const { prefixVideoUrl, postfixVideoUrl, quality, resolution, fps, audioCodec, videoCodec } = req.body;
+      const payload: DatabaseWebhookPayload = req.body;
+      const { type, table, record } = payload;
 
-      // Validation des paramètres requis
-      if (!prefixVideoUrl || !postfixVideoUrl) {
-        res.status(400).json({
-          success: false,
-          error: 'Les URLs des vidéos prefix et postfix sont requises'
+      console.log('📊 Webhook de base de données reçu:', {
+        type,
+        table,
+        recordId: record?.id,
+        hasPresentationVideo: !!record?.presentation_video_public_url
+      });
+
+      // Vérifier le type d'opération
+      if (type !== 'INSERT' && type !== 'UPDATE') {
+        console.log('⏭️ Type d\'opération ignoré:', type);
+        res.status(200).json({
+          success: true,
+          message: 'Type d\'opération ignoré'
         });
         return;
       }
 
-      // Validation des URLs
-      if (!this.isValidUrl(prefixVideoUrl) || !this.isValidUrl(postfixVideoUrl)) {
-        res.status(400).json({
-          success: false,
-          error: 'Les URLs fournies ne sont pas valides'
+      // Vérifier la table
+      if (table !== 'categories' && table !== 'practices') {
+        console.log('⏭️ Table ignorée:', table);
+        res.status(200).json({
+          success: true,
+          message: 'Table ignorée'
         });
         return;
       }
 
-      // Validation de la qualité
-      if (quality && !['low', 'medium', 'high'].includes(quality)) {
-        res.status(400).json({
-          success: false,
-          error: 'La qualité doit être "low", "medium" ou "high"'
+      // Vérifier que le record contient une vidéo de présentation
+      if (!record?.presentation_video_public_url) {
+        console.log('⏭️ Aucune vidéo de présentation trouvée dans le record');
+        res.status(200).json({
+          success: true,
+          message: 'Aucune vidéo de présentation trouvée'
         });
         return;
       }
 
-      // Validation de la résolution
-      if (resolution && !this.isValidResolution(resolution)) {
-        res.status(400).json({
+      // Récupérer la vidéo prefix depuis les variables d'environnement
+      const prefixVideoUrl = process.env['PREFIX_VIDEO_URL'];
+      if (!prefixVideoUrl) {
+        console.error('❌ Variable d\'environnement PREFIX_VIDEO_URL non définie');
+        res.status(500).json({
           success: false,
-          error: 'Format de résolution invalide. Utilisez le format "largeurxhauteur" (ex: 1920x1080)'
+          error: 'Configuration manquante: PREFIX_VIDEO_URL'
         });
         return;
       }
 
-      // Validation du FPS
-      if (fps && (typeof fps !== 'number' || fps <= 0 || fps > 120)) {
-        res.status(400).json({
-          success: false,
-          error: 'Le FPS doit être un nombre entre 1 et 120'
-        });
-        return;
-      }
+      // Construire l'URL de la vidéo postfix depuis Supabase
+      const postfixVideoUrl = record.presentation_video_public_url;
+
+      console.log('🎬 Préparation de la fusion:', {
+        table,
+        recordId: record.id,
+        prefixVideoUrl,
+        postfixVideoUrl
+      });
 
       const mergeRequest: MergeRequest = {
         prefixVideoUrl,
         postfixVideoUrl,
-        quality,
-        resolution,
-        fps,
-        audioCodec,
-        videoCodec
+        quality: 'medium', // Qualité par défaut
+        resolution: '1920x1080', // Résolution par défaut
+        fps: 30, // FPS par défaut
+        metadata: {
+          table,
+          recordId: record.id,
+          operation: type
+        }
       };
-
-      console.log('🎬 Demande de fusion reçue:', {
-        prefixVideoUrl,
-        postfixVideoUrl,
-        quality,
-        resolution,
-        fps
-      });
 
       const result = await this.videoService.mergeVideos(mergeRequest);
 
       if (result.success) {
+        console.log('✅ Fusion démarrée avec succès pour:', {
+          table,
+          recordId: record.id,
+          jobId: result.jobId
+        });
+
         res.json({
           success: true,
           jobId: result.jobId,
-          outputUrl: result.outputUrl,
-          message: 'Fusion démarrée avec succès'
+          message: 'Fusion démarrée avec succès',
+          metadata: {
+            table,
+            recordId: record.id,
+            operation: type
+          }
         });
       } else {
+        console.error('❌ Échec de la fusion pour:', {
+          table,
+          recordId: record.id,
+          error: result.error
+        });
+
         res.status(500).json({
           success: false,
           error: result.error,
-          jobId: result.jobId
+          jobId: result.jobId,
+          metadata: {
+            table,
+            recordId: record.id,
+            operation: type
+          }
         });
       }
 
     } catch (error) {
-      console.error('❌ Erreur lors de la fusion:', error);
+      console.error('❌ Erreur lors du traitement du webhook:', error);
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Erreur interne du serveur'
@@ -137,17 +174,11 @@ export class VideoController {
     }
   }
 
-  private isValidUrl(url: string): boolean {
-    try {
-      new URL(url);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private isValidResolution(resolution: string): boolean {
-    const resolutionRegex = /^\d+x\d+$/;
-    return resolutionRegex.test(resolution);
+  async getHealth(req: Request, res: Response): Promise<void> {
+    res.json({
+      success: true,
+      message: 'Service vidéo opérationnel',
+      timestamp: new Date().toISOString()
+    });
   }
 } 

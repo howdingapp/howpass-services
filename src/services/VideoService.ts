@@ -12,6 +12,12 @@ export interface MergeRequest {
   fps?: number;
   audioCodec?: string;
   videoCodec?: string;
+  metadata?: {
+    table?: string;
+    recordId?: string | number;
+    operation?: string;
+    [key: string]: any;
+  };
 }
 
 export interface MergeResponse {
