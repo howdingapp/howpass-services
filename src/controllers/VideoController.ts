@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { VideoService, MergeRequest } from '../services/VideoService';
-import { SupabaseService } from '../services/SupabaseService';
 
 interface DatabaseWebhookPayload {
   type: string;
@@ -11,11 +10,9 @@ interface DatabaseWebhookPayload {
 
 export class VideoController {
   private videoService: VideoService;
-  private supabaseService: SupabaseService;
 
   constructor() {
     this.videoService = new VideoService();
-    this.supabaseService = new SupabaseService();
   }
 
   async handleDatabaseWebhook(req: Request, res: Response): Promise<void> {
