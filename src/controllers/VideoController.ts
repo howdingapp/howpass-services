@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
-import { VideoService, MergeRequest } from '../services/VideoService';
-import { SupabaseService } from '../services/SupabaseService';
+import { MergeRequest } from '../services/VideoService';
 import { CloudRunJobsService, JobPayload } from '../services/CloudRunJobsService';
 
 interface DatabaseWebhookPayload {
@@ -11,13 +10,9 @@ interface DatabaseWebhookPayload {
 }
 
 export class VideoController {
-  private videoService: VideoService;
-  private supabaseService: SupabaseService;
   private cloudRunJobsService: CloudRunJobsService;
 
   constructor() {
-    this.videoService = new VideoService();
-    this.supabaseService = new SupabaseService();
     this.cloudRunJobsService = new CloudRunJobsService();
   }
 

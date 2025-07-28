@@ -17,7 +17,7 @@ export class CloudRunJobsService {
     this.jobName = process.env['GCP_JOB_NAME'] || 'video-processing-job';
   }
 
-  async createVideoProcessingJob(payload: JobPayload): Promise<string> {
+  async createVideoProcessingJob(_payload: JobPayload): Promise<string> {
     try {
       if (!this.projectId) {
         throw new Error('GCP_PROJECT_ID non défini');
