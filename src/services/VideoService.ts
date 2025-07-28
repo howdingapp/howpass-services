@@ -411,11 +411,14 @@ export class VideoService {
 
   private buildFilterComplex(options: FFmpegOptions): string {
     if (options.audioPath) {
-      // Avec audio : concaténer les vidéos, puis utiliser l'audio externe
-      return '[0:v][1:v][2:v]concat=n=3:v=1:a=0[outv]';
+      // Avec audio : 
+      // - Prefix1 garde son audio par défaut
+      // - Prefix2 et Postfix utilisent la musique externe
+      // - Limitation à 40 secondes
+      return '[0:v][0:a][1:v][2:v]concat=n=3:v=1:a=1[concatv][concata];[concatv][concata]trim=duration=40[trimv][trima];[3:a]adelay=10000|10000[delayaudio];[trima][delayaudio]amix=inputs=2:duration=first[outv][outa]';
     } else {
-      // Sans audio : concaténer les 3 vidéos avec leur audio
-      return '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]';
+      // Sans audio : concaténer les 3 vidéos avec leur audio et limiter à 40 secondes
+      return '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[concatv][concata];[concatv][concata]trim=duration=40[outv][outa]';
     }
   }
 
