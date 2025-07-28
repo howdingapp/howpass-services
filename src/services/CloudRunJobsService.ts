@@ -39,7 +39,20 @@ export class CloudRunJobsService {
 
       const response = await run.projects.locations.jobs.run({
         name: jobPath,
-        auth
+        auth,
+        requestBody: {
+          overrides: {
+            containerOverrides: [
+              {
+                env: [
+                  { name: 'MERGE_REQUEST', value: JSON.stringify(payload.mergeRequest) },
+                  { name: 'TABLE', value: payload.table },
+                  { name: 'RECORD_ID', value: payload.recordId.toString() }
+                ]
+              }
+            ]
+          }
+        }
       });
 
       console.log('✅ Job Cloud Run créé:', response);
