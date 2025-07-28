@@ -242,7 +242,8 @@ export class VideoService {
         audioCodec: request.audioCodec || undefined,
         videoCodec: request.videoCodec || undefined,
         threads: parseInt(process.env['FFMPEG_THREADS'] || '4'),
-        timeout: parseInt(process.env['FFMPEG_TIMEOUT'] || '300000')
+        timeout: parseInt(process.env['FFMPEG_TIMEOUT'] || '300000'),
+        metadata: request.metadata as any,
       };
 
       // Ajouter l'audio si disponible
