@@ -462,14 +462,14 @@ export class VideoService {
       console.log('🎬 Création de la vidéo intermédiaire...');
 
       const args = [
-        '-i', prefix2Path,      // vidéo 1
-        '-i', postfixPath,      // vidéo 2
-        '-i', audioPath,        // musique
+        '-i', prefix2Path,        // vidéo 1
+        '-i', postfixPath,        // vidéo 2
+        '-i', audioPath,          // musique
         '-filter_complex',
           '[0:v][1:v]concat=n=2:v=1:a=0[concatv];' +
-          '[concatv]trim=duration=30,setpts=PTS-STARTPTS[trimv];' +
+          '[concatv]tpad=stop_duration=30[extendedv];' + // étend vidéo jusqu'à 30s avec image figée
           '[2:a]atrim=duration=30,asetpts=PTS-STARTPTS[trima]',
-        '-map', '[trimv]',
+        '-map', '[extendedv]',
         '-map', '[trima]',
         '-c:v', 'libx264',
         '-c:a', 'aac',
