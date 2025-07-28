@@ -19,7 +19,7 @@ async function processVideoJob() {
 
     const mergeRequest = JSON.parse(mergeRequestStr);
 
-    console.log('📊 Paramètres du job:', mergeRequest);
+    console.log('📊 Paramètres du job:', mergeRequestStr);
 
     // Initialiser les services
     const videoService = new VideoService();
