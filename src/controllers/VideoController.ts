@@ -58,6 +58,21 @@ export class VideoController {
         return;
       }
 
+      // Vérifier si les vidéos QR code sont déjà générées
+      if (record?.qr_code_presentation_video_public_url || record?.qr_code_less_presentation_video_public_url) {
+        console.log('⏭️ Vidéos QR code déjà générées, webhook ignoré:', {
+          table,
+          recordId: record.id,
+          hasQrCodeVideo: !!record?.qr_code_presentation_video_public_url,
+          hasQrCodeLessVideo: !!record?.qr_code_less_presentation_video_public_url
+        });
+        res.status(200).json({
+          success: true,
+          message: 'Vidéos QR code déjà générées'
+        });
+        return;
+      }
+
       // Obtenir les URLs publiques des vidéos préfixes et de l'audio via le service Supabase
       const prefixVideo1BucketPath = 'qr_codes/qr_code_scene1_part1.mp4';
       const prefixVideo2BucketPath = 'qr_codes/qr_code_scene1_part2.mp4';
