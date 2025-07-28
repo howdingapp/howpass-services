@@ -467,15 +467,15 @@ export class VideoService {
         '-i', audioPath,          // musique
         '-filter_complex',
           '[0:v][1:v]concat=n=2:v=1:a=0[concatv];' +
-          '[concatv]tpad=stop_duration=30[extendedv];' + // étend vidéo jusqu'à 30s avec image figée
           '[2:a]atrim=duration=30,asetpts=PTS-STARTPTS[trima]',
-        '-map', '[extendedv]',
+        '-map', '[concatv]',
         '-map', '[trima]',
         '-c:v', 'libx264',
         '-c:a', 'aac',
         '-r', (options.fps || 25).toString(),
         '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
         '-threads', (options.threads || 4).toString(),
+        '-t', '30', // ← force durée finale à 30s
         '-y',
         outputPath
       ];
