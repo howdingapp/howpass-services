@@ -462,12 +462,15 @@ export class VideoService {
       console.log('🎬 Création de la vidéo intermédiaire...');
 
       const args = [
-        '-i', prefix2Path,
-        '-i', postfixPath,
-        '-i', audioPath,
-        '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[concatv];' + '[concatv]trim=duration=30[trimv];' + '[2:a]adelay=0|0[outa]',
+        '-i', prefix2Path,      // vidéo 1
+        '-i', postfixPath,      // vidéo 2
+        '-i', audioPath,        // musique
+        '-filter_complex',
+          '[0:v][1:v]concat=n=2:v=1:a=0[concatv];' +
+          '[concatv]trim=duration=30,setpts=PTS-STARTPTS[trimv];' +
+          '[2:a]atrim=duration=30,asetpts=PTS-STARTPTS[trima]',
         '-map', '[trimv]',
-        '-map', '[outa]',
+        '-map', '[trima]',
         '-c:v', 'libx264',
         '-c:a', 'aac',
         '-r', (options.fps || 25).toString(),
@@ -521,9 +524,11 @@ export class VideoService {
       const args = [
         '-i', prefix1Path,
         '-i', intermediatePath,
-        '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[outv]',
+        '-filter_complex', '[0:v:0][0:a:0][1:v:0][1:a:0]concat=n=2:v=1:a=1[outv][outa]',
         '-map', '[outv]',
+        '-map', '[outa]',
         '-c:v', 'libx264',
+        '-c:a', 'aac',
         '-r', (options.fps || 25).toString(),
         '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
         '-threads', (options.threads || 4).toString(),
