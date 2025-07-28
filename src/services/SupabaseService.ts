@@ -150,7 +150,7 @@ export class SupabaseService {
     try {
       console.log(`🔄 Mise à jour du champ qr_code_presentation_video_public_url pour ${table}/${recordId}`);
 
-      const { data, error } = await this.supabase
+      const { error } = await this.supabase
         .from(table)
         .update({ qr_code_presentation_video_public_url: videoUrl })
         .eq('id', recordId)

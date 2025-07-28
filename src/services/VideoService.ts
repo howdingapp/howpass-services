@@ -308,7 +308,6 @@ export class VideoService {
           const percentMatch = progressOutput.match(/time=(\d{2}:\d{2}:\d{2}\.\d{2}) bitrate=(\d+)/);
           if (percentMatch) {
             const currentTime = percentMatch[1];
-            const bitrate = percentMatch[2];
             const durationMatch = progressOutput.match(/Duration: (\d{2}:\d{2}:\d{2}\.\d{2})/);
             const duration = durationMatch ? durationMatch[1] : '00:00:00.00';
             const durationSeconds = this.parseDuration(duration!);

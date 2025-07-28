@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env['PORT'] || 3000;
 
 // Vérifier que FFmpeg est disponible
 function checkFFmpeg(): Promise<boolean> {
@@ -38,7 +38,7 @@ function checkFFmpeg(): Promise<boolean> {
 app.use(helmet());
 app.use(compression());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: process.env['CORS_ORIGIN'] || '*',
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -71,9 +71,9 @@ async function startServer() {
 
     app.listen(port, () => {
       console.log(`🚀 Serveur démarré sur le port ${port}`);
-      console.log(`📊 Environnement: ${process.env.NODE_ENV}`);
-      console.log(`🎬 FFmpeg threads: ${process.env.FFMPEG_THREADS || 4}`);
-      console.log(`⏱️ FFmpeg timeout: ${process.env.FFMPEG_TIMEOUT || 300000}ms`);
+      console.log(`📊 Environnement: ${process.env['NODE_ENV']}`);
+      console.log(`🎬 FFmpeg threads: ${process.env['FFMPEG_THREADS'] || 4}`);
+      console.log(`⏱️ FFmpeg timeout: ${process.env['FFMPEG_TIMEOUT'] || 300000}ms`);
     });
   } catch (error) {
     console.error('❌ Erreur lors du démarrage du serveur:', error);
