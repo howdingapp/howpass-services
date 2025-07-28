@@ -80,6 +80,8 @@ jobs:
             --cpu=2 \
             --task-timeout=3600 \
             --max-retries=3 \
+            --command="npm" \
+            --args="run,job" \
             --set-env-vars=NODE_ENV=production \
             --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
             --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
@@ -100,6 +102,8 @@ jobs:
             --cpu=2 \
             --task-timeout=3600 \
             --max-retries=3 \
+            --command="npm" \
+            --args="run,job" \
             --set-env-vars=NODE_ENV=production \
             --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
             --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
