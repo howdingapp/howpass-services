@@ -520,11 +520,9 @@ export class VideoService {
       const args = [
         '-i', prefix1Path,
         '-i', intermediatePath,
-        '-filter_complex', '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[concatv][concata];[concatv][concata]trim=duration=40[outv][outa]',
+        '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[outv]',
         '-map', '[outv]',
-        '-map', '[outa]',
         '-c:v', 'libx264',
-        '-c:a', 'aac',
         '-r', (options.fps || 25).toString(),
         '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
         '-threads', (options.threads || 4).toString(),
