@@ -146,13 +146,13 @@ export class SupabaseService {
     }
   }
 
-  async updateQrCodePresentationVideoUrl(table: string, recordId: string | number, filePath: string): Promise<boolean> {
+  async updateQrCodePresentationVideoUrl(table: string, recordId: string | number, outputUrl: string): Promise<boolean> {
     try {
-      console.log('📝 Mise à jour du champ qr_code_presentation_video_public_url:', { table, recordId, filePath });
+      console.log('📝 Mise à jour du champ qr_code_presentation_video_public_url:', { table, recordId, outputUrl });
 
       const { error } = await this.supabase
         .from(table)
-        .update({ qr_code_presentation_video_public_url: filePath })
+        .update({ qr_code_presentation_video_public_url: outputUrl })
         .eq('id', recordId)
         .select();
 
@@ -169,13 +169,13 @@ export class SupabaseService {
     }
   }
 
-  async updateQrCodePresentationVideoMidUrl(table: string, recordId: string | number, filePath: string): Promise<boolean> {
+  async updateQrCodePresentationVideoMidUrl(table: string, recordId: string | number, outputUrl: string): Promise<boolean> {
     try {
-      console.log('📝 Mise à jour du champ qr_code_less_presentation_video_public_url:', { table, recordId, filePath });
+      console.log('📝 Mise à jour du champ qr_code_less_presentation_video_public_url:', { table, recordId, outputUrl });
 
       const { error } = await this.supabase
         .from(table)
-        .update({ qr_code_less_presentation_video_public_url: filePath })
+        .update({ qr_code_less_presentation_video_public_url: outputUrl })
         .eq('id', recordId);
 
       if (error) {

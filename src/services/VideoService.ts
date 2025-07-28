@@ -422,10 +422,10 @@ export class VideoService {
         const midDestinationPath = `${table}/${recordId}_mid.mp4`;
         
         console.log('📤 Upload de la vidéo intermédiaire vers Supabase:', { midDestinationPath });
-        await this.supabaseService.upload(VIDEO_BUCKET, intermediatePath, midDestinationPath);
+        const midVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, intermediatePath, midDestinationPath);
         
         // Mettre à jour le champ qr_code_less_presentation_video_public_url dans Supabase
-        await this.supabaseService.updateQrCodePresentationVideoMidUrl(table, recordId, midDestinationPath);
+        await this.supabaseService.updateQrCodePresentationVideoMidUrl(table, recordId, midVideoOutputUrl);
         console.log('✅ Vidéo intermédiaire sauvegardée et associée dans Supabase');
 
         // Étape 2 : Concaténer prefix1 + vidéo intermédiaire
@@ -435,11 +435,11 @@ export class VideoService {
         // Upload de la vidéo finale vers Supabase
         console.log('📤 Upload de la vidéo finale...');
         const destinationPath = `${table}/${recordId}_merged.mp4`;
-        await this.supabaseService.upload(VIDEO_BUCKET, options.outputPath, destinationPath);
+        const mergedVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, options.outputPath, destinationPath);
 
         // Mettre à jour le champ qr_code_presentation_video_public_url dans la base de données
         console.log('📝 Mise à jour du champ qr_code_presentation_video_public_url...');
-        const updateSuccess = await this.supabaseService.updateQrCodePresentationVideoUrl(table, recordId, destinationPath);
+        const updateSuccess = await this.supabaseService.updateQrCodePresentationVideoUrl(table, recordId, mergedVideoOutputUrl);
         
         if (!updateSuccess) {
           console.error('❌ Échec de la mise à jour du champ qr_code_presentation_video_public_url pour:', { table, recordId });
