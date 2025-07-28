@@ -464,8 +464,8 @@ export class VideoService {
         '-i', prefix2Path,
         '-i', postfixPath,
         '-i', audioPath,
-        '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[concatv];[concatv]trim=duration=30[trimv];[2:a]trim=duration=30[trima];[trimv][trima]amix=inputs=2:duration=first[outv][outa]',
-        '-map', '[outv]',
+        '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[concatv];' + '[concatv]trim=duration=30[trimv];' + '[2:a]adelay=0|0[outa]',
+        '-map', '[trimv]',
         '-map', '[outa]',
         '-c:v', 'libx264',
         '-c:a', 'aac',
@@ -475,6 +475,7 @@ export class VideoService {
         '-y',
         outputPath
       ];
+
 
       console.log('🎬 Arguments FFmpeg (intermédiaire):', args.join(' '));
 
