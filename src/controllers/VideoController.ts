@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { VideoService, MergeRequest } from '../services/VideoService';
 import { SupabaseService } from '../services/SupabaseService';
-import { CloudTasksService, TaskPayload } from '../services/CloudTasksService';
+import { CloudRunJobsService, JobPayload } from '../services/CloudRunJobsService';
 
 interface DatabaseWebhookPayload {
   type: string;
@@ -13,12 +13,12 @@ interface DatabaseWebhookPayload {
 export class VideoController {
   private videoService: VideoService;
   private supabaseService: SupabaseService;
-  private cloudTasksService: CloudTasksService;
+  private cloudRunJobsService: CloudRunJobsService;
 
   constructor() {
     this.videoService = new VideoService();
     this.supabaseService = new SupabaseService();
-    this.cloudTasksService = new CloudTasksService();
+    this.cloudRunJobsService = new CloudRunJobsService();
   }
 
   async handleDatabaseWebhook(req: Request, res: Response): Promise<void> {
@@ -95,20 +95,20 @@ export class VideoController {
         }
       };
 
-      // Créer une tâche Cloud Tasks pour le traitement en arrière-plan
-      const taskPayload: TaskPayload = {
+      // Créer un job Cloud Run pour le traitement en arrière-plan
+      const jobPayload: JobPayload = {
         mergeRequest,
         table,
         recordId: record.id
       };
 
-      const taskName = await this.cloudTasksService.createVideoProcessingTask(taskPayload);
+      const jobName = await this.cloudRunJobsService.createVideoProcessingJob(jobPayload);
 
       // Retourner immédiatement pour indiquer que le webhook est accepté
       res.status(200).json({
         success: true,
-        message: 'Webhook accepté, tâche de fusion créée',
-        taskName,
+        message: 'Webhook accepté, job de fusion créé',
+        jobName,
         metadata: {
           table,
           recordId: record.id,
@@ -125,102 +125,19 @@ export class VideoController {
     }
   }
 
-  async processVideoTask(req: Request, res: Response): Promise<void> {
-    try {
-      const payload: TaskPayload = req.body;
-      const { mergeRequest, table, recordId } = payload;
-
-      console.log('🔄 Traitement de la tâche vidéo reçue:', { table, recordId });
-
-      // Vérifier l'authentification (optionnel mais recommandé)
-      const authHeader = req.headers.authorization;
-      const expectedToken = process.env['GCP_SERVICE_TOKEN'];
-      
-      if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
-        console.error('❌ Token d\'authentification invalide');
-        res.status(401).json({
-          success: false,
-          error: 'Token d\'authentification invalide'
-        });
-        return;
-      }
-
-      // Traiter la fusion vidéo
-      const result = await this.videoService.mergeVideos(mergeRequest);
-
-      if (result.success && result.outputUrl) {
-        console.log('✅ Merge terminé avec succès pour:', { table, recordId, jobId: result.jobId });
-
-        // Construire le chemin de destination dans le bucket
-        const bucketName = process.env['SUPABASE_BUCKET_NAME'];
-        if (!bucketName) {
-          console.error('❌ Variable d\'environnement SUPABASE_BUCKET_NAME non définie');
-          res.status(500).json({
-            success: false,
-            error: 'Configuration manquante'
-          });
-          return;
-        }
-
-        const destinationPath = `${table}/${recordId}.mp4`;
-        console.log('📤 Upload vers Supabase:', { bucketName, destinationPath });
-
-        // Uploader le fichier fusionné vers Supabase
-        await this.videoService.uploadToSupabase(result.outputUrl, bucketName, destinationPath);
-
-        console.log('✅ Upload vers Supabase terminé pour:', { table, recordId, destinationPath });
-
-        // Mettre à jour le champ qr_code_presentation_video_public_url dans la base de données
-        const updateSuccess = await this.supabaseService.updateQrCodePresentationVideoUrl(table, recordId, destinationPath);
-        
-        if (!updateSuccess) {
-          console.error('❌ Échec de la mise à jour du champ qr_code_presentation_video_public_url pour:', { table, recordId });
-        }
-
-        res.json({
-          success: true,
-          message: 'Traitement vidéo terminé avec succès',
-          metadata: { table, recordId, jobId: result.jobId }
-        });
-
-      } else {
-        console.error('❌ Échec du merge pour:', { table, recordId, error: result.error });
-        res.status(500).json({
-          success: false,
-          error: result.error || 'Échec du traitement vidéo'
-        });
-      }
-
-    } catch (error) {
-      console.error('❌ Erreur lors du traitement de la tâche vidéo:', error);
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Erreur interne du serveur'
-      });
-    }
-  }
-
   async getJobStatus(req: Request, res: Response): Promise<void> {
     try {
-      const { jobId } = req.params;
+      const { executionName } = req.params;
 
-      if (!jobId) {
+      if (!executionName) {
         res.status(400).json({
           success: false,
-          error: 'ID du job requis'
+          error: 'Nom de l\'exécution requis'
         });
         return;
       }
 
-      const jobStatus = await this.videoService.getJobStatus(jobId);
-
-      if (!jobStatus) {
-        res.status(404).json({
-          success: false,
-          error: 'Job non trouvé'
-        });
-        return;
-      }
+      const jobStatus = await this.cloudRunJobsService.checkJobStatus(executionName);
 
       res.json({
         success: true,

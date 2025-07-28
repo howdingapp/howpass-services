@@ -4,7 +4,6 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { spawn } from 'child_process';
 import { VideoController } from './controllers/VideoController';
-import { CloudTasksService } from './services/CloudTasksService';
 import dotenv from 'dotenv';
 
 // Charger les variables d'environnement
@@ -47,17 +46,12 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Routes
 const videoController = new VideoController();
-const cloudTasksService = new CloudTasksService();
 
 app.post('/webhook/database', (req, res) => {
   videoController.handleDatabaseWebhook(req, res);
 });
 
-app.post('/task/process-video', (req, res) => {
-  videoController.processVideoTask(req, res);
-});
-
-app.get('/job/:jobId', (req, res) => {
+app.get('/job/:executionName', (req, res) => {
   videoController.getJobStatus(req, res);
 });
 
@@ -75,16 +69,13 @@ async function startServer() {
       process.exit(1);
     }
 
-    // Créer la queue Cloud Tasks si elle n'existe pas
-    await cloudTasksService.createQueueIfNotExists();
-
     app.listen(port, () => {
       console.log(`🚀 Serveur démarré sur le port ${port}`);
       console.log(`📊 Environnement: ${process.env['NODE_ENV']}`);
       console.log(`🎬 FFmpeg threads: ${process.env['FFMPEG_THREADS'] || 4}`);
       console.log(`⏱️ FFmpeg timeout: ${process.env['FFMPEG_TIMEOUT'] || 300000}ms`);
       console.log(`☁️ GCP Project ID: ${process.env['GCP_PROJECT_ID'] || 'Non défini'}`);
-      console.log(`📋 GCP Queue: ${process.env['GCP_QUEUE_NAME'] || 'video-processing-queue'}`);
+      console.log(`📋 GCP Job: ${process.env['GCP_JOB_NAME'] || 'video-processing-job'}`);
     });
   } catch (error) {
     console.error('❌ Erreur lors du démarrage du serveur:', error);

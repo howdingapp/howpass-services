@@ -38,7 +38,6 @@ gcloud config set project PROJECT_ID
 # Active les APIs nécessaires
 gcloud services enable run.googleapis.com
 gcloud services enable artifactregistry.googleapis.com
-gcloud services enable cloudtasks.googleapis.com
 
 # Vérifier l'existence du repo
 gcloud auth login
@@ -49,10 +48,6 @@ gcloud artifacts repositories create howpass-services \
   --repository-format=docker \
   --location=europe-west1 \
   --description="Dépôt Docker pour Cloud Run"
-
-#Créer la queue pour les videos
-gcloud tasks queues create webhook-queue \
-  --location=europe-west1
 
 ```
 Autoriser l'accès public du service sur 
