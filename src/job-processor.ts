@@ -1,7 +1,6 @@
 import { VideoService } from './services/VideoService';
-import { SupabaseService, VIDEO_BUCKET } from './services/SupabaseService';
+import { SupabaseService } from './services/SupabaseService';
 import dotenv from 'dotenv';
-import path from 'path';
 
 // Charger les variables d'environnement
 dotenv.config();
