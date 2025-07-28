@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { VideoService, MergeRequest } from '../services/VideoService';
 import { SupabaseService } from '../services/SupabaseService';
+import { CloudTasksService, TaskPayload } from '../services/CloudTasksService';
 
 interface DatabaseWebhookPayload {
   type: string;
@@ -12,10 +13,12 @@ interface DatabaseWebhookPayload {
 export class VideoController {
   private videoService: VideoService;
   private supabaseService: SupabaseService;
+  private cloudTasksService: CloudTasksService;
 
   constructor() {
     this.videoService = new VideoService();
     this.supabaseService = new SupabaseService();
+    this.cloudTasksService = new CloudTasksService();
   }
 
   async handleDatabaseWebhook(req: Request, res: Response): Promise<void> {
@@ -92,19 +95,26 @@ export class VideoController {
         }
       };
 
+      // Créer une tâche Cloud Tasks pour le traitement en arrière-plan
+      const taskPayload: TaskPayload = {
+        mergeRequest,
+        table,
+        recordId: record.id
+      };
+
+      const taskName = await this.cloudTasksService.createVideoProcessingTask(taskPayload);
+
       // Retourner immédiatement pour indiquer que le webhook est accepté
       res.status(200).json({
         success: true,
-        message: 'Webhook accepté, fusion en cours',
+        message: 'Webhook accepté, tâche de fusion créée',
+        taskName,
         metadata: {
           table,
           recordId: record.id,
           operation: type
         }
       });
-
-      // Lancer le merge en arrière-plan
-      this.processMergeInBackground(mergeRequest, table, record.id);
 
     } catch (error) {
       console.error('❌ Erreur lors du traitement du webhook:', error);
@@ -115,10 +125,27 @@ export class VideoController {
     }
   }
 
-  private async processMergeInBackground(mergeRequest: MergeRequest, table: string, recordId: string | number): Promise<void> {
+  async processVideoTask(req: Request, res: Response): Promise<void> {
     try {
-      console.log('🔄 Démarrage du merge en arrière-plan pour:', { table, recordId });
+      const payload: TaskPayload = req.body;
+      const { mergeRequest, table, recordId } = payload;
 
+      console.log('🔄 Traitement de la tâche vidéo reçue:', { table, recordId });
+
+      // Vérifier l'authentification (optionnel mais recommandé)
+      const authHeader = req.headers.authorization;
+      const expectedToken = process.env['GCP_SERVICE_TOKEN'];
+      
+      if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
+        console.error('❌ Token d\'authentification invalide');
+        res.status(401).json({
+          success: false,
+          error: 'Token d\'authentification invalide'
+        });
+        return;
+      }
+
+      // Traiter la fusion vidéo
       const result = await this.videoService.mergeVideos(mergeRequest);
 
       if (result.success && result.outputUrl) {
@@ -128,6 +155,10 @@ export class VideoController {
         const bucketName = process.env['SUPABASE_BUCKET_NAME'];
         if (!bucketName) {
           console.error('❌ Variable d\'environnement SUPABASE_BUCKET_NAME non définie');
+          res.status(500).json({
+            success: false,
+            error: 'Configuration manquante'
+          });
           return;
         }
 
@@ -146,12 +177,26 @@ export class VideoController {
           console.error('❌ Échec de la mise à jour du champ qr_code_presentation_video_public_url pour:', { table, recordId });
         }
 
+        res.json({
+          success: true,
+          message: 'Traitement vidéo terminé avec succès',
+          metadata: { table, recordId, jobId: result.jobId }
+        });
+
       } else {
         console.error('❌ Échec du merge pour:', { table, recordId, error: result.error });
+        res.status(500).json({
+          success: false,
+          error: result.error || 'Échec du traitement vidéo'
+        });
       }
 
     } catch (error) {
-      console.error('❌ Erreur lors du traitement en arrière-plan:', error);
+      console.error('❌ Erreur lors du traitement de la tâche vidéo:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Erreur interne du serveur'
+      });
     }
   }
 

@@ -61,6 +61,11 @@ jobs:
           --set-env-vars=FFMPEG_TIMEOUT=300000
           --set-env-vars=FFMPEG_THREADS=4
           --set-env-vars=CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
+          --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+          --set-env-vars=GCP_LOCATION=europe-west1
+          --set-env-vars=GCP_QUEUE_NAME=video-processing-queue
+          --set-env-vars=GCP_SERVICE_URL=${{ secrets.GCP_SERVICE_URL }}
+          --set-env-vars=GCP_SERVICE_TOKEN=${{ secrets.GCP_SERVICE_TOKEN }}
 
     - name: Show service URL
       run: |
