@@ -286,17 +286,35 @@ export class VideoService {
 
       args.push(
         '-filter_complex',
-        this.buildFilterComplex(options),
-        '-map', '[outv]',
-        '-map', '[outa]',
-        '-c:v', 'libx264',
-        '-c:a', 'aac',
-        '-r', (options.fps || 25).toString(),
-        '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
-        '-threads', (options.threads || 4).toString(),
-        '-y',
-        options.outputPath
+        this.buildFilterComplex(options)
       );
+
+      // Mapping différent selon la présence d'audio
+      if (options.audioPath) {
+        args.push(
+          '-map', '[outv]',
+          '-map', '3:a', // Utiliser directement l'audio externe
+          '-c:v', 'libx264',
+          '-c:a', 'aac',
+          '-r', (options.fps || 25).toString(),
+          '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
+          '-threads', (options.threads || 4).toString(),
+          '-y',
+          options.outputPath
+        );
+      } else {
+        args.push(
+          '-map', '[outv]',
+          '-map', '[outa]',
+          '-c:v', 'libx264',
+          '-c:a', 'aac',
+          '-r', (options.fps || 25).toString(),
+          '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
+          '-threads', (options.threads || 4).toString(),
+          '-y',
+          options.outputPath
+        );
+      }
 
       const ffmpeg = spawn('ffmpeg', args);
 
@@ -348,24 +366,13 @@ export class VideoService {
   }
 
   private buildFilterComplex(options: FFmpegOptions): string {
-    let filterComplex = '';
-
     if (options.audioPath) {
-      // Avec audio : concaténer les 3 vidéos, puis ajouter l'audio sur prefix2+postfix
-      filterComplex = [
-        // Concaténer les 3 vidéos
-        '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[concatv][concata]',
-        // Ajouter l'audio sur la partie prefix2+postfix (à partir de la durée de prefix1)
-        '[concatv][concata][3:a]amix=inputs=2:duration=longest[outa]',
-        // La vidéo reste inchangée
-        '[concatv]copy[outv]'
-      ].join(';');
+      // Avec audio : concaténer les vidéos, puis utiliser l'audio externe
+      return '[0:v][1:v][2:v]concat=n=3:v=1:a=0[outv]';
     } else {
-      // Sans audio : simplement concaténer les 3 vidéos
-      filterComplex = '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]';
+      // Sans audio : concaténer les 3 vidéos avec leur audio
+      return '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]';
     }
-
-    return filterComplex;
   }
 
   private parseDuration(durationString: string): number {
