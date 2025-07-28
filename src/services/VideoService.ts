@@ -480,11 +480,9 @@ export class VideoService {
     
     if (currentRatio > targetRatio) {
       // Vidéo plus large que la cible - redimensionner et ajouter du padding vertical
-      const scaledHeight = Math.round(targetWidth / currentRatio);
       return `scale=${targetWidth}:-2,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
     } else if (currentRatio < targetRatio) {
       // Vidéo plus haute que la cible - redimensionner et ajouter du padding horizontal
-      const scaledWidth = Math.round(targetHeight * currentRatio);
       return `scale=-2:${targetHeight},pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
     } else {
       // Même ratio - redimensionner simplement
