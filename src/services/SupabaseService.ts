@@ -146,27 +146,48 @@ export class SupabaseService {
     }
   }
 
-  async updateQrCodePresentationVideoUrl(table: string, recordId: string | number, videoUrl: string): Promise<boolean> {
+  async updateQrCodePresentationVideoUrl(table: string, recordId: string | number, filePath: string): Promise<boolean> {
     try {
-      console.log(`🔄 Mise à jour du champ qr_code_presentation_video_public_url pour ${table}/${recordId}`);
+      console.log('📝 Mise à jour du champ qr_code_presentation_video_public_url:', { table, recordId, filePath });
 
       const { error } = await this.supabase
         .from(table)
-        .update({ qr_code_presentation_video_public_url: videoUrl })
+        .update({ qr_code_presentation_video_public_url: filePath })
         .eq('id', recordId)
-        .select()
-        .single();
+        .select();
 
       if (error) {
-        console.error('❌ Erreur lors de la mise à jour du champ qr_code_presentation_video_public_url:', error);
+        console.error('❌ Erreur lors de la mise à jour:', error);
         return false;
       }
 
-      console.log(`✅ Champ qr_code_presentation_video_public_url mis à jour avec succès pour ${table}/${recordId}`);
+      console.log('✅ Champ qr_code_presentation_video_public_url mis à jour avec succès');
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur lors de la mise à jour du champ qr_code_presentation_video_public_url:', error);
+      return false;
+    }
+  }
+
+  async updateQrCodePresentationVideoMidUrl(table: string, recordId: string | number, filePath: string): Promise<boolean> {
+    try {
+      console.log('📝 Mise à jour du champ qr_code_less_presentation_video_public_url:', { table, recordId, filePath });
+
+      const { error } = await this.supabase
+        .from(table)
+        .update({ qr_code_less_presentation_video_public_url: filePath })
+        .eq('id', recordId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour du champ qr_code_less_presentation_video_public_url:', error);
+        return false;
+      }
+
+      console.log('✅ Champ qr_code_less_presentation_video_public_url mis à jour avec succès');
       return true;
 
     } catch (error) {
-      console.error('❌ Erreur lors de la mise à jour du champ qr_code_presentation_video_public_url:', error);
+      console.error('❌ Erreur lors de la mise à jour du champ qr_code_less_presentation_video_public_url:', error);
       return false;
     }
   }

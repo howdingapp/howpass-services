@@ -52,6 +52,13 @@ export interface FFmpegOptions {
   videoCodec?: string | undefined;
   threads?: number;
   timeout?: number;
+  prefix1Duration?: number; // Durée du prefix1 pour synchroniser l'audio
+  metadata?: {
+    table?: string;
+    recordId?: string | number;
+    operation?: string;
+    [key: string]: any;
+  };
 }
 
 export interface VideoInfo {
@@ -245,7 +252,15 @@ export class VideoService {
 
       // Exécuter la fusion
       console.log('🎬 Fusion des vidéos...');
-      await this.executeMerge(ffmpegOptions, jobId);
+      
+      if (audioPath) {
+        // Approche en deux étapes : créer d'abord prefix2+postfix+audio, puis ajouter prefix1
+        await this.executeTwoStepMerge(ffmpegOptions, jobId);
+      } else {
+        // Fusion simple sans audio externe
+        await this.executeMerge(ffmpegOptions, jobId);
+      }
+      
       job.progress = 80;
       job.updatedAt = new Date();
 
@@ -253,18 +268,6 @@ export class VideoService {
       if (!await fs.pathExists(outputPath)) {
         throw new Error('Le fichier de sortie n\'a pas été créé');
       }
-
-      // Upload du résultat vers Supabase
-      console.log('📤 Upload du résultat...');
-      
-      // Construire le chemin de destination avec le répertoire et le bon nom
-      const table = request.metadata?.table || 'practices';
-      const recordId = request.metadata?.recordId || jobId;
-      const destinationPath = `${table}/${recordId}_merged.mp4`;
-      
-      const outputUrl = await this.supabaseService.upload(VIDEO_BUCKET, outputPath, destinationPath);
-      job.progress = 95;
-      job.updatedAt = new Date();
 
       // Nettoyer les fichiers temporaires
       const tempFiles = [prefixVideo1Path, prefixVideo2Path, postfixPath, outputPath];
@@ -281,19 +284,24 @@ export class VideoService {
       if (adaptedPostfixPath !== postfixPath) {
         tempFiles.push(adaptedPostfixPath);
       }
+      // Ajouter la vidéo intermédiaire si elle existe
+      if (audioPath) {
+        const intermediatePath = path.join(this.tempPath, `intermediate_${jobId}.mp4`);
+        tempFiles.push(intermediatePath);
+      }
       await this.cleanupTempFiles(tempFiles);
 
       // Mettre à jour le job
       job.status = 'completed';
       job.progress = 100;
-      job.outputUrl = outputUrl;
+      job.outputUrl = outputPath; // The outputUrl is now set in executeTwoStepMerge
       job.updatedAt = new Date();
 
-      console.log(`✅ Fusion terminée avec succès: ${outputUrl}`);
+      console.log(`✅ Fusion terminée avec succès: ${outputPath}`);
 
       return {
         success: true,
-        outputUrl,
+        outputUrl: outputPath,
         jobId
       };
 
@@ -313,7 +321,7 @@ export class VideoService {
     }
   }
 
-  private executeMerge(options: FFmpegOptions, jobId: string): Promise<void> {
+  private executeMerge(options: FFmpegOptions, _jobId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       console.log('🎬 Début de la fusion FFmpeg...');
 
@@ -337,7 +345,7 @@ export class VideoService {
       if (options.audioPath) {
         args.push(
           '-map', '[outv]',
-          '-map', '3:a', // Utiliser directement l'audio externe
+          '-map', '[outa]',
           '-c:v', 'libx264',
           '-c:a', 'aac',
           '-r', (options.fps || 25).toString(),
@@ -360,50 +368,200 @@ export class VideoService {
         );
       }
 
+      console.log('🎬 Arguments FFmpeg:', args.join(' '));
+
       const ffmpeg = spawn('ffmpeg', args);
 
-      let progressOutput = '';
-      ffmpeg.stdout.on('data', (data) => {
-        progressOutput += data.toString();
-        const job = this.jobs.get(jobId);
-        if (job) {
-          const percentMatch = progressOutput.match(/time=(\d{2}:\d{2}:\d{2}\.\d{2}) bitrate=(\d+)/);
-          if (percentMatch) {
-            const currentTime = percentMatch[1];
-            const durationMatch = progressOutput.match(/Duration: (\d{2}:\d{2}:\d{2}\.\d{2})/);
-            const duration = durationMatch ? durationMatch[1] : '00:00:00.00';
-            const durationSeconds = this.parseDuration(duration!);
-            const currentTimeSeconds = this.parseDuration(currentTime!);
-            const progress = (currentTimeSeconds / durationSeconds) * 100;
-            job.progress = Math.round(progress);
-            job.updatedAt = new Date();
-          }
-        }
-        console.log(`📊 Progression FFmpeg: ${progressOutput}`);
-      });
+      let stderr = '';
 
       ffmpeg.stderr.on('data', (data) => {
-        console.error(`ffmpeg stderr: ${data}`);
+        stderr += data.toString();
+        console.log(`🎬 FFmpeg: ${data}`);
       });
 
       ffmpeg.on('close', (code) => {
         if (code !== 0) {
+          console.error(`❌ Erreur FFmpeg: code ${code}`);
+          console.error(`❌ FFmpeg stderr: ${stderr}`);
           reject(new Error(`ffmpeg error code: ${code}`));
           return;
         }
-        console.log('✅ Fusion FFmpeg terminée');
+        console.log('✅ Fusion FFmpeg terminée avec succès');
         resolve();
       });
 
       ffmpeg.on('error', (err) => {
-        console.error('❌ Erreur FFmpeg:', err);
+        console.error('❌ Erreur lors de l\'exécution de FFmpeg:', err);
+        reject(new Error(`Erreur FFmpeg: ${err.message}`));
+      });
+
+      // Timeout pour éviter les blocages
+      if (options.timeout) {
+        setTimeout(() => {
+          ffmpeg.kill('SIGKILL');
+          reject(new Error('Timeout lors de la fusion FFmpeg'));
+        }, options.timeout);
+      }
+    });
+  }
+
+  private executeTwoStepMerge(options: FFmpegOptions, jobId: string): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        console.log('🎬 Début de la fusion en deux étapes...');
+
+        // Étape 1 : Créer prefix2+postfix+audio
+        const intermediatePath = path.join(this.tempPath, `intermediate_${jobId}.mp4`);
+        
+        console.log('📹 Étape 1 : Création de prefix2+postfix+audio...');
+        await this.createIntermediateVideo(options.prefixVideo2Path, options.postfixPath, options.audioPath!, intermediatePath, options);
+
+        // Sauvegarder la vidéo intermédiaire dans le bucket
+        const table = options.metadata?.table || 'practices';
+        const recordId = options.metadata?.recordId || jobId;
+        const midDestinationPath = `${table}/${recordId}_mid.mp4`;
+        
+        console.log('📤 Upload de la vidéo intermédiaire vers Supabase:', { midDestinationPath });
+        await this.supabaseService.upload(VIDEO_BUCKET, intermediatePath, midDestinationPath);
+        
+        // Mettre à jour le champ qr_code_less_presentation_video_public_url dans Supabase
+        await this.supabaseService.updateQrCodePresentationVideoMidUrl(table, recordId, midDestinationPath);
+        console.log('✅ Vidéo intermédiaire sauvegardée et associée dans Supabase');
+
+        // Étape 2 : Concaténer prefix1 + vidéo intermédiaire
+        console.log('📹 Étape 2 : Concaténation prefix1 + vidéo intermédiaire...');
+        await this.concatWithPrefix1(options.prefixVideo1Path, intermediatePath, options.outputPath, options);
+
+        // Upload de la vidéo finale vers Supabase
+        console.log('📤 Upload de la vidéo finale...');
+        const destinationPath = `${table}/${recordId}_merged.mp4`;
+        await this.supabaseService.upload(VIDEO_BUCKET, options.outputPath, destinationPath);
+
+        // Mettre à jour le champ qr_code_presentation_video_public_url dans la base de données
+        console.log('📝 Mise à jour du champ qr_code_presentation_video_public_url...');
+        const updateSuccess = await this.supabaseService.updateQrCodePresentationVideoUrl(table, recordId, destinationPath);
+        
+        if (!updateSuccess) {
+          console.error('❌ Échec de la mise à jour du champ qr_code_presentation_video_public_url pour:', { table, recordId });
+          throw new Error('Échec de la mise à jour de la base de données');
+        }
+
+        console.log('✅ Champ qr_code_presentation_video_public_url mis à jour avec succès');
+        console.log('✅ Fusion en deux étapes terminée avec succès');
+        resolve();
+      } catch (error) {
+        console.error('❌ Erreur lors de la fusion en deux étapes:', error);
+        reject(error);
+      }
+    });
+  }
+
+  private createIntermediateVideo(prefix2Path: string, postfixPath: string, audioPath: string, outputPath: string, options: FFmpegOptions): Promise<void> {
+    return new Promise((resolve, reject) => {
+      console.log('🎬 Création de la vidéo intermédiaire...');
+
+      const args = [
+        '-i', prefix2Path,
+        '-i', postfixPath,
+        '-i', audioPath,
+        '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[concatv];[concatv]trim=duration=30[trimv];[2:a]trim=duration=30[trima];[trimv][trima]amix=inputs=2:duration=first[outv][outa]',
+        '-map', '[outv]',
+        '-map', '[outa]',
+        '-c:v', 'libx264',
+        '-c:a', 'aac',
+        '-r', (options.fps || 25).toString(),
+        '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
+        '-threads', (options.threads || 4).toString(),
+        '-y',
+        outputPath
+      ];
+
+      console.log('🎬 Arguments FFmpeg (intermédiaire):', args.join(' '));
+
+      const ffmpeg = spawn('ffmpeg', args);
+
+      let stderr = '';
+
+      ffmpeg.stderr.on('data', (data) => {
+        stderr += data.toString();
+        console.log(`🎬 FFmpeg (intermédiaire): ${data}`);
+      });
+
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) {
+          console.error(`❌ Erreur FFmpeg (intermédiaire): code ${code}`);
+          console.error(`❌ FFmpeg stderr: ${stderr}`);
+          reject(new Error(`ffmpeg error code: ${code}`));
+          return;
+        }
+        console.log('✅ Vidéo intermédiaire créée avec succès');
+        resolve();
+      });
+
+      ffmpeg.on('error', (err) => {
+        console.error('❌ Erreur lors de la création de la vidéo intermédiaire:', err);
         reject(new Error(`Erreur FFmpeg: ${err.message}`));
       });
 
       if (options.timeout) {
         setTimeout(() => {
           ffmpeg.kill('SIGKILL');
-          reject(new Error(`Timeout FFmpeg pour le job ${jobId}`));
+          reject(new Error('Timeout lors de la création de la vidéo intermédiaire'));
+        }, options.timeout);
+      }
+    });
+  }
+
+  private concatWithPrefix1(prefix1Path: string, intermediatePath: string, outputPath: string, options: FFmpegOptions): Promise<void> {
+    return new Promise((resolve, reject) => {
+      console.log('🎬 Concaténation avec prefix1...');
+
+      const args = [
+        '-i', prefix1Path,
+        '-i', intermediatePath,
+        '-filter_complex', '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[concatv][concata];[concatv][concata]trim=duration=40[outv][outa]',
+        '-map', '[outv]',
+        '-map', '[outa]',
+        '-c:v', 'libx264',
+        '-c:a', 'aac',
+        '-r', (options.fps || 25).toString(),
+        '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
+        '-threads', (options.threads || 4).toString(),
+        '-y',
+        outputPath
+      ];
+
+      console.log('🎬 Arguments FFmpeg (final):', args.join(' '));
+
+      const ffmpeg = spawn('ffmpeg', args);
+
+      let stderr = '';
+
+      ffmpeg.stderr.on('data', (data) => {
+        stderr += data.toString();
+        console.log(`🎬 FFmpeg (final): ${data}`);
+      });
+
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) {
+          console.error(`❌ Erreur FFmpeg (final): code ${code}`);
+          console.error(`❌ FFmpeg stderr: ${stderr}`);
+          reject(new Error(`ffmpeg error code: ${code}`));
+          return;
+        }
+        console.log('✅ Concaténation finale terminée avec succès');
+        resolve();
+      });
+
+      ffmpeg.on('error', (err) => {
+        console.error('❌ Erreur lors de la concaténation finale:', err);
+        reject(new Error(`Erreur FFmpeg: ${err.message}`));
+      });
+
+      if (options.timeout) {
+        setTimeout(() => {
+          ffmpeg.kill('SIGKILL');
+          reject(new Error('Timeout lors de la concaténation finale'));
         }, options.timeout);
       }
     });
@@ -411,8 +569,8 @@ export class VideoService {
 
   private buildFilterComplex(options: FFmpegOptions): string {
     if (options.audioPath) {
-      // Avec audio : 
-      // - Prefix1 garde son audio par défaut
+      // Avec audio externe :
+      // - Prefix1 garde sa propre musique
       // - Prefix2 et Postfix utilisent la musique externe
       // - Limitation à 40 secondes
       return '[0:v][0:a][1:v][2:v]concat=n=3:v=1:a=1[concatv][concata];[concatv]trim=duration=40[trimv];[concata]trim=duration=40[trima];[3:a]adelay=10000|10000[delayaudio];[trima][delayaudio]amix=inputs=2:duration=first[outv][outa]';
@@ -422,13 +580,6 @@ export class VideoService {
     }
   }
 
-  private parseDuration(durationString: string): number {
-    const parts = durationString.split(':');
-    const hours = parseInt(parts[0]!);
-    const minutes = parseInt(parts[1]!);
-    const seconds = parseFloat(parts[2]!);
-    return hours * 3600 + minutes * 60 + seconds;
-  }
 
   private async getTargetDimensions(videoPath: string): Promise<{ width: number; height: number }> {
     try {
