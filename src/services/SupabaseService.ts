@@ -3,7 +3,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
-export const VIDEO_BUCKET= "vidéos";
+export const VIDEO_BUCKET= "videos";
 export const IMAGE_BUCKET= "images";
 export const SOUND_BUCKET= "sounds";
 
