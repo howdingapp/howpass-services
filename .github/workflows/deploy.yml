@@ -78,9 +78,8 @@ jobs:
             --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
             --memory=2Gi \
             --cpu=2 \
-            --timeout=3600 \
-            --max-retries=3 \
             --task-timeout=3600 \
+            --max-retries=3 \
             --set-env-vars=NODE_ENV=production \
             --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
             --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
@@ -99,9 +98,8 @@ jobs:
             --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
             --memory=2Gi \
             --cpu=2 \
-            --timeout=3600 \
-            --max-retries=3 \
             --task-timeout=3600 \
+            --max-retries=3 \
             --set-env-vars=NODE_ENV=production \
             --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
             --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
