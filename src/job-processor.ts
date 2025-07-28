@@ -19,13 +19,7 @@ async function processVideoJob() {
 
     const mergeRequest = JSON.parse(mergeRequestStr);
 
-    console.log('📊 Paramètres du job:', {
-      table,
-      recordId,
-      prefixVideo1: mergeRequest.prefixVideo1BucketPath,
-      prefixVideo2: mergeRequest.prefixVideo2BucketPath,
-      postfix: mergeRequest.postfixVideoUrl
-    });
+    console.log('📊 Paramètres du job:', mergeRequest);
 
     // Initialiser les services
     const videoService = new VideoService();
