@@ -214,15 +214,19 @@ export class VideoService {
       // Analyser les dimensions des vidéos et adapter la vidéo postfixe
       console.log('📐 Analyse des dimensions des vidéos...');
       const targetDimensions = await this.getTargetDimensions(prefixVideo1Path);
-      const adaptedPostfixPath = await this.adaptVideoDimensions(postfixPath, targetDimensions, jobId);
+      
+      // Adapter toutes les vidéos aux mêmes dimensions
+      const adaptedPrefix1Path = await this.adaptVideoDimensions(prefixVideo1Path, targetDimensions, jobId, 'prefix1');
+      const adaptedPrefix2Path = await this.adaptVideoDimensions(prefixVideo2Path, targetDimensions, jobId, 'prefix2');
+      const adaptedPostfixPath = await this.adaptVideoDimensions(postfixPath, targetDimensions, jobId, 'postfix');
       
       job.progress = 45;
       job.updatedAt = new Date();
 
       // Préparer les options FFmpeg
       const ffmpegOptions: FFmpegOptions = {
-        prefixVideo1Path,
-        prefixVideo2Path,
+        prefixVideo1Path: adaptedPrefix1Path, // Utiliser la vidéo adaptée
+        prefixVideo2Path: adaptedPrefix2Path, // Utiliser la vidéo adaptée
         postfixPath: adaptedPostfixPath, // Utiliser la vidéo adaptée
         outputPath,
         quality: request.quality || undefined,
@@ -261,6 +265,13 @@ export class VideoService {
       const tempFiles = [prefixVideo1Path, prefixVideo2Path, postfixPath, outputPath];
       if (audioPath) {
         tempFiles.push(audioPath);
+      }
+      // Ajouter les fichiers adaptés s'ils sont différents des originaux
+      if (adaptedPrefix1Path !== prefixVideo1Path) {
+        tempFiles.push(adaptedPrefix1Path);
+      }
+      if (adaptedPrefix2Path !== prefixVideo2Path) {
+        tempFiles.push(adaptedPrefix2Path);
       }
       if (adaptedPostfixPath !== postfixPath) {
         tempFiles.push(adaptedPostfixPath);
@@ -428,10 +439,11 @@ export class VideoService {
   private async adaptVideoDimensions(
     videoPath: string, 
     targetDimensions: { width: number; height: number }, 
-    jobId: string
+    jobId: string,
+    prefix: string
   ): Promise<string> {
     try {
-      console.log(`📐 Adaptation des dimensions: ${targetDimensions.width}x${targetDimensions.height}`);
+      console.log(`📐 Adaptation des dimensions pour ${prefix}: ${targetDimensions.width}x${targetDimensions.height}`);
       
       const videoInfo = await this.getVideoInfo(videoPath);
       const currentWidth = videoInfo.width;
@@ -439,11 +451,11 @@ export class VideoService {
       
       // Vérifier si l'adaptation est nécessaire
       if (currentWidth === targetDimensions.width && currentHeight === targetDimensions.height) {
-        console.log('✅ Dimensions déjà compatibles, pas d\'adaptation nécessaire');
+        console.log(`✅ Dimensions déjà compatibles pour ${prefix}, pas d'adaptation nécessaire`);
         return videoPath;
       }
       
-      const adaptedPath = path.join(this.tempPath, `adapted_postfix_${jobId}.mp4`);
+      const adaptedPath = path.join(this.tempPath, `adapted_${prefix}_${jobId}.mp4`);
       
       return new Promise((resolve, reject) => {
         const args = [
@@ -460,27 +472,27 @@ export class VideoService {
         const ffmpeg = spawn('ffmpeg', args);
         
         ffmpeg.stderr.on('data', (data) => {
-          console.log(`📐 Adaptation FFmpeg: ${data}`);
+          console.log(`📐 Adaptation FFmpeg pour ${prefix}: ${data}`);
         });
         
         ffmpeg.on('close', (code) => {
           if (code !== 0) {
-            console.error(`❌ Erreur lors de l'adaptation des dimensions: code ${code}`);
-            reject(new Error(`Erreur FFmpeg lors de l'adaptation: ${code}`));
+            console.error(`❌ Erreur lors de l'adaptation des dimensions pour ${prefix}: code ${code}`);
+            reject(new Error(`Erreur FFmpeg lors de l'adaptation pour ${prefix}: ${code}`));
             return;
           }
-          console.log('✅ Adaptation des dimensions terminée');
+          console.log(`✅ Adaptation des dimensions terminée pour ${prefix}`);
           resolve(adaptedPath);
         });
         
         ffmpeg.on('error', (err) => {
-          console.error('❌ Erreur FFmpeg lors de l\'adaptation:', err);
+          console.error(`❌ Erreur FFmpeg lors de l'adaptation pour ${prefix}:`, err);
           reject(new Error(`Erreur FFmpeg: ${err.message}`));
         });
       });
       
     } catch (error) {
-      console.error('❌ Erreur lors de l\'adaptation des dimensions:', error);
+      console.error(`❌ Erreur lors de l'adaptation des dimensions pour ${prefix}:`, error);
       // En cas d'erreur, retourner le chemin original
       return videoPath;
     }
