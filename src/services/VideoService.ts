@@ -84,19 +84,33 @@ export class VideoService {
 
   async getVideoInfo(filePath: string): Promise<VideoInfo> {
     return new Promise((resolve, reject) => {
-      const ffmpeg = spawn('ffmpeg', ['-i', filePath, '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams']);
+      const ffmpeg = spawn('ffprobe', [
+        '-v', 'quiet',
+        '-print_format', 'json',
+        '-show_format',
+        '-show_streams',
+        filePath
+      ]);
+      
       let output = '';
+      let errorOutput = '';
+      
       ffmpeg.stdout.on('data', (data) => {
         output += data.toString();
       });
+      
       ffmpeg.stderr.on('data', (data) => {
-        console.error(`ffmpeg stderr: ${data}`);
+        errorOutput += data.toString();
       });
+      
       ffmpeg.on('close', (code) => {
         if (code !== 0) {
-          reject(new Error(`ffmpeg error code: ${code}`));
+          console.error(`ffprobe error code: ${code}`);
+          console.error(`ffprobe stderr: ${errorOutput}`);
+          reject(new Error(`ffprobe error code: ${code}`));
           return;
         }
+        
         try {
           const metadata = JSON.parse(output);
           const videoStream = metadata.streams.find((stream: any) => stream.codec_type === 'video');
@@ -108,7 +122,7 @@ export class VideoService {
           }
 
           resolve({
-            duration: metadata.format.duration || 0,
+            duration: parseFloat(metadata.format.duration) || 0,
             width: videoStream.width || 0,
             height: videoStream.height || 0,
             fps: this.parseFPS(videoStream.r_frame_rate || '0/1'),
@@ -120,6 +134,11 @@ export class VideoService {
         } catch (error) {
           reject(new Error(`Erreur lors de l'analyse de la vidéo: ${error instanceof Error ? error.message : 'Erreur inconnue'}`));
         }
+      });
+      
+      ffmpeg.on('error', (err) => {
+        console.error('❌ Erreur ffprobe:', err);
+        reject(new Error(`Erreur ffprobe: ${err.message}`));
       });
     });
   }
@@ -401,8 +420,8 @@ export class VideoService {
       };
     } catch (error) {
       console.error('❌ Erreur lors de l\'analyse des dimensions:', error);
-      // Dimensions par défaut si l'analyse échoue
-      return { width: 1920, height: 1080 };
+      // Dimensions par défaut adaptées aux téléphones (mode portrait)
+      return { width: 720, height: 1280 };
     }
   }
 
