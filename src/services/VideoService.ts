@@ -256,8 +256,13 @@ export class VideoService {
 
       // Upload du résultat vers Supabase
       console.log('📤 Upload du résultat...');
-      const fileName = this.supabaseService.generateFileName('merged');
-      const outputUrl = await this.supabaseService.upload(VIDEO_BUCKET, outputPath, fileName);
+      
+      // Construire le chemin de destination avec le répertoire et le bon nom
+      const table = request.metadata?.table || 'practices';
+      const recordId = request.metadata?.recordId || jobId;
+      const destinationPath = `${table}/${recordId}_merged.mp4`;
+      
+      const outputUrl = await this.supabaseService.upload(VIDEO_BUCKET, outputPath, destinationPath);
       job.progress = 95;
       job.updatedAt = new Date();
 
