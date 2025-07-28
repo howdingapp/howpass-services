@@ -1,4 +1,4 @@
-import ffmpeg from 'fluent-ffmpeg';
+import { spawn } from 'child_process';
 import fs from 'fs-extra';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -84,30 +84,42 @@ export class VideoService {
 
   async getVideoInfo(filePath: string): Promise<VideoInfo> {
     return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(filePath, (err: any, metadata: any) => {
-        if (err) {
-          reject(new Error(`Erreur lors de l'analyse de la vidéo: ${err.message}`));
+      const ffmpeg = spawn('ffmpeg', ['-i', filePath, '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams']);
+      let output = '';
+      ffmpeg.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+      ffmpeg.stderr.on('data', (data) => {
+        console.error(`ffmpeg stderr: ${data}`);
+      });
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`ffmpeg error code: ${code}`));
           return;
         }
+        try {
+          const metadata = JSON.parse(output);
+          const videoStream = metadata.streams.find((stream: any) => stream.codec_type === 'video');
+          const audioStream = metadata.streams.find((stream: any) => stream.codec_type === 'audio');
 
-        const videoStream = metadata.streams.find((stream: any) => stream.codec_type === 'video');
-        const audioStream = metadata.streams.find((stream: any) => stream.codec_type === 'audio');
+          if (!videoStream) {
+            reject(new Error('Aucun flux vidéo trouvé'));
+            return;
+          }
 
-        if (!videoStream) {
-          reject(new Error('Aucun flux vidéo trouvé'));
-          return;
+          resolve({
+            duration: metadata.format.duration || 0,
+            width: videoStream.width || 0,
+            height: videoStream.height || 0,
+            fps: this.parseFPS(videoStream.r_frame_rate || '0/1'),
+            bitrate: metadata.format.bit_rate ? parseInt(metadata.format.bit_rate) : 0,
+            audioCodec: audioStream?.codec_name,
+            videoCodec: videoStream.codec_name,
+            format: metadata.format.format_name || 'unknown'
+          });
+        } catch (error) {
+          reject(new Error(`Erreur lors de l'analyse de la vidéo: ${error instanceof Error ? error.message : 'Erreur inconnue'}`));
         }
-
-        resolve({
-          duration: metadata.format.duration || 0,
-          width: videoStream.width || 0,
-          height: videoStream.height || 0,
-          fps: this.parseFPS(videoStream.r_frame_rate || '0/1'),
-          bitrate: metadata.format.bit_rate ? parseInt(metadata.format.bit_rate) : 0,
-          audioCodec: audioStream?.codec_name,
-          videoCodec: videoStream.codec_name,
-          format: metadata.format.format_name || 'unknown'
-        });
       });
     });
   }
@@ -261,116 +273,108 @@ export class VideoService {
     return new Promise((resolve, reject) => {
       console.log('🎬 Début de la fusion FFmpeg...');
 
-      let command = ffmpeg();
+      const args = [
+        '-i', options.prefixVideo1Path,
+        '-i', options.prefixVideo2Path,
+        '-i', options.postfixPath
+      ];
 
-      // Ajouter les fichiers d'entrée dans l'ordre
-      command = command.input(options.prefixVideo1Path); // [0]
-      command = command.input(options.prefixVideo2Path); // [1]
-      command = command.input(options.postfixPath); // [2]
-      
       // Ajouter l'audio si disponible
       if (options.audioPath) {
-        command = command.input(options.audioPath); // [3]
+        args.push('-i', options.audioPath);
       }
 
-      // Construire le filtre complexe selon la présence d'audio
-      let filterComplex: string;
-      
-      if (options.audioPath) {
-        // Avec audio : concaténer les 3 vidéos, puis ajouter l'audio sur prefix2+postfix
-        filterComplex = [
-          // Concaténer les 3 vidéos
-          '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[concatv][concata]',
-          // Ajouter l'audio sur la partie prefix2+postfix (à partir de la durée de prefix1)
-          '[concatv][concata][3:a]amix=inputs=2:duration=longest[outa]',
-          // La vidéo reste inchangée
-          '[concatv]copy[outv]'
-        ].join(';');
-      } else {
-        // Sans audio : simplement concaténer les 3 vidéos
-        filterComplex = '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]';
-      }
+      args.push(
+        '-filter_complex',
+        this.buildFilterComplex(options),
+        '-map', '[outv]',
+        '-map', '[outa]',
+        '-c:v', 'libx264',
+        '-c:a', 'aac',
+        '-r', (options.fps || 25).toString(),
+        '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
+        '-threads', (options.threads || 4).toString(),
+        '-y',
+        options.outputPath
+      );
 
-      // Configurer la sortie avec le filtre complexe
-      command
-        .outputOptions([
-          '-filter_complex', filterComplex,
-          '-map', '[outv]',
-          '-map', '[outa]'
-        ])
-        .output(options.outputPath);
+      const ffmpeg = spawn('ffmpeg', args);
 
-      // Ajouter les options de qualité
-      if (options.quality) {
-        switch (options.quality) {
-          case 'low':
-            command.outputOptions(['-crf', '28']);
-            break;
-          case 'medium':
-            command.outputOptions(['-crf', '23']);
-            break;
-          case 'high':
-            command.outputOptions(['-crf', '18']);
-            break;
-        }
-      }
-
-      // Ajouter les options de résolution
-      if (options.resolution) {
-        command.outputOptions(['-vf', `scale=${options.resolution}`]);
-      }
-
-      // Ajouter les options de FPS
-      if (options.fps) {
-        command.outputOptions(['-r', options.fps.toString()]);
-      }
-
-      // Ajouter les codecs
-      if (options.videoCodec) {
-        command.outputOptions(['-c:v', options.videoCodec]);
-      }
-      if (options.audioCodec) {
-        command.outputOptions(['-c:a', options.audioCodec]);
-      }
-
-      // Configurer les threads
-      if (options.threads) {
-        command.outputOptions(['-threads', options.threads.toString()]);
-      }
-
-      // Gérer le timeout
-      if (options.timeout) {
-        command.timeout(options.timeout);
-      }
-
-      // Gérer les événements
-      command
-        .on('progress', (progress: any) => {
-          const job = this.jobs.get(jobId);
-          if (job) {
-            // Ajuster la progression entre 50% et 80%
-            const baseProgress = 50;
-            const ffmpegProgress = Math.round(progress.percent || 0);
-            job.progress = baseProgress + Math.round((ffmpegProgress * 30) / 100);
+      let progressOutput = '';
+      ffmpeg.stdout.on('data', (data) => {
+        progressOutput += data.toString();
+        const job = this.jobs.get(jobId);
+        if (job) {
+          const percentMatch = progressOutput.match(/time=(\d{2}:\d{2}:\d{2}\.\d{2}) bitrate=(\d+)/);
+          if (percentMatch) {
+            const currentTime = percentMatch[1];
+            const bitrate = percentMatch[2];
+            const durationMatch = progressOutput.match(/Duration: (\d{2}:\d{2}:\d{2}\.\d{2})/);
+            const duration = durationMatch ? durationMatch[1] : '00:00:00.00';
+            const durationSeconds = this.parseDuration(duration!);
+            const currentTimeSeconds = this.parseDuration(currentTime!);
+            const progress = (currentTimeSeconds / durationSeconds) * 100;
+            job.progress = Math.round(progress);
             job.updatedAt = new Date();
           }
-          console.log(`📊 Progression FFmpeg: ${progress.percent?.toFixed(1)}%`);
-        })
-        .on('end', () => {
-          console.log('✅ Fusion FFmpeg terminée');
-          resolve();
-        })
-        .on('error', (err: any) => {
-          console.error('❌ Erreur FFmpeg:', err);
-          reject(new Error(`Erreur FFmpeg: ${err.message}`));
-        })
-        .on('stderr', (stderrLine: string) => {
-          console.log('🔧 FFmpeg:', stderrLine);
-        });
+        }
+        console.log(`📊 Progression FFmpeg: ${progressOutput}`);
+      });
 
-      // Lancer la commande
-      command.run();
+      ffmpeg.stderr.on('data', (data) => {
+        console.error(`ffmpeg stderr: ${data}`);
+      });
+
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`ffmpeg error code: ${code}`));
+          return;
+        }
+        console.log('✅ Fusion FFmpeg terminée');
+        resolve();
+      });
+
+      ffmpeg.on('error', (err) => {
+        console.error('❌ Erreur FFmpeg:', err);
+        reject(new Error(`Erreur FFmpeg: ${err.message}`));
+      });
+
+      if (options.timeout) {
+        setTimeout(() => {
+          ffmpeg.kill('SIGKILL');
+          reject(new Error(`Timeout FFmpeg pour le job ${jobId}`));
+        }, options.timeout);
+      }
     });
+  }
+
+  private buildFilterComplex(options: FFmpegOptions): string {
+    let filterComplex = '';
+
+    if (options.audioPath) {
+      // Avec audio : concaténer les 3 vidéos, puis ajouter l'audio sur prefix2+postfix
+      filterComplex = [
+        // Concaténer les 3 vidéos
+        '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[concatv][concata]',
+        // Ajouter l'audio sur la partie prefix2+postfix (à partir de la durée de prefix1)
+        '[concatv][concata][3:a]amix=inputs=2:duration=longest[outa]',
+        // La vidéo reste inchangée
+        '[concatv]copy[outv]'
+      ].join(';');
+    } else {
+      // Sans audio : simplement concaténer les 3 vidéos
+      filterComplex = '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[outv][outa]';
+    }
+
+    return filterComplex;
+  }
+
+  private parseDuration(durationString: string): number {
+    const parts = durationString.split(':');
+    const hours = parseInt(parts[0]!);
+    const minutes = parseInt(parts[1]!);
+    const seconds = parseFloat(parts[2]!);
+    return hours * 3600 + minutes * 60 + seconds;
   }
 
   async getJobStatus(jobId: string): Promise<JobStatus | null> {

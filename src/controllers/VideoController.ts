@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { VideoService, MergeRequest } from '../services/VideoService';
+import { SupabaseService } from '../services/SupabaseService';
 
 interface DatabaseWebhookPayload {
   type: string;
@@ -10,9 +11,11 @@ interface DatabaseWebhookPayload {
 
 export class VideoController {
   private videoService: VideoService;
+  private supabaseService: SupabaseService;
 
   constructor() {
     this.videoService = new VideoService();
+    this.supabaseService = new SupabaseService();
   }
 
   async handleDatabaseWebhook(req: Request, res: Response): Promise<void> {
@@ -135,6 +138,13 @@ export class VideoController {
         await this.videoService.uploadToSupabase(result.outputUrl, bucketName, destinationPath);
 
         console.log('✅ Upload vers Supabase terminé pour:', { table, recordId, destinationPath });
+
+        // Mettre à jour le champ qr_code_presentation_video_public_url dans la base de données
+        const updateSuccess = await this.supabaseService.updateQrCodePresentationVideoUrl(table, recordId, destinationPath);
+        
+        if (!updateSuccess) {
+          console.error('❌ Échec de la mise à jour du champ qr_code_presentation_video_public_url pour:', { table, recordId });
+        }
 
       } else {
         console.error('❌ Échec du merge pour:', { table, recordId, error: result.error });

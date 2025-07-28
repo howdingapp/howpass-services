@@ -139,10 +139,35 @@ export class SupabaseService {
     try {
       if (await fs.pathExists(filePath)) {
         await fs.remove(filePath);
-        console.log(`🧹 Fichier local supprimé: ${filePath}`);
+        console.log(`🗑️ Fichier local supprimé: ${filePath}`);
       }
     } catch (error) {
-      console.error(`❌ Erreur lors du nettoyage de ${filePath}:`, error);
+      console.error('❌ Erreur lors de la suppression du fichier local:', error);
+    }
+  }
+
+  async updateQrCodePresentationVideoUrl(table: string, recordId: string | number, videoUrl: string): Promise<boolean> {
+    try {
+      console.log(`🔄 Mise à jour du champ qr_code_presentation_video_public_url pour ${table}/${recordId}`);
+
+      const { data, error } = await this.supabase
+        .from(table)
+        .update({ qr_code_presentation_video_public_url: videoUrl })
+        .eq('id', recordId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour du champ qr_code_presentation_video_public_url:', error);
+        return false;
+      }
+
+      console.log(`✅ Champ qr_code_presentation_video_public_url mis à jour avec succès pour ${table}/${recordId}`);
+      return true;
+
+    } catch (error) {
+      console.error('❌ Erreur lors de la mise à jour du champ qr_code_presentation_video_public_url:', error);
+      return false;
     }
   }
 } 
