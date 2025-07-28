@@ -1,5 +1,5 @@
 import { VideoService } from './services/VideoService';
-import { SupabaseService } from './services/SupabaseService';
+import { SupabaseService, VIDEO_BUCKET } from './services/SupabaseService';
 import dotenv from 'dotenv';
 
 // Charger les variables d'environnement
@@ -38,17 +38,21 @@ async function processVideoJob() {
     if (result.success && result.outputUrl) {
       console.log('✅ Fusion terminée avec succès:', { jobId: result.jobId });
 
-      // Construire le chemin de destination dans le bucket
-      const bucketName = process.env['SUPABASE_BUCKET_NAME'];
-      if (!bucketName) {
-        throw new Error('Variable d\'environnement SUPABASE_BUCKET_NAME non définie');
-      }
 
-      const destinationPath = `${table}/${recordId}.mp4`;
-      console.log('📤 Upload vers Supabase:', { bucketName, destinationPath });
+      // Le fichier local est dans /tmp avec le nom du job
+      const localFilePath = `/tmp/merged_${result.jobId}.mp4`;
+      
+      // Le nom de fichier de destination doit être <id>_qr_code.mp4
+      const destinationPath = `${recordId}_qr_code.mp4`;
+      
+      console.log('📤 Upload vers Supabase:', { 
+        localFilePath, 
+        VIDEO_BUCKET, 
+        destinationPath 
+      });
 
       // Uploader le fichier fusionné vers Supabase
-      await videoService.uploadToSupabase(result.outputUrl, bucketName, destinationPath);
+      await videoService.uploadToSupabase(localFilePath, VIDEO_BUCKET, destinationPath);
 
       console.log('✅ Upload vers Supabase terminé:', { destinationPath });
 

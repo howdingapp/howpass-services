@@ -570,7 +570,7 @@ export class VideoService {
       }
 
       // Uploader le fichier vers Supabase
-      await this.supabaseService.upload(VIDEO_BUCKET,localFilePath, destinationPath);
+      await this.supabaseService.upload(bucketName, localFilePath, destinationPath);
 
       console.log('✅ Upload vers Supabase terminé:', { destinationPath });
 

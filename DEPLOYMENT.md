@@ -52,7 +52,6 @@ Dans votre repository GitHub, allez dans **Settings > Secrets and variables > Ac
 | `GCP_SA_KEY` | Clé JSON du service account (contenu complet du fichier) | `{"type": "service_account", ...}` |
 | `SUPABASE_URL` | URL de votre projet Supabase | `https://abc123.supabase.co` |
 | `SUPABASE_SERVICE_KEY` | Clé de service Supabase | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
-| `SUPABASE_BUCKET_NAME` | Nom du bucket Supabase Storage | `videos` |
 | `CORS_ORIGIN` | Origine autorisée pour CORS | `https://your-app.com` |
 
 ### Comment ajouter les secrets
@@ -61,7 +60,6 @@ Dans votre repository GitHub, allez dans **Settings > Secrets and variables > Ac
 2. **GCP_SA_KEY** : Le contenu complet du fichier `key.json` généré précédemment
 3. **SUPABASE_URL** : URL de votre projet Supabase (Settings > API)
 4. **SUPABASE_SERVICE_KEY** : Clé de service Supabase (Settings > API > service_role key)
-5. **SUPABASE_BUCKET_NAME** : Nom du bucket où stocker les vidéos
 6. **CORS_ORIGIN** : URL de votre application frontend
 
 ## 🚀 Déploiement
@@ -152,7 +150,6 @@ Le service utilise les variables d'environnement suivantes :
 | `NODE_ENV` | Environnement | `production` |
 | `SUPABASE_URL` | URL Supabase | Requis |
 | `SUPABASE_SERVICE_KEY` | Clé service Supabase | Requis |
-| `SUPABASE_BUCKET_NAME` | Bucket Supabase | `videos` |
 | `FFMPEG_TIMEOUT` | Timeout FFmpeg (ms) | `300000` |
 | `FFMPEG_THREADS` | Nombre de threads FFmpeg | `4` |
 | `CORS_ORIGIN` | Origine CORS | `*` |

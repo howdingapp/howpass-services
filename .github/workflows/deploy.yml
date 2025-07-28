@@ -57,7 +57,6 @@ jobs:
           --set-env-vars=NODE_ENV=production
           --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
-          --set-env-vars=SUPABASE_BUCKET_NAME=${{ secrets.SUPABASE_BUCKET_NAME }}
           --set-env-vars=FFMPEG_TIMEOUT=300000
           --set-env-vars=FFMPEG_THREADS=4
           --set-env-vars=CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
@@ -85,7 +84,6 @@ jobs:
             --set-env-vars=NODE_ENV=production \
             --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
             --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
-            --set-env-vars=SUPABASE_BUCKET_NAME=${{ secrets.SUPABASE_BUCKET_NAME }} \
             --set-env-vars=FFMPEG_TIMEOUT=300000 \
             --set-env-vars=FFMPEG_THREADS=4 \
             --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
@@ -106,7 +104,6 @@ jobs:
             --set-env-vars=NODE_ENV=production \
             --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
             --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
-            --set-env-vars=SUPABASE_BUCKET_NAME=${{ secrets.SUPABASE_BUCKET_NAME }} \
             --set-env-vars=FFMPEG_TIMEOUT=300000 \
             --set-env-vars=FFMPEG_THREADS=4 \
             --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
