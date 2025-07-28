@@ -1,4 +1,4 @@
-import { VideoService, MergeRequest } from './services/VideoService';
+import { VideoService } from './services/VideoService';
 import { SupabaseService } from './services/SupabaseService';
 import dotenv from 'dotenv';
 
@@ -18,8 +18,8 @@ async function processVideoJob() {
       throw new Error('Variables d\'environnement manquantes: MERGE_REQUEST, TABLE, RECORD_ID');
     }
 
-    const mergeRequest: MergeRequest = JSON.parse(mergeRequestStr);
-    
+    const mergeRequest = JSON.parse(mergeRequestStr);
+
     console.log('📊 Paramètres du job:', {
       table,
       recordId,

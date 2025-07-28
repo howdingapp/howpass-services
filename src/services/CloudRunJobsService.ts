@@ -17,7 +17,7 @@ export class CloudRunJobsService {
     this.jobName = process.env['GCP_JOB_NAME'] || 'video-processing-job';
   }
 
-  async createVideoProcessingJob(_payload: JobPayload): Promise<string> {
+  async createVideoProcessingJob(payload: JobPayload): Promise<string> {
     try {
       if (!this.projectId) {
         throw new Error('GCP_PROJECT_ID non défini');
@@ -26,7 +26,8 @@ export class CloudRunJobsService {
       console.log('📋 Création d\'un job Cloud Run:', {
         projectId: this.projectId,
         location: this.location,
-        jobName: this.jobName
+        jobName: this.jobName,
+        payload: { table: payload.table, recordId: payload.recordId }
       });
 
       const run = google.run('v2');
@@ -42,7 +43,7 @@ export class CloudRunJobsService {
       });
 
       console.log('✅ Job Cloud Run créé:', response);
-      return response.data?.name || '';
+      return 'job-created';
 
     } catch (error) {
       console.error('❌ Erreur lors de la création du job Cloud Run:', error);
