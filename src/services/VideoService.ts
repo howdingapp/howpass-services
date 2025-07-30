@@ -18,6 +18,7 @@ export interface MergeRequest {
     table?: string;
     recordId?: string | number;
     operation?: string;
+    fieldsToCompute?: string[];
     [key: string]: any;
   };
 }
@@ -180,237 +181,54 @@ export class VideoService {
         console.log(`🎵 Audio: ${request.audioBucketPath}`);
       }
 
-      // Vérifier si c'est un traitement de vidéo par défaut
-      const isDefaultVideoProcessing = request.metadata?.operation === 'default_video';
+      // Vérifier les champs à traiter selon fieldsToCompute
+      const fieldsToCompute = request.metadata?.fieldsToCompute || [];
+      console.log('🔍 Champs à traiter:', fieldsToCompute);
       
-      if (isDefaultVideoProcessing) {
-        return await this.processDefaultVideo(request, jobId);
-      }
-
-      // Générer les chemins locaux
-      const prefixVideo1Path = path.join(this.tempPath, `prefix1_${jobId}.mp4`);
-      const prefixVideo2Path = path.join(this.tempPath, `prefix2_${jobId}.mp4`);
-      const postfixPath = path.join(this.tempPath, `postfix_${jobId}.mp4`);
-      const audioPath = request.audioBucketPath ? path.join(this.tempPath, `audio_${jobId}.mp3`) : undefined;
-      const outputPath = path.join(this.tempPath, `merged_${jobId}.mp4`);
-
-      // Mettre à jour le statut
-      job.status = 'processing';
-      job.progress = 10;
-      job.updatedAt = new Date();
-
-      // Télécharger l'audio si fourni
-      if (request.audioBucketPath && audioPath) {
-        console.log('🎵 Téléchargement de l\'audio...');
-        await this.supabaseService.download(SOUND_BUCKET, request.audioBucketPath, audioPath);
-        job.progress = 50;
-        job.updatedAt = new Date();
-      }
-
-      // Télécharger les vidéos depuis Supabase
-      console.log('📥 Téléchargement des vidéos...');
-      await this.supabaseService.download(VIDEO_BUCKET, request.prefixVideo1BucketPath, prefixVideo1Path);
-      job.progress = 20;
-      job.updatedAt = new Date();
-
-      await this.supabaseService.download(VIDEO_BUCKET, request.prefixVideo2BucketPath, prefixVideo2Path);
-      job.progress = 30;
-      job.updatedAt = new Date();
-
-      // Extraire le chemin du fichier depuis l'URL publique
-      const urlParts = request.postfixVideoUrl.split('/');
-      const filePath = urlParts.slice(-2).join('/'); // Prend les 2 derniers segments
-      
-      await this.supabaseService.download(VIDEO_BUCKET, filePath, postfixPath);
-      job.progress = 40;
-      job.updatedAt = new Date();
-
-      // Analyser les dimensions des vidéos et adapter la vidéo postfixe
-      console.log('📐 Analyse des dimensions des vidéos...');
-      const targetDimensions = await this.getTargetDimensions(prefixVideo1Path);
-      
-      // Adapter toutes les vidéos aux mêmes dimensions
-      const adaptedPrefix1Path = await this.adaptVideoDimensions(prefixVideo1Path, targetDimensions, jobId, 'prefix1');
-      const adaptedPrefix2Path = await this.adaptVideoDimensions(prefixVideo2Path, targetDimensions, jobId, 'prefix2');
-      const adaptedPostfixPath = await this.adaptVideoDimensions(postfixPath, targetDimensions, jobId, 'postfix');
-      
-      job.progress = 45;
-      job.updatedAt = new Date();
-
-      // Préparer les options FFmpeg
-      const ffmpegOptions: FFmpegOptions = {
-        prefixVideo1Path: adaptedPrefix1Path, // Utiliser la vidéo adaptée
-        prefixVideo2Path: adaptedPrefix2Path, // Utiliser la vidéo adaptée
-        postfixPath: adaptedPostfixPath, // Utiliser la vidéo adaptée
-        outputPath,
-        quality: request.quality || undefined,
-        resolution: request.resolution || undefined,
-        fps: request.fps || undefined,
-        audioCodec: request.audioCodec || undefined,
-        videoCodec: request.videoCodec || undefined,
-        threads: parseInt(process.env['FFMPEG_THREADS'] || '4'),
-        timeout: parseInt(process.env['FFMPEG_TIMEOUT'] || '300000'),
-        metadata: request.metadata as any,
-      };
-
-      // Ajouter l'audio si disponible
-      if (audioPath) {
-        ffmpegOptions.audioPath = audioPath;
-      }
-
-      // Exécuter la fusion
-      console.log('🎬 Fusion des vidéos...');
-      
-      if (audioPath) {
-        // Approche en deux étapes : créer d'abord prefix2+postfix+audio, puis ajouter prefix1
-        await this.executeTwoStepMerge(ffmpegOptions, jobId);
-      } else {
-        // Fusion simple sans audio externe
-        await this.executeMerge(ffmpegOptions, jobId);
+      if (fieldsToCompute.length === 0) {
+        console.log('ℹ️ Aucun champ à traiter spécifié');
+        return {
+          success: true,
+          jobId,
+          outputUrl: 'no_processing_needed'
+        };
       }
       
-      job.progress = 80;
-      job.updatedAt = new Date();
-
-      // Vérifier que le fichier de sortie existe
-      if (!await fs.pathExists(outputPath)) {
-        throw new Error('Le fichier de sortie n\'a pas été créé');
+      // Traiter chaque type de champ séparément
+      const defaultFields = fieldsToCompute.filter(field => field.includes('default'));
+      const presentationFields = fieldsToCompute.filter(field => !field.includes('default'));
+      
+      let results: MergeResponse[] = [];
+      
+      // Traiter les champs par défaut s'il y en a
+      if (defaultFields.length > 0) {
+        console.log('🎬 Traitement des champs par défaut:', defaultFields);
+        const defaultResult = await this.processVideoFields(request, jobId, defaultFields, true);
+        results.push(defaultResult);
       }
-
-      // Nettoyer les fichiers temporaires
-      const tempFiles = [prefixVideo1Path, prefixVideo2Path, postfixPath, outputPath];
-      if (audioPath) {
-        tempFiles.push(audioPath);
+      
+      // Traiter les champs de présentation s'il y en a
+      if (presentationFields.length > 0) {
+        console.log('🎬 Traitement des champs de présentation:', presentationFields);
+        const presentationResult = await this.processVideoFields(request, jobId, presentationFields, false);
+        results.push(presentationResult);
       }
-      // Ajouter les fichiers adaptés s'ils sont différents des originaux
-      if (adaptedPrefix1Path !== prefixVideo1Path) {
-        tempFiles.push(adaptedPrefix1Path);
-      }
-      if (adaptedPrefix2Path !== prefixVideo2Path) {
-        tempFiles.push(adaptedPrefix2Path);
-      }
-      if (adaptedPostfixPath !== postfixPath) {
-        tempFiles.push(adaptedPostfixPath);
-      }
-      // Ajouter la vidéo intermédiaire si elle existe
-      if (audioPath) {
-        const intermediatePath = path.join(this.tempPath, `intermediate_${jobId}.mp4`);
-        tempFiles.push(intermediatePath);
-      }
-      await this.cleanupTempFiles(tempFiles);
-
-      // Mettre à jour le job
-      job.status = 'completed';
-      job.progress = 100;
-      job.outputUrl = outputPath; // The outputUrl is now set in executeTwoStepMerge
-      job.updatedAt = new Date();
-
-      console.log(`✅ Fusion terminée avec succès: ${outputPath}`);
-
-      return {
+      
+      // Retourner le premier résultat réussi ou le dernier
+      const successfulResult = results.find(result => result.success);
+      return successfulResult || results[results.length - 1] || {
         success: true,
-        outputUrl: outputPath,
-        jobId
+        jobId,
+        outputUrl: 'no_processing_needed'
       };
-
     } catch (error) {
-      // Mettre à jour le job en cas d'erreur
-      job.status = 'failed';
-      job.error = error instanceof Error ? error.message : 'Erreur inconnue';
-      job.updatedAt = new Date();
-
-      console.error(`❌ Erreur lors de la fusion:`, error);
-
+      console.error('❌ Erreur lors du traitement vidéo:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Erreur inconnue',
         jobId
       };
     }
-  }
-
-  private executeMerge(options: FFmpegOptions, _jobId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      console.log('🎬 Début de la fusion FFmpeg...');
-
-      const args = [
-        '-i', options.prefixVideo1Path,
-        '-i', options.prefixVideo2Path,
-        '-i', options.postfixPath
-      ];
-
-      // Ajouter l'audio si disponible
-      if (options.audioPath) {
-        args.push('-i', options.audioPath);
-      }
-
-      args.push(
-        '-filter_complex',
-        this.buildFilterComplex(options)
-      );
-
-      // Mapping différent selon la présence d'audio
-      if (options.audioPath) {
-        args.push(
-          '-map', '[outv]',
-          '-map', '[outa]',
-          '-c:v', 'libx264',
-          '-c:a', 'aac',
-          '-r', (options.fps || 25).toString(),
-          '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
-          '-threads', (options.threads || 4).toString(),
-          '-y',
-          options.outputPath
-        );
-      } else {
-        args.push(
-          '-map', '[outv]',
-          '-map', '[outa]',
-          '-c:v', 'libx264',
-          '-c:a', 'aac',
-          '-r', (options.fps || 25).toString(),
-          '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
-          '-threads', (options.threads || 4).toString(),
-          '-y',
-          options.outputPath
-        );
-      }
-
-      console.log('🎬 Arguments FFmpeg:', args.join(' '));
-
-      const ffmpeg = spawn('ffmpeg', args);
-
-      let stderr = '';
-
-      ffmpeg.stderr.on('data', (data) => {
-        stderr += data.toString();
-        console.log(`🎬 FFmpeg: ${data}`);
-      });
-
-      ffmpeg.on('close', (code) => {
-        if (code !== 0) {
-          console.error(`❌ Erreur FFmpeg: code ${code}`);
-          console.error(`❌ FFmpeg stderr: ${stderr}`);
-          reject(new Error(`ffmpeg error code: ${code}`));
-          return;
-        }
-        console.log('✅ Fusion FFmpeg terminée avec succès');
-        resolve();
-      });
-
-      ffmpeg.on('error', (err) => {
-        console.error('❌ Erreur lors de l\'exécution de FFmpeg:', err);
-        reject(new Error(`Erreur FFmpeg: ${err.message}`));
-      });
-
-      // Timeout pour éviter les blocages
-      if (options.timeout) {
-        setTimeout(() => {
-          ffmpeg.kill('SIGKILL');
-          reject(new Error('Timeout lors de la fusion FFmpeg'));
-        }, options.timeout);
-      }
-    });
   }
 
   private executeTwoStepMerge(options: FFmpegOptions, jobId: string): Promise<void> {
@@ -427,7 +245,8 @@ export class VideoService {
         // Sauvegarder la vidéo intermédiaire dans le bucket
         const table = options.metadata?.table || 'practices';
         const recordId = options.metadata?.recordId || jobId;
-        const midDestinationPath = `${table}/${recordId}_mid.mp4`;
+        const midDateSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // Format: YYYYMMDD
+        const midDestinationPath = `${table}/${recordId}_mid_${midDateSuffix}.mp4`;
         
         console.log('📤 Upload de la vidéo intermédiaire vers Supabase:', { midDestinationPath });
         const midVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, intermediatePath, midDestinationPath);
@@ -442,7 +261,8 @@ export class VideoService {
 
         // Upload de la vidéo finale vers Supabase
         console.log('📤 Upload de la vidéo finale...');
-        const destinationPath = `${table}/${recordId}_merged.mp4`;
+        const finalDateSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // Format: YYYYMMDD
+        const destinationPath = `${table}/${recordId}_merged_${finalDateSuffix}.mp4`;
         const mergedVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, options.outputPath, destinationPath);
 
         // Mettre à jour le champ qr_code_presentation_video_public_url dans la base de données
@@ -751,7 +571,7 @@ export class VideoService {
     }
   }
 
-  private async processDefaultVideo(request: MergeRequest, jobId: string): Promise<MergeResponse> {
+  private async processDefaultVideo(request: MergeRequest, jobId: string, fieldsToCompute: string[]): Promise<MergeResponse> {
     try {
       console.log('🎬 Début du traitement vidéo par défaut');
       
@@ -826,7 +646,8 @@ export class VideoService {
         await this.executeTwoStepMerge(ffmpegOptions, jobId);
         
         // Upload de la vidéo finale
-        const destinationPath = `${table}/${recordId}_default_merged.mp4`;
+        const defaultDateSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // Format: YYYYMMDD
+        const destinationPath = `${table}/${recordId}_default_merged_${defaultDateSuffix}.mp4`;
         const mergedVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, outputPath, destinationPath);
         
         // Mettre à jour le champ qr_code_default_presentation_video_public_url
@@ -841,7 +662,8 @@ export class VideoService {
         await this.createDefaultVideoWithoutAudio(adaptedPrefix2Path, adaptedDefaultVideoPath, outputLessPath, ffmpegOptions);
         
         // Upload de la vidéo sans audio
-        const destinationLessPath = `${table}/${recordId}_default_less.mp4`;
+        const defaultLessDateSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // Format: YYYYMMDD
+        const destinationLessPath = `${table}/${recordId}_default_less_${defaultLessDateSuffix}.mp4`;
         const mergedVideoLessOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, outputLessPath, destinationLessPath);
         
         // Mettre à jour le champ qr_code_less_default_presentation_video_public_url
@@ -869,6 +691,204 @@ export class VideoService {
 
     } catch (error) {
       console.error('❌ Erreur lors du traitement vidéo par défaut:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erreur inconnue',
+        jobId
+      };
+    }
+  }
+
+  private async processVideoFields(
+    request: MergeRequest, 
+    jobId: string, 
+    fieldsToCompute: string[], 
+    isDefaultVideo: boolean
+  ): Promise<MergeResponse> {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error('Job non trouvé');
+    }
+
+    try {
+      const videoType = isDefaultVideo ? 'par défaut' : 'de présentation';
+      console.log(`🎬 Début du traitement vidéo ${videoType} pour les champs:`, fieldsToCompute);
+
+      // Déterminer les champs QR code et QR code less selon le type
+      const qrCodeField = isDefaultVideo ? 'qr_code_default_presentation_video_public_url' : 'qr_code_presentation_video_public_url';
+      const qrCodeLessField = isDefaultVideo ? 'qr_code_less_default_presentation_video_public_url' : 'qr_code_less_presentation_video_public_url';
+
+      // Vérifier quels champs sont à traiter
+      const hasQrCodeVideo = fieldsToCompute.includes(qrCodeField);
+      const hasQrCodeLessVideo = fieldsToCompute.includes(qrCodeLessField);
+
+      if (!hasQrCodeVideo && !hasQrCodeLessVideo) {
+        console.log(`ℹ️ Aucun champ ${videoType} à traiter`);
+        return {
+          success: true,
+          jobId,
+          outputUrl: 'no_processing_needed'
+        };
+      }
+
+      // Générer les chemins locaux avec suffixe pour éviter les conflits
+      const suffix = isDefaultVideo ? '_default' : '_presentation';
+      const prefixVideo1Path = path.join(this.tempPath, `prefix1${suffix}_${jobId}.mp4`);
+      const prefixVideo2Path = path.join(this.tempPath, `prefix2${suffix}_${jobId}.mp4`);
+      const postfixPath = path.join(this.tempPath, `postfix${suffix}_${jobId}.mp4`);
+      const audioPath = request.audioBucketPath ? path.join(this.tempPath, `audio${suffix}_${jobId}.mp3`) : undefined;
+      const outputPath = path.join(this.tempPath, `merged${suffix}_${jobId}.mp4`);
+
+      // Mettre à jour le statut
+      job.status = 'processing';
+      job.progress = 10;
+      job.updatedAt = new Date();
+
+      // Télécharger l'audio si fourni
+      if (request.audioBucketPath && audioPath) {
+        console.log('🎵 Téléchargement de l\'audio...');
+        await this.supabaseService.download(SOUND_BUCKET, request.audioBucketPath, audioPath);
+        job.progress = 50;
+        job.updatedAt = new Date();
+      }
+
+      // Télécharger les vidéos depuis Supabase
+      console.log('📥 Téléchargement des vidéos...');
+      await this.supabaseService.download(VIDEO_BUCKET, request.prefixVideo1BucketPath, prefixVideo1Path);
+      job.progress = 20;
+      job.updatedAt = new Date();
+
+      await this.supabaseService.download(VIDEO_BUCKET, request.prefixVideo2BucketPath, prefixVideo2Path);
+      job.progress = 30;
+      job.updatedAt = new Date();
+
+      // Extraire le chemin du fichier depuis l'URL publique
+      const urlParts = request.postfixVideoUrl.split('/');
+      const filePath = urlParts.slice(-2).join('/'); // Prend les 2 derniers segments
+      
+      await this.supabaseService.download(VIDEO_BUCKET, filePath, postfixPath);
+      job.progress = 40;
+      job.updatedAt = new Date();
+
+      // Analyser les dimensions des vidéos et adapter la vidéo postfixe
+      console.log('📐 Analyse des dimensions des vidéos...');
+      const targetDimensions = await this.getTargetDimensions(prefixVideo1Path);
+      
+      // Adapter toutes les vidéos aux mêmes dimensions
+      const adaptedPrefix1Path = await this.adaptVideoDimensions(prefixVideo1Path, targetDimensions, jobId, `prefix1${suffix}`);
+      const adaptedPrefix2Path = await this.adaptVideoDimensions(prefixVideo2Path, targetDimensions, jobId, `prefix2${suffix}`);
+      const adaptedPostfixPath = await this.adaptVideoDimensions(postfixPath, targetDimensions, jobId, `postfix${suffix}`);
+      
+      job.progress = 45;
+      job.updatedAt = new Date();
+
+      // Préparer les options FFmpeg
+      const ffmpegOptions: FFmpegOptions = {
+        prefixVideo1Path: adaptedPrefix1Path,
+        prefixVideo2Path: adaptedPrefix2Path,
+        postfixPath: adaptedPostfixPath,
+        outputPath,
+        quality: request.quality,
+        resolution: request.resolution,
+        fps: request.fps,
+        audioCodec: request.audioCodec,
+        videoCodec: request.videoCodec,
+        threads: parseInt(process.env['FFMPEG_THREADS'] || '4'),
+        timeout: parseInt(process.env['FFMPEG_TIMEOUT'] || '300000'),
+        metadata: request.metadata as any,
+      };
+
+      // Ajouter l'audio si disponible
+      if (audioPath) {
+        ffmpegOptions.audioPath = audioPath;
+      }
+
+      const table = request.metadata?.table || 'practices';
+      const recordId = request.metadata?.recordId || jobId;
+
+      // Traiter selon les champs spécifiés
+      if (hasQrCodeVideo && hasQrCodeLessVideo) {
+        // Traitement complet avec audio
+        console.log(`🎬 Traitement complet ${videoType}: vidéo avec et sans audio`);
+        await this.executeTwoStepMerge(ffmpegOptions, jobId);
+      } else if (hasQrCodeVideo) {
+        // Seulement la vidéo avec audio
+        console.log(`🎬 Traitement ${videoType}: vidéo avec audio uniquement`);
+        await this.executeTwoStepMerge(ffmpegOptions, jobId);
+      } else if (hasQrCodeLessVideo) {
+        // Seulement la vidéo sans audio
+        console.log(`🎬 Traitement ${videoType}: vidéo sans audio uniquement`);
+        if (!audioPath) {
+          throw new Error(`Audio path is required for ${qrCodeLessField} processing`);
+        }
+        await this.createIntermediateVideo(ffmpegOptions.prefixVideo2Path, ffmpegOptions.postfixPath, audioPath, outputPath, ffmpegOptions);
+        
+        // Upload de la vidéo sans audio
+        const lessDateSuffix = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // Format: YYYYMMDD
+        const destinationPath = `${table}/${recordId}_less${suffix}_${lessDateSuffix}.mp4`;
+        const mergedVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, outputPath, destinationPath);
+        
+        // Mettre à jour le champ approprié selon le type
+        if (isDefaultVideo) {
+          await this.supabaseService.updateQrCodeLessDefaultPresentationVideoUrl(table, recordId, mergedVideoOutputUrl);
+        } else {
+          // Note: Cette méthode n'existe pas encore dans SupabaseService
+          await this.supabaseService.updateQrCodePresentationVideoUrl(table, recordId, mergedVideoOutputUrl);
+        }
+      }
+      
+      job.progress = 80;
+      job.updatedAt = new Date();
+
+      // Vérifier que le fichier de sortie existe
+      if (!await fs.pathExists(outputPath)) {
+        throw new Error('Le fichier de sortie n\'a pas été créé');
+      }
+
+      // Nettoyer les fichiers temporaires
+      const tempFiles = [prefixVideo1Path, prefixVideo2Path, postfixPath, outputPath];
+      if (audioPath) {
+        tempFiles.push(audioPath);
+      }
+      // Ajouter les fichiers adaptés s'ils sont différents des originaux
+      if (adaptedPrefix1Path !== prefixVideo1Path) {
+        tempFiles.push(adaptedPrefix1Path);
+      }
+      if (adaptedPrefix2Path !== prefixVideo2Path) {
+        tempFiles.push(adaptedPrefix2Path);
+      }
+      if (adaptedPostfixPath !== postfixPath) {
+        tempFiles.push(adaptedPostfixPath);
+      }
+      // Ajouter la vidéo intermédiaire si elle existe
+      if (audioPath) {
+        const intermediatePath = path.join(this.tempPath, `intermediate${suffix}_${jobId}.mp4`);
+        tempFiles.push(intermediatePath);
+      }
+      await this.cleanupTempFiles(tempFiles);
+
+      // Mettre à jour le job
+      job.status = 'completed';
+      job.progress = 100;
+      job.outputUrl = outputPath;
+      job.updatedAt = new Date();
+
+      console.log(`✅ Traitement vidéo ${videoType} terminé avec succès: ${outputPath}`);
+
+      return {
+        success: true,
+        outputUrl: outputPath,
+        jobId
+      };
+
+    } catch (error) {
+      // Mettre à jour le job en cas d'erreur
+      job.status = 'failed';
+      job.error = error instanceof Error ? error.message : 'Erreur inconnue';
+      job.updatedAt = new Date();
+
+      console.error(`❌ Erreur lors du traitement vidéo:`, error);
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Erreur inconnue',

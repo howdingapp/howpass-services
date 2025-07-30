@@ -58,44 +58,59 @@ export class VideoController {
         return;
       }
 
-      // Vérifier si les vidéos QR code sont déjà générées ou en cours de traitement
+      // Vérifier les statuts des champs QR code
       const qrCodeVideoStatus = record?.qr_code_presentation_video_public_url;
       const qrCodeLessVideoStatus = record?.qr_code_less_presentation_video_public_url;
       
-      if (qrCodeVideoStatus && qrCodeVideoStatus !== 'to_compute' && qrCodeVideoStatus !== 'computing' &&
-          qrCodeLessVideoStatus && qrCodeLessVideoStatus !== 'to_compute' && qrCodeLessVideoStatus !== 'computing') {
-        console.log('⏭️ Vidéos QR code déjà générées, webhook ignoré:', {
-          table,
-          recordId: record.id,
-          qrCodeVideoStatus,
-          qrCodeLessVideoStatus
-        });
-        res.status(200).json({
-          success: true,
-          message: 'Vidéos QR code déjà générées'
-        });
-        return;
-      }
-
-      // Vérifier si les vidéos QR code par défaut sont déjà générées ou en cours de traitement
+      // Vérifier les statuts des champs QR code par défaut
       const qrCodeDefaultVideoStatus = record?.qr_code_default_presentation_video_public_url;
       const qrCodeLessDefaultVideoStatus = record?.qr_code_less_default_presentation_video_public_url;
       const hasDefaultVideo = record?.default_presentation_video_public_url;
       
-      if (hasDefaultVideo && 
-          qrCodeDefaultVideoStatus && qrCodeDefaultVideoStatus !== 'to_compute' && qrCodeDefaultVideoStatus !== 'computing' &&
-          qrCodeLessDefaultVideoStatus && qrCodeLessDefaultVideoStatus !== 'to_compute' && qrCodeLessDefaultVideoStatus !== 'computing') {
-        console.log('⏭️ Vidéos QR code par défaut déjà générées, webhook ignoré:', {
+      // Identifier tous les champs qui sont en 'to_compute'
+      const fieldsToCompute = [];
+      
+      if (qrCodeVideoStatus === 'to_compute') {
+        fieldsToCompute.push('qr_code_presentation_video_public_url');
+      }
+      if (qrCodeLessVideoStatus === 'to_compute') {
+        fieldsToCompute.push('qr_code_less_presentation_video_public_url');
+      }
+      if (hasDefaultVideo && qrCodeDefaultVideoStatus === 'to_compute') {
+        fieldsToCompute.push('qr_code_default_presentation_video_public_url');
+      }
+      if (hasDefaultVideo && qrCodeLessDefaultVideoStatus === 'to_compute') {
+        fieldsToCompute.push('qr_code_less_default_presentation_video_public_url');
+      }
+      
+      // Si aucun champ n'est en 'to_compute', faire un retour immédiat
+      if (fieldsToCompute.length === 0) {
+        console.log('⏭️ Aucun champ en attente de calcul, webhook ignoré:', {
           table,
           recordId: record.id,
+          qrCodeVideoStatus,
+          qrCodeLessVideoStatus,
           qrCodeDefaultVideoStatus,
           qrCodeLessDefaultVideoStatus
         });
         res.status(200).json({
           success: true,
-          message: 'Vidéos QR code par défaut déjà générées'
+          message: 'Vidéos générées ou en cours de génération'
         });
         return;
+      }
+      
+      // Si des champs sont en 'to_compute', continuer le traitement
+      if (fieldsToCompute.length > 0) {
+        console.log('🔄 Champs en attente de calcul détectés:', {
+          table,
+          recordId: record.id,
+          fieldsToCompute,
+          qrCodeVideoStatus,
+          qrCodeLessVideoStatus,
+          qrCodeDefaultVideoStatus,
+          qrCodeLessDefaultVideoStatus
+        });
       }
 
       // Obtenir les URLs publiques des vidéos préfixes et de l'audio via le service Supabase
@@ -126,7 +141,8 @@ export class VideoController {
         metadata: {
           table,
           recordId: record.id,
-          operation: type
+          operation: type,
+          fieldsToCompute
         }
       };
 
@@ -134,7 +150,8 @@ export class VideoController {
       const jobPayload: JobPayload = {
         mergeRequest,
         table,
-        recordId: record.id
+        recordId: record.id,
+        fieldsToCompute
       };
 
       const jobName = await this.cloudRunJobsService.createVideoProcessingJob(jobPayload);
