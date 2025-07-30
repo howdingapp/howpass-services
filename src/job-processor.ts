@@ -13,19 +13,16 @@ async function processVideoJob() {
     const mergeRequestStr = process.env['MERGE_REQUEST'];
     const table = process.env['TABLE'];
     const recordId = process.env['RECORD_ID'];
-    const fieldsToComputeStr = process.env['FIELDS_TO_COMPUTE'];
 
     if (!mergeRequestStr || !table || !recordId) {
       throw new Error('Variables d\'environnement manquantes: MERGE_REQUEST, TABLE, RECORD_ID');
     }
 
     const mergeRequest = JSON.parse(mergeRequestStr);
-    const fieldsToCompute = fieldsToComputeStr ? JSON.parse(fieldsToComputeStr) : [];
 
     console.log('📊 Paramètres du job:', {
       table,
       recordId,
-      fieldsToCompute,
       mergeRequest: mergeRequestStr
     });
 
@@ -34,7 +31,7 @@ async function processVideoJob() {
     const supabaseService = new SupabaseService();
 
     // Vérifier les champs à traiter et les passer à "computing"
-    const fieldsToProcess = await checkAndUpdateFieldsToCompute(supabaseService, table, recordId, fieldsToCompute);
+    const fieldsToProcess = await checkAndUpdateFieldsToCompute(supabaseService, table, recordId);
     
     if (fieldsToProcess.length === 0) {
       console.log('ℹ️ Aucun champ à traiter trouvé');
@@ -60,19 +57,14 @@ async function processVideoJob() {
   }
 }
 
-async function checkAndUpdateFieldsToCompute(supabaseService: SupabaseService, table: string, recordId: string, fieldsToCompute: string[]): Promise<string[]> {
+async function checkAndUpdateFieldsToCompute(supabaseService: SupabaseService, table: string, recordId: string): Promise<string[]> {
   try {
-    console.log('🔍 Vérification des champs à traiter:', { table, recordId, fieldsToCompute });
+    console.log('🔍 Vérification des champs à traiter:', { table, recordId });
 
-    if (fieldsToCompute.length === 0) {
-      console.log('ℹ️ Aucun champ à traiter fourni');
-      return [];
-    }
-
-    // Vérifier que les champs sont bien en 'to_compute' avant de les passer à 'computing'
+    // Vérifier que les champs QR code sont bien en 'to_compute' avant de les passer à 'computing'
     const { data, error } = await supabaseService.getSupabaseClient()
       .from(table)
-      .select(fieldsToCompute.join(','))
+      .select('qr_code_presentation_video_public_url, qr_code_less_presentation_video_public_url')
       .eq('id', recordId)
       .single();
 
@@ -84,14 +76,22 @@ async function checkAndUpdateFieldsToCompute(supabaseService: SupabaseService, t
     const fieldsToProcess: string[] = [];
     const updates: any = {};
 
-    // Vérifier que les champs fournis sont bien en 'to_compute'
-    for (const field of fieldsToCompute) {
-      if ((data as any)[field] === 'to_compute') {
-        fieldsToProcess.push(field);
-        updates[field] = 'computing';
-      } else {
-        console.log(`⚠️ Champ ${field} n'est pas en 'to_compute' (valeur: ${(data as any)[field]})`);
-      }
+    // Vérifier que les champs QR code sont bien en 'to_compute'
+    const qrCodeField = 'qr_code_presentation_video_public_url';
+    const qrCodeLessField = 'qr_code_less_presentation_video_public_url';
+
+    if ((data as any)[qrCodeField] === 'to_compute') {
+      fieldsToProcess.push(qrCodeField);
+      updates[qrCodeField] = 'computing';
+    } else {
+      console.log(`⚠️ Champ ${qrCodeField} n'est pas en 'to_compute' (valeur: ${(data as any)[qrCodeField]})`);
+    }
+
+    if ((data as any)[qrCodeLessField] === 'to_compute') {
+      fieldsToProcess.push(qrCodeLessField);
+      updates[qrCodeLessField] = 'computing';
+    } else {
+      console.log(`⚠️ Champ ${qrCodeLessField} n'est pas en 'to_compute' (valeur: ${(data as any)[qrCodeLessField]})`);
     }
 
     // Mettre à jour les champs à "computing" si nécessaire

@@ -62,36 +62,13 @@ export class VideoController {
       const qrCodeVideoStatus = record?.qr_code_presentation_video_public_url;
       const qrCodeLessVideoStatus = record?.qr_code_less_presentation_video_public_url;
       
-      // Vérifier les statuts des champs QR code par défaut
-      const qrCodeDefaultVideoStatus = record?.qr_code_default_presentation_video_public_url;
-      const qrCodeLessDefaultVideoStatus = record?.qr_code_less_default_presentation_video_public_url;
-      const hasDefaultVideo = record?.default_presentation_video_public_url;
-      
-      // Identifier tous les champs qui sont en 'to_compute'
-      const fieldsToCompute = [];
-      
-      if (qrCodeVideoStatus === 'to_compute') {
-        fieldsToCompute.push('qr_code_presentation_video_public_url');
-      }
-      if (qrCodeLessVideoStatus === 'to_compute') {
-        fieldsToCompute.push('qr_code_less_presentation_video_public_url');
-      }
-      if (hasDefaultVideo && qrCodeDefaultVideoStatus === 'to_compute') {
-        fieldsToCompute.push('qr_code_default_presentation_video_public_url');
-      }
-      if (hasDefaultVideo && qrCodeLessDefaultVideoStatus === 'to_compute') {
-        fieldsToCompute.push('qr_code_less_default_presentation_video_public_url');
-      }
-      
       // Si aucun champ n'est en 'to_compute', faire un retour immédiat
-      if (fieldsToCompute.length === 0) {
+      if (qrCodeVideoStatus !== 'to_compute' && qrCodeLessVideoStatus !== 'to_compute') {
         console.log('⏭️ Aucun champ en attente de calcul, webhook ignoré:', {
           table,
           recordId: record.id,
           qrCodeVideoStatus,
-          qrCodeLessVideoStatus,
-          qrCodeDefaultVideoStatus,
-          qrCodeLessDefaultVideoStatus
+          qrCodeLessVideoStatus
         });
         res.status(200).json({
           success: true,
@@ -100,18 +77,13 @@ export class VideoController {
         return;
       }
       
-      // Si des champs sont en 'to_compute', continuer le traitement
-      if (fieldsToCompute.length > 0) {
-        console.log('🔄 Champs en attente de calcul détectés:', {
-          table,
-          recordId: record.id,
-          fieldsToCompute,
-          qrCodeVideoStatus,
-          qrCodeLessVideoStatus,
-          qrCodeDefaultVideoStatus,
-          qrCodeLessDefaultVideoStatus
-        });
-      }
+      // Si au moins un champ est en 'to_compute', continuer le traitement
+      console.log('🔄 Champs en attente de calcul détectés:', {
+        table,
+        recordId: record.id,
+        qrCodeVideoStatus,
+        qrCodeLessVideoStatus
+      });
 
       // Obtenir les URLs publiques des vidéos préfixes et de l'audio via le service Supabase
       const prefixVideo1BucketPath = 'qr_codes/qr_code_scene1_part1.mp4';
@@ -119,7 +91,8 @@ export class VideoController {
       const audioBucketPath = 'ytmp3free.cc_playa-blanca-dream-youtubemp3free.org.mp3';
 
       // Construire l'URL de la vidéo postfix depuis Supabase
-      const postfixVideoUrl = record.presentation_video_public_url;
+      // Utiliser default_presentation_video_public_url si presentation_video_public_url n'est pas renseignée
+      const postfixVideoUrl = record.presentation_video_public_url || record.default_presentation_video_public_url;
 
       console.log('🎬 Préparation de la fusion:', {
         table,
@@ -141,8 +114,7 @@ export class VideoController {
         metadata: {
           table,
           recordId: record.id,
-          operation: type,
-          fieldsToCompute
+          operation: type
         }
       };
 
@@ -150,8 +122,7 @@ export class VideoController {
       const jobPayload: JobPayload = {
         mergeRequest,
         table,
-        recordId: record.id,
-        fieldsToCompute
+        recordId: record.id
       };
 
       const jobName = await this.cloudRunJobsService.createVideoProcessingJob(jobPayload);

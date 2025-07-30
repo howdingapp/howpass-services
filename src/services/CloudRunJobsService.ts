@@ -4,7 +4,6 @@ export interface JobPayload {
   mergeRequest: any;
   table: string;
   recordId: string | number;
-  fieldsToCompute?: string[];
 }
 
 export class CloudRunJobsService {
@@ -49,7 +48,7 @@ export class CloudRunJobsService {
                   { name: 'MERGE_REQUEST', value: JSON.stringify(payload.mergeRequest) },
                   { name: 'TABLE', value: payload.table },
                   { name: 'RECORD_ID', value: payload.recordId.toString() },
-                  { name: 'FIELDS_TO_COMPUTE', value: JSON.stringify(payload.fieldsToCompute || []) }
+
                 ]
               }
             ]
