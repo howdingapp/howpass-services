@@ -58,17 +58,42 @@ export class VideoController {
         return;
       }
 
-      // Vérifier si les vidéos QR code sont déjà générées
-      if (record?.qr_code_presentation_video_public_url || record?.qr_code_less_presentation_video_public_url) {
+      // Vérifier si les vidéos QR code sont déjà générées ou en cours de traitement
+      const qrCodeVideoStatus = record?.qr_code_presentation_video_public_url;
+      const qrCodeLessVideoStatus = record?.qr_code_less_presentation_video_public_url;
+      
+      if (qrCodeVideoStatus && qrCodeVideoStatus !== 'to_compute' && qrCodeVideoStatus !== 'computing' &&
+          qrCodeLessVideoStatus && qrCodeLessVideoStatus !== 'to_compute' && qrCodeLessVideoStatus !== 'computing') {
         console.log('⏭️ Vidéos QR code déjà générées, webhook ignoré:', {
           table,
           recordId: record.id,
-          hasQrCodeVideo: !!record?.qr_code_presentation_video_public_url,
-          hasQrCodeLessVideo: !!record?.qr_code_less_presentation_video_public_url
+          qrCodeVideoStatus,
+          qrCodeLessVideoStatus
         });
         res.status(200).json({
           success: true,
           message: 'Vidéos QR code déjà générées'
+        });
+        return;
+      }
+
+      // Vérifier si les vidéos QR code par défaut sont déjà générées ou en cours de traitement
+      const qrCodeDefaultVideoStatus = record?.qr_code_default_presentation_video_public_url;
+      const qrCodeLessDefaultVideoStatus = record?.qr_code_less_default_presentation_video_public_url;
+      const hasDefaultVideo = record?.default_presentation_video_public_url;
+      
+      if (hasDefaultVideo && 
+          qrCodeDefaultVideoStatus && qrCodeDefaultVideoStatus !== 'to_compute' && qrCodeDefaultVideoStatus !== 'computing' &&
+          qrCodeLessDefaultVideoStatus && qrCodeLessDefaultVideoStatus !== 'to_compute' && qrCodeLessDefaultVideoStatus !== 'computing') {
+        console.log('⏭️ Vidéos QR code par défaut déjà générées, webhook ignoré:', {
+          table,
+          recordId: record.id,
+          qrCodeDefaultVideoStatus,
+          qrCodeLessDefaultVideoStatus
+        });
+        res.status(200).json({
+          success: true,
+          message: 'Vidéos QR code par défaut déjà générées'
         });
         return;
       }

@@ -191,4 +191,81 @@ export class SupabaseService {
       return false;
     }
   }
+
+  async updateQrCodeDefaultPresentationVideoUrl(table: string, recordId: string | number, outputUrl: string): Promise<boolean> {
+    try {
+      console.log('📝 Mise à jour du champ qr_code_default_presentation_video_public_url:', { table, recordId, outputUrl });
+
+      const { error } = await this.supabase
+        .from(table)
+        .update({ qr_code_default_presentation_video_public_url: outputUrl })
+        .eq('id', recordId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour du champ qr_code_default_presentation_video_public_url:', error);
+        return false;
+      }
+
+      console.log('✅ Champ qr_code_default_presentation_video_public_url mis à jour avec succès');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Erreur lors de la mise à jour du champ qr_code_default_presentation_video_public_url:', error);
+      return false;
+    }
+  }
+
+  async updateQrCodeLessDefaultPresentationVideoUrl(table: string, recordId: string | number, outputUrl: string): Promise<boolean> {
+    try {
+      console.log('📝 Mise à jour du champ qr_code_less_default_presentation_video_public_url:', { table, recordId, outputUrl });
+
+      const { error } = await this.supabase
+        .from(table)
+        .update({ qr_code_less_default_presentation_video_public_url: outputUrl })
+        .eq('id', recordId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour du champ qr_code_less_default_presentation_video_public_url:', error);
+        return false;
+      }
+
+      console.log('✅ Champ qr_code_less_default_presentation_video_public_url mis à jour avec succès');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Erreur lors de la mise à jour du champ qr_code_less_default_presentation_video_public_url:', error);
+      return false;
+    }
+  }
+
+  async checkQrCodeDefaultFields(table: string, recordId: string | number): Promise<{ hasDefaultVideo: boolean; hasDefaultLessVideo: boolean }> {
+    try {
+      console.log('🔍 Vérification des champs QR code par défaut:', { table, recordId });
+
+      const { data, error } = await this.supabase
+        .from(table)
+        .select('qr_code_default_presentation_video_public_url, qr_code_less_default_presentation_video_public_url, default_presentation_video_public_url')
+        .eq('id', recordId)
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur lors de la vérification des champs QR code par défaut:', error);
+        return { hasDefaultVideo: false, hasDefaultLessVideo: false };
+      }
+
+      const hasDefaultVideo = data.qr_code_default_presentation_video_public_url === 'computing' && data.default_presentation_video_public_url;
+      const hasDefaultLessVideo = data.qr_code_less_default_presentation_video_public_url === 'computing' && data.default_presentation_video_public_url;
+
+      console.log('✅ Vérification des champs QR code par défaut terminée:', { hasDefaultVideo, hasDefaultLessVideo });
+      return { hasDefaultVideo, hasDefaultLessVideo };
+
+    } catch (error) {
+      console.error('❌ Erreur lors de la vérification des champs QR code par défaut:', error);
+      return { hasDefaultVideo: false, hasDefaultLessVideo: false };
+    }
+  }
+
+  getSupabaseClient() {
+    return this.supabase;
+  }
 } 

@@ -180,6 +180,13 @@ export class VideoService {
         console.log(`🎵 Audio: ${request.audioBucketPath}`);
       }
 
+      // Vérifier si c'est un traitement de vidéo par défaut
+      const isDefaultVideoProcessing = request.metadata?.operation === 'default_video';
+      
+      if (isDefaultVideoProcessing) {
+        return await this.processDefaultVideo(request, jobId);
+      }
+
       // Générer les chemins locaux
       const prefixVideo1Path = path.join(this.tempPath, `prefix1_${jobId}.mp4`);
       const prefixVideo2Path = path.join(this.tempPath, `prefix2_${jobId}.mp4`);
@@ -742,5 +749,185 @@ export class VideoService {
       console.error('❌ Erreur lors de l\'upload vers Supabase:', error);
       throw error;
     }
+  }
+
+  private async processDefaultVideo(request: MergeRequest, jobId: string): Promise<MergeResponse> {
+    try {
+      console.log('🎬 Début du traitement vidéo par défaut');
+      
+      const table = request.metadata?.table || 'practices';
+      const recordId = request.metadata?.recordId || jobId;
+      
+      // Vérifier les champs QR code par défaut
+      const { hasDefaultVideo, hasDefaultLessVideo } = await this.supabaseService.checkQrCodeDefaultFields(table, recordId);
+      
+      if (!hasDefaultVideo && !hasDefaultLessVideo) {
+        console.log('ℹ️ Aucun traitement nécessaire pour les vidéos par défaut');
+        return {
+          success: true,
+          jobId,
+          outputUrl: 'no_processing_needed'
+        };
+      }
+
+      // Générer les chemins locaux
+      const prefixVideo1Path = path.join(this.tempPath, `prefix1_default_${jobId}.mp4`);
+      const prefixVideo2Path = path.join(this.tempPath, `prefix2_default_${jobId}.mp4`);
+      const defaultVideoPath = path.join(this.tempPath, `default_video_${jobId}.mp4`);
+      const audioPath = request.audioBucketPath ? path.join(this.tempPath, `audio_default_${jobId}.mp3`) : undefined;
+      const outputPath = path.join(this.tempPath, `merged_default_${jobId}.mp4`);
+      const outputLessPath = path.join(this.tempPath, `merged_default_less_${jobId}.mp4`);
+
+      // Télécharger les vidéos préfixes
+      console.log('📥 Téléchargement des vidéos préfixes...');
+      await this.supabaseService.download(VIDEO_BUCKET, request.prefixVideo1BucketPath, prefixVideo1Path);
+      await this.supabaseService.download(VIDEO_BUCKET, request.prefixVideo2BucketPath, prefixVideo2Path);
+
+      // Extraire le chemin du fichier vidéo par défaut depuis l'URL publique
+      const urlParts = request.postfixVideoUrl.split('/');
+      const filePath = urlParts.slice(-2).join('/');
+      await this.supabaseService.download(VIDEO_BUCKET, filePath, defaultVideoPath);
+
+      // Télécharger l'audio si fourni
+      if (request.audioBucketPath && audioPath) {
+        console.log('🎵 Téléchargement de l\'audio...');
+        await this.supabaseService.download(SOUND_BUCKET, request.audioBucketPath, audioPath);
+      }
+
+      // Analyser les dimensions et adapter les vidéos
+      const targetDimensions = await this.getTargetDimensions(prefixVideo1Path);
+      const adaptedPrefix1Path = await this.adaptVideoDimensions(prefixVideo1Path, targetDimensions, jobId, 'prefix1_default');
+      const adaptedPrefix2Path = await this.adaptVideoDimensions(prefixVideo2Path, targetDimensions, jobId, 'prefix2_default');
+      const adaptedDefaultVideoPath = await this.adaptVideoDimensions(defaultVideoPath, targetDimensions, jobId, 'default_video');
+
+      // Préparer les options FFmpeg
+      const ffmpegOptions: FFmpegOptions = {
+        prefixVideo1Path: adaptedPrefix1Path,
+        prefixVideo2Path: adaptedPrefix2Path,
+        postfixPath: adaptedDefaultVideoPath,
+        outputPath,
+        quality: request.quality || undefined,
+        resolution: request.resolution || undefined,
+        fps: request.fps || undefined,
+        audioCodec: request.audioCodec || undefined,
+        videoCodec: request.videoCodec || undefined,
+        threads: parseInt(process.env['FFMPEG_THREADS'] || '4'),
+        timeout: parseInt(process.env['FFMPEG_TIMEOUT'] || '300000'),
+        metadata: request.metadata as any,
+      };
+
+      if (audioPath) {
+        ffmpegOptions.audioPath = audioPath;
+      }
+
+      // Traiter les vidéos selon les besoins
+      if (hasDefaultVideo) {
+        console.log('🎬 Création de la vidéo QR code par défaut avec audio...');
+        await this.executeTwoStepMerge(ffmpegOptions, jobId);
+        
+        // Upload de la vidéo finale
+        const destinationPath = `${table}/${recordId}_default_merged.mp4`;
+        const mergedVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, outputPath, destinationPath);
+        
+        // Mettre à jour le champ qr_code_default_presentation_video_public_url
+        await this.supabaseService.updateQrCodeDefaultPresentationVideoUrl(table, recordId, mergedVideoOutputUrl);
+        console.log('✅ Vidéo QR code par défaut avec audio créée et sauvegardée');
+      }
+
+      if (hasDefaultLessVideo) {
+        console.log('🎬 Création de la vidéo QR code par défaut sans audio...');
+        
+        // Créer une version sans audio (prefix2 + vidéo par défaut)
+        await this.createDefaultVideoWithoutAudio(adaptedPrefix2Path, adaptedDefaultVideoPath, outputLessPath, ffmpegOptions);
+        
+        // Upload de la vidéo sans audio
+        const destinationLessPath = `${table}/${recordId}_default_less.mp4`;
+        const mergedVideoLessOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, outputLessPath, destinationLessPath);
+        
+        // Mettre à jour le champ qr_code_less_default_presentation_video_public_url
+        await this.supabaseService.updateQrCodeLessDefaultPresentationVideoUrl(table, recordId, mergedVideoLessOutputUrl);
+        console.log('✅ Vidéo QR code par défaut sans audio créée et sauvegardée');
+      }
+
+      // Nettoyer les fichiers temporaires
+      const tempFiles = [
+        prefixVideo1Path, prefixVideo2Path, defaultVideoPath, outputPath, outputLessPath,
+        adaptedPrefix1Path, adaptedPrefix2Path, adaptedDefaultVideoPath
+      ];
+      if (audioPath) {
+        tempFiles.push(audioPath);
+      }
+      await this.cleanupTempFiles(tempFiles);
+
+      console.log('✅ Traitement vidéo par défaut terminé avec succès');
+
+      return {
+        success: true,
+        jobId,
+        outputUrl: 'default_video_processed'
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur lors du traitement vidéo par défaut:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erreur inconnue',
+        jobId
+      };
+    }
+  }
+
+  private async createDefaultVideoWithoutAudio(prefix2Path: string, defaultVideoPath: string, outputPath: string, options: FFmpegOptions): Promise<void> {
+    return new Promise((resolve, reject) => {
+      console.log('🎬 Création de la vidéo par défaut sans audio...');
+
+      const args = [
+        '-i', prefix2Path,
+        '-i', defaultVideoPath,
+        '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[outv]',
+        '-map', '[outv]',
+        '-c:v', 'libx264',
+        '-r', (options.fps || 25).toString(),
+        '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
+        '-threads', (options.threads || 4).toString(),
+        '-t', '30',
+        '-y',
+        outputPath
+      ];
+
+      console.log('🎬 Arguments FFmpeg (vidéo par défaut sans audio):', args.join(' '));
+
+      const ffmpeg = spawn('ffmpeg', args);
+
+      let stderr = '';
+
+      ffmpeg.stderr.on('data', (data) => {
+        stderr += data.toString();
+        console.log(`🎬 FFmpeg (vidéo par défaut sans audio): ${data}`);
+      });
+
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) {
+          console.error(`❌ Erreur FFmpeg (vidéo par défaut sans audio): code ${code}`);
+          console.error(`❌ FFmpeg stderr: ${stderr}`);
+          reject(new Error(`ffmpeg error code: ${code}`));
+          return;
+        }
+        console.log('✅ Vidéo par défaut sans audio créée avec succès');
+        resolve();
+      });
+
+      ffmpeg.on('error', (err) => {
+        console.error('❌ Erreur lors de la création de la vidéo par défaut sans audio:', err);
+        reject(new Error(`Erreur FFmpeg: ${err.message}`));
+      });
+
+      if (options.timeout) {
+        setTimeout(() => {
+          ffmpeg.kill('SIGKILL');
+          reject(new Error('Timeout lors de la création de la vidéo par défaut sans audio'));
+        }, options.timeout);
+      }
+    });
   }
 } 
