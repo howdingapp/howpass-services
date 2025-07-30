@@ -361,20 +361,6 @@ export class VideoService {
     });
   }
 
-  private buildFilterComplex(options: FFmpegOptions): string {
-    if (options.audioPath) {
-      // Avec audio externe :
-      // - Prefix1 garde sa propre musique
-      // - Prefix2 et Postfix utilisent la musique externe
-      // - Limitation à 40 secondes
-      return '[0:v][0:a][1:v][2:v]concat=n=3:v=1:a=1[concatv][concata];[concatv]trim=duration=40[trimv];[concata]trim=duration=40[trima];[3:a]adelay=10000|10000[delayaudio];[trima][delayaudio]amix=inputs=2:duration=first[outv][outa]';
-    } else {
-      // Sans audio : concaténer les 3 vidéos avec leur audio et limiter à 40 secondes
-      return '[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[concatv][concata];[concatv]trim=duration=40[outv];[concata]trim=duration=40[outa]';
-    }
-  }
-
-
   private async getTargetDimensions(videoPath: string): Promise<{ width: number; height: number }> {
     try {
       const videoInfo = await this.getVideoInfo(videoPath);
@@ -546,16 +532,6 @@ export class VideoService {
 
     try {
       console.log('🎬 Début du traitement vidéo de présentation');
-
-      // Déterminer les champs QR code et QR code less
-      const qrCodeField = 'qr_code_presentation_video_public_url';
-      const qrCodeLessField = 'qr_code_less_presentation_video_public_url';
-
-      // Vérifier quels champs sont à traiter en interrogeant la base de données
-      const dbTable = request.metadata?.table!;
-      const dbRecordId = request.metadata?.recordId;
-      
-
 
       // Générer les chemins locaux
       const suffix = '_presentation';
