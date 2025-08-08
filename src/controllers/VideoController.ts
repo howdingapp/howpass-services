@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { MergeRequest } from '../services/VideoService';
 import { CloudRunJobsService, JobPayload } from '../services/CloudRunJobsService';
+import { SupabaseService } from '../services/SupabaseService';
 
 interface DatabaseWebhookPayload {
   type: string;
@@ -11,9 +12,11 @@ interface DatabaseWebhookPayload {
 
 export class VideoController {
   private cloudRunJobsService: CloudRunJobsService;
+  private supabaseService: SupabaseService;
 
   constructor() {
     this.cloudRunJobsService = new CloudRunJobsService();
+    this.supabaseService = new SupabaseService();
   }
 
   async handleDatabaseWebhook(req: Request, res: Response): Promise<void> {
@@ -48,16 +51,6 @@ export class VideoController {
         return;
       }
 
-      // Vérifier que le record contient une vidéo de présentation
-      if (!record?.presentation_video_public_url) {
-        console.log('⏭️ Aucune vidéo de présentation trouvée dans le record');
-        res.status(200).json({
-          success: true,
-          message: 'Aucune vidéo de présentation trouvée'
-        });
-        return;
-      }
-
       // Vérifier les statuts des champs QR code
       const qrCodeVideoStatus = record?.qr_code_presentation_video_public_url;
       const qrCodeLessVideoStatus = record?.qr_code_less_presentation_video_public_url;
@@ -73,6 +66,37 @@ export class VideoController {
         res.status(200).json({
           success: true,
           message: 'Vidéos générées ou en cours de génération'
+        });
+        return;
+      }
+
+      // Vérifier que le record contient une vidéo de présentation
+      if (!record?.presentation_video_public_url) {
+        console.log('⚠️ Aucune vidéo de présentation trouvée mais champs QR code en to_compute, passage à null');
+        
+        // Mettre à jour les champs QR code vers null
+        const updates: any = {};
+        if (qrCodeVideoStatus === 'to_compute') {
+          updates['qr_code_presentation_video_public_url'] = null;
+        }
+        if (qrCodeLessVideoStatus === 'to_compute') {
+          updates['qr_code_less_presentation_video_public_url'] = null;
+        }
+
+        // Mettre à jour la base de données via le service
+        const updateSuccess = await this.supabaseService.updateRecord(table, record.id, updates);
+
+        if (!updateSuccess) {
+          res.status(500).json({
+            success: false,
+            error: 'Erreur lors de la mise à jour des champs QR code'
+          });
+          return;
+        }
+        res.status(200).json({
+          success: true,
+          message: 'Champs QR code mis à jour vers null (pas de vidéo de présentation)',
+          updates
         });
         return;
       }

@@ -265,6 +265,28 @@ export class SupabaseService {
     }
   }
 
+  async updateRecord(table: string, recordId: string | number, updates: Record<string, any>): Promise<boolean> {
+    try {
+      console.log('📝 Mise à jour du record:', { table, recordId, updates });
+
+      const { error } = await this.supabase
+        .from(table)
+        .update(updates)
+        .eq('id', recordId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour du record:', error);
+        return false;
+      }
+
+      console.log('✅ Record mis à jour avec succès:', Object.keys(updates));
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur lors de la mise à jour du record:', error);
+      return false;
+    }
+  }
+
   getSupabaseClient() {
     return this.supabase;
   }
