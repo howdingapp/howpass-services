@@ -61,10 +61,10 @@ async function checkAndUpdateFieldsToCompute(supabaseService: SupabaseService, t
   try {
     console.log('🔍 Vérification des champs à traiter:', { table, recordId });
 
-    // Vérifier que les champs QR code sont bien en 'to_compute' avant de les passer à 'computing'
+    // Récupérer les champs QR code ET les vidéos de présentation
     const { data, error } = await supabaseService.getSupabaseClient()
       .from(table)
-      .select('qr_code_presentation_video_public_url, qr_code_less_presentation_video_public_url')
+      .select('qr_code_presentation_video_public_url, qr_code_less_presentation_video_public_url, presentation_video_public_url, default_presentation_video_public_url')
       .eq('id', recordId)
       .single();
 
@@ -76,25 +76,32 @@ async function checkAndUpdateFieldsToCompute(supabaseService: SupabaseService, t
     const fieldsToProcess: string[] = [];
     const updates: any = {};
 
-    // Vérifier que les champs QR code sont bien en 'to_compute'
-    const qrCodeField = 'qr_code_presentation_video_public_url';
-    const qrCodeLessField = 'qr_code_less_presentation_video_public_url';
+    // Vérifier les champs QR code en 'to_compute'
+    const presentationVideoUrl = (data as any).presentation_video_public_url;
+    
+    // Définir les champs QR code à traiter
+    const qrCodeFields = [
+      { field: 'qr_code_presentation_video_public_url', value: (data as any).qr_code_presentation_video_public_url },
+      { field: 'qr_code_less_presentation_video_public_url', value: (data as any).qr_code_less_presentation_video_public_url }
+    ];
 
-    if ((data as any)[qrCodeField] === 'to_compute') {
-      fieldsToProcess.push(qrCodeField);
-      updates[qrCodeField] = 'computing';
-    } else {
-      console.log(`⚠️ Champ ${qrCodeField} n'est pas en 'to_compute' (valeur: ${(data as any)[qrCodeField]})`);
+    // Traiter chaque champ QR code
+    for (const { field, value } of qrCodeFields) {
+      if (value === 'to_compute') {
+        if (!presentationVideoUrl) {
+          console.log(`⚠️ ${field} est en to_compute mais presentation_video_public_url n'est pas renseigné, mise à jour vers null`);
+          updates[field] = null;
+        } else {
+          console.log(`✅ ${field} est en to_compute et presentation_video_public_url est renseigné, passage à computing`);
+          fieldsToProcess.push(field);
+          updates[field] = 'computing';
+        }
+      } else {
+        console.log(`ℹ️ ${field} n'est pas en 'to_compute' (valeur: ${value})`);
+      }
     }
 
-    if ((data as any)[qrCodeLessField] === 'to_compute') {
-      fieldsToProcess.push(qrCodeLessField);
-      updates[qrCodeLessField] = 'computing';
-    } else {
-      console.log(`⚠️ Champ ${qrCodeLessField} n'est pas en 'to_compute' (valeur: ${(data as any)[qrCodeLessField]})`);
-    }
-
-    // Mettre à jour les champs à "computing" si nécessaire
+    // Mettre à jour la base de données si nécessaire
     if (Object.keys(updates).length > 0) {
       const { error: updateError } = await supabaseService.getSupabaseClient()
         .from(table)
@@ -106,9 +113,17 @@ async function checkAndUpdateFieldsToCompute(supabaseService: SupabaseService, t
         return [];
       }
 
-      console.log('✅ Statuts mis à jour vers "computing":', Object.keys(updates));
+      const computingFields = Object.keys(updates).filter(field => updates[field] === 'computing');
+      const nullFields = Object.keys(updates).filter(field => updates[field] === null);
+      
+      if (computingFields.length > 0) {
+        console.log('✅ Statuts mis à jour vers "computing":', computingFields);
+      }
+      if (nullFields.length > 0) {
+        console.log('✅ Champs mis à jour vers null:', nullFields);
+      }
     } else {
-      console.log('ℹ️ Aucun champ à mettre à jour vers "computing"');
+      console.log('ℹ️ Aucun champ à mettre à jour');
     }
 
     return fieldsToProcess;
