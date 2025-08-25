@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { spawn } from 'child_process';
 import { VideoController } from './controllers/VideoController';
+import conversationRoutes from './routes/conversationRoutes';
 import dotenv from 'dotenv';
 
 // Charger les variables d'environnement
@@ -47,6 +48,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Routes
 const videoController = new VideoController();
 
+// Routes vidéo
 app.post('/webhook/database', (req, res) => {
   videoController.handleDatabaseWebhook(req, res);
 });
@@ -58,6 +60,9 @@ app.get('/job/:executionName', (req, res) => {
 app.get('/health', (req, res) => {
   videoController.getHealth(req, res);
 });
+
+// Routes des conversations
+app.use('/api/conversations', conversationRoutes);
 
 // Démarrage du serveur
 async function startServer() {

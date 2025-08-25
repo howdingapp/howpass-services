@@ -63,4 +63,7 @@ export interface VideoInfo {
   audioCodec?: string;
   videoCodec?: string;
   format: string;
-} 
+}
+
+// Export des types de conversation
+export * from './conversation'; 

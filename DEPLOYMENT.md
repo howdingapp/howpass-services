@@ -160,4 +160,101 @@ Le service utilise les variables d'environnement suivantes :
 - Les secrets sont chiffrés dans GitHub
 - Le service account a des permissions minimales
 - CORS est configuré pour limiter les origines
-- Les fichiers temporaires sont nettoyés automatiquement 
+- Les fichiers temporaires sont nettoyés automatiquement
+
+---
+
+## 🗄️ **Configuration Redis pour les Conversations **
+
+### **A. Activer l'API Memorystore**
+```bash
+# Activer Memorystore for Redis
+gcloud services enable redis.googleapis.com
+```
+
+### **B. Créer l'instance Redis**
+```bash
+gcloud redis instances create howpass-conversations \
+  --size=1 \
+  --region=europe-west1 \
+  --redis-version=redis_7_0 \
+  --tier=BASIC \
+  --memory-size-gb=1 \
+  --description="Redis pour les conversations HowPass"
+```
+
+**Paramètres recommandés :**
+- **Taille** : 1 GB (suffisant pour des milliers de conversations)
+- **Région** : `europe-west1` (Paris, latence optimale)
+- **Version** : `redis_7_0` (dernière version stable)
+- **Niveau** : `BASIC` (pour la production, `STANDARD_HA` pour la haute disponibilité)
+
+### **C. Récupérer les informations de connexion**
+```bash
+# Obtenir l'IP interne et le port
+gcloud redis instances describe howpass-conversations \
+  --region=europe-west1 \
+  --format="value(host,port)"
+
+# Obtenir la chaîne d'authentification
+gcloud redis instances get-auth-string howpass-conversations \
+  --region=europe-west1
+```
+
+### **D. Ajouter les variables Redis aux secrets GitHub**
+
+Ajoutez ces nouveaux secrets dans GitHub Actions :
+
+| Nom | Description |
+|-----|-------------|
+| `REDIS_HOST` | IP interne de l'instance Redis |
+| `REDIS_PORT` | Port Redis (généralement 6379) |
+| `REDIS_PASSWORD` | Chaîne d'authentification Redis |
+
+### **E. Mettre à jour le déploiement Cloud Run**
+
+```bash
+# Déployer avec les variables Redis
+gcloud run deploy howpass-service \
+  --image gcr.io/YOUR_PROJECT_ID/howpass-service \
+  --platform managed \
+  --region europe-west1 \
+  --allow-unauthenticated \
+  --memory 2Gi \
+  --cpu 2 \
+  --timeout 900 \
+  --concurrency 10 \
+  --max-instances 10 \
+  --set-env-vars="REDIS_HOST=10.x.x.x,REDIS_PORT=6379,REDIS_PASSWORD=your_auth_string"
+```
+
+### **F. Tester les conversations**
+
+```bash
+# URL du service déployé
+SERVICE_URL=$(gcloud run services describe howpass-service --region=europe-west1 --format="value(status.url)")
+
+# Tester les conversations
+curl -X POST $SERVICE_URL/api/conversations/start \
+  -H "Content-Type: application/json" \
+  -d '{"userId": "test-123", "type": "bilan"}'
+
+# Vérifier les statistiques
+curl $SERVICE_URL/api/conversations/stats
+```
+
+### **G. Monitoring Redis**
+
+```bash
+# Voir les métriques de l'instance Redis
+gcloud redis instances describe howpass-conversations \
+  --region=europe-west1 \
+  --format="value(currentLocationId,state,redisVersion,memorySizeGb)"
+```
+
+### **H. Estimation des coûts Redis**
+
+- **Instance BASIC 1GB** : ~$25/mois
+- **Instance STANDARD_HA 1GB** : ~$50/mois
+
+**Total estimé avec Cloud Run** : $75-250/mois selon l'usage 
