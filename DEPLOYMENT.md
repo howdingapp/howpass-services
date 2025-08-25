@@ -53,6 +53,9 @@ Dans votre repository GitHub, allez dans **Settings > Secrets and variables > Ac
 | `SUPABASE_URL` | URL de votre projet Supabase | `https://abc123.supabase.co` |
 | `SUPABASE_SERVICE_KEY` | Clé de service Supabase | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
 | `CORS_ORIGIN` | Origine autorisée pour CORS | `https://your-app.com` |
+| `REDIS_HOST` | IP interne de l'instance Redis | `10.x.x.x` |
+| `REDIS_PORT` | Port Redis (généralement 6379) | `6379` |
+| `REDIS_PASSWORD` | Chaîne d'authentification Redis | `your_auth_string` |
 
 ### Comment ajouter les secrets
 
@@ -179,8 +182,7 @@ gcloud redis instances create howpass-conversations \
   --region=europe-west1 \
   --redis-version=redis_7_0 \
   --tier=BASIC \
-  --memory-size-gb=1 \
-  --description="Redis pour les conversations HowPass"
+  --display-name="Redis pour les conversations HowPass"
 ```
 
 **Paramètres recommandés :**
@@ -188,6 +190,12 @@ gcloud redis instances create howpass-conversations \
 - **Région** : `europe-west1` (Paris, latence optimale)
 - **Version** : `redis_7_0` (dernière version stable)
 - **Niveau** : `BASIC` (pour la production, `STANDARD_HA` pour la haute disponibilité)
+- **Note** : La taille mémoire est gérée par le paramètre `--size=1` (1 GB)
+
+**⚠️ Sécurité :** Le chiffrement en transit n'est PAS nécessaire car :
+- Votre service Cloud Run et Redis sont dans le même réseau Google Cloud
+- Les connexions internes Google Cloud sont déjà sécurisées
+- Évite la complexité des certificats TLS et la rotation des autorités de certification
 
 ### **C. Récupérer les informations de connexion**
 ```bash
@@ -257,4 +265,40 @@ gcloud redis instances describe howpass-conversations \
 - **Instance BASIC 1GB** : ~$25/mois
 - **Instance STANDARD_HA 1GB** : ~$50/mois
 
-**Total estimé avec Cloud Run** : $75-250/mois selon l'usage 
+**Total estimé avec Cloud Run** : $75-250/mois selon l'usage
+
+### **I. Dépannage Redis**
+
+#### **Erreurs courantes lors de la création :**
+
+1. **Paramètres invalides** : Vérifiez la syntaxe avec `gcloud help redis instances create`
+2. **Permissions insuffisantes** : Assurez-vous d'avoir le rôle `Redis Admin`
+3. **Nom d'instance déjà utilisé** : Choisissez un nom unique
+4. **Région non supportée** : Vérifiez la disponibilité Redis dans votre région
+
+#### **Commandes de vérification :**
+
+```bash
+# Lister les instances Redis existantes
+gcloud redis instances list --region=europe-west1
+
+# Vérifier le statut d'une instance
+gcloud redis instances describe howpass-conversations \
+  --region=europe-west1 \
+  --format="value(state,redisVersion,currentLocationId)"
+
+# Vérifier les logs Redis
+gcloud logging read "resource.type=redis_instance AND resource.labels.instance_id=howpass-conversations"
+```
+
+#### **Redémarrage et maintenance :**
+
+```bash
+# Redémarrer une instance (si nécessaire)
+gcloud redis instances restart howpass-conversations --region=europe-west1
+
+# Mettre à jour une instance
+gcloud redis instances update howpass-conversations \
+  --region=europe-west1 \
+  --redis-version=redis_7_0
+``` 
