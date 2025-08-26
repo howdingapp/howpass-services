@@ -50,6 +50,8 @@ export class ConversationService {
     const conversationId = uuidv4();
     const now = new Date().toISOString();
 
+    console.log('🔍 Sauvegarde d\'une nouvelle conversation dans Redis:', request);
+
     const context: ConversationContext = {
       id: conversationId,
       userId: request.userId,
@@ -73,6 +75,9 @@ export class ConversationService {
    * Ajouter un message à une conversation
    */
   async addMessage(conversationId: string, request: AddMessageRequest): Promise<{ messageId: string; context: ConversationContext }> {
+    
+    console.log('🔍 Ajout d\'un message à la conversation dans Redis:', conversationId);
+
     const context = await this.getContext(conversationId);
     if (!context) {
       throw new Error('Conversation not found');
@@ -133,6 +138,9 @@ export class ConversationService {
    * Terminer une conversation et générer un résumé
    */
   async endConversation(conversationId: string): Promise<ConversationSummary> {
+    
+    console.log('🔍 Terminaison d\'une conversation dans Redis:', conversationId);
+    
     const context = await this.getContext(conversationId);
     if (!context) {
       throw new Error('Conversation not found');

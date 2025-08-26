@@ -7,6 +7,7 @@ export class ChatBotService {
   private conversationService: ConversationService;
   private supabaseService: SupabaseService;
   private openai: OpenAI;
+  private AI_MODEL = "gpt-3.5-turbo";
 
   constructor() {
     this.conversationService = new ConversationService();
@@ -46,7 +47,7 @@ export class ChatBotService {
             {
               content: firstResponse,
               type: 'bot',
-              metadata: { source: 'ai', model: 'gpt-4', type: 'first_response' }
+                             metadata: { source: 'ai', model: this.AI_MODEL, type: 'first_response' }
             }
           );
           
@@ -63,6 +64,10 @@ export class ChatBotService {
           if (updatedContext) {
             result.context = updatedContext;
           }
+        } else {
+
+          console.error('❌ Erreur lors de la génération de la première réponse:', 'Réponse vide');
+
         }
       } catch (aiError) {
         console.error('❌ Erreur lors de la génération de la première réponse:', aiError);
@@ -126,7 +131,7 @@ export class ChatBotService {
                 {
                   content: aiResponse,
                   type: 'bot',
-                  metadata: { source: 'ai', model: 'gpt-4' }
+                  metadata: { source: 'ai', model: this.AI_MODEL }
                 }
               );
               
@@ -252,12 +257,17 @@ export class ChatBotService {
         { role: "user" as const, content: userMessage }
       ];
 
+      console.log('🔍 Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
+      console.log('Dernier message de l\'utilisateur:', userMessage);
+
       const completion = await this.openai.chat.completions.create({
-        model: "gpt-4",
+        model: this.AI_MODEL,
         messages,
         max_tokens: 500,
         temperature: 0.7
       });
+
+      console.log('🔍 Réponse IA:', completion.choices[0]?.message?.content || 'Aucune réponse générée');
 
       return completion.choices[0]?.message?.content || "Je n'ai pas pu générer de réponse. Pouvez-vous reformuler votre question ?";
     } catch (error) {
@@ -279,7 +289,7 @@ export class ChatBotService {
         .join('\n');
 
       const completion = await this.openai.chat.completions.create({
-        model: "gpt-4",
+        model: this.AI_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Résume cette conversation:\n${conversationText}` }
@@ -316,8 +326,11 @@ export class ChatBotService {
         Commence par un accueil chaleureux et propose de l'accompagner dans cette réflexion.`;
       }
 
+      console.log('🔍 System prompt:', systemPrompt);
+      console.log('🔍 Génération de la première réponse IA:', userPrompt);
+
       const completion = await this.openai.chat.completions.create({
-        model: "gpt-4",
+        model: this.AI_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
@@ -325,6 +338,8 @@ export class ChatBotService {
         max_tokens: 200,
         temperature: 0.7
       });
+
+      console.log('🔍 Première réponse IA:', completion.choices[0]?.message?.content || 'Aucune réponse générée');
 
       return completion.choices[0]?.message?.content || "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
     } catch (error) {
@@ -376,5 +391,20 @@ export class ChatBotService {
     - Respecte strictement toutes les règles de comportement et d'information spécifiées ci-dessus`;
 
     return basePrompt;
+  }
+
+  /**
+   * Changer le modèle IA utilisé (pour la configuration dynamique)
+   */
+  setAIModel(model: string): void {
+    this.AI_MODEL = model;
+    console.log(`🤖 Modèle IA changé vers: ${model}`);
+  }
+
+  /**
+   * Obtenir le modèle IA actuellement utilisé
+   */
+  getAIModel(): string {
+    return this.AI_MODEL;
   }
 }

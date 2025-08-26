@@ -309,6 +309,9 @@ export class SupabaseService {
     error?: string;
   }> {
     try {
+
+      console.log('🔍 Création de la réponse IA:', response);
+
       const { data, error } = await this.supabase
         .from('ai_responses')
         .insert([response])
@@ -347,6 +350,9 @@ export class SupabaseService {
     error?: string;
   }> {
     try {
+
+      console.log('🔍 Récupération des réponses IA pour la conversation:', conversationId);
+
       const { data, error } = await this.supabase
         .from('ai_responses')
         .select('*')
@@ -384,6 +390,9 @@ export class SupabaseService {
     error?: string;
   }> {
     try {
+
+      console.log('🔍 Récupération des réponses IA pour l\'utilisateur:', userId);
+
       const { data, error } = await this.supabase
         .from('ai_responses')
         .select('*')
@@ -420,6 +429,9 @@ export class SupabaseService {
     error?: string;
   }> {
     try {
+
+      console.log('🗑️ Suppression de la réponse IA:', responseId);
+
       const { error } = await this.supabase
         .from('ai_responses')
         .delete()
@@ -456,6 +468,9 @@ export class SupabaseService {
     error?: string;
   }> {
     try {
+
+      console.log('🗑️ Suppression des réponses IA pour la conversation:', conversationId);
+
       const { data, error } = await this.supabase
         .from('ai_responses')
         .delete()
