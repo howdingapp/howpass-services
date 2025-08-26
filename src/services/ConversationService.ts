@@ -17,9 +17,9 @@ export class ConversationService {
   constructor() {
 
     console.log("Config Redis");
-    console.log("REDIS_HOST", process.env['REDIS_HOST']);
-    console.log("REDIS_PORT", process.env['REDIS_PORT']);
-    console.log("REDIS_PASSWORD", process.env['REDIS_PASSWORD']);
+    console.log("REDIS_HOST", `'${process.env['REDIS_HOST']}'`);
+    console.log("REDIS_PORT", `'${process.env['REDIS_PORT']}'`);
+    console.log("REDIS_PASSWORD", `'${process.env['REDIS_PASSWORD']}'`);
 
     // Configuration Redis
     this.redis = new Redis({
