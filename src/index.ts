@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import { VideoController } from './controllers/VideoController';
 import conversationRoutes from './routes/conversationRoutes';
 import iaJobsRoutes from './routes/iaJobsRoutes';
+import { redisService } from './services/RedisService';
 import dotenv from 'dotenv';
 
 // Charger les variables d'environnement
@@ -34,6 +35,23 @@ function checkFFmpeg(): Promise<boolean> {
       resolve(false);
     });
   });
+}
+
+// Vérifier que Redis est disponible
+async function checkRedis(): Promise<boolean> {
+  try {
+    const isHealthy = await redisService.healthCheck();
+    if (isHealthy) {
+      console.log('✅ Redis est disponible et en bonne santé');
+      return true;
+    } else {
+      console.error('❌ Redis n\'est pas en bonne santé');
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Erreur lors de la vérification de Redis:', error);
+    return false;
+  }
 }
 
 // Middleware
@@ -78,6 +96,13 @@ async function startServer() {
       process.exit(1);
     }
 
+    // Vérifier Redis avant de démarrer
+    const redisAvailable = await checkRedis();
+    if (!redisAvailable) {
+      console.error('❌ Le service ne peut pas démarrer sans Redis');
+      process.exit(1);
+    }
+
     app.listen(port, () => {
       console.log(`🚀 Serveur démarré sur le port ${port}`);
       console.log(`📊 Environnement: ${process.env['NODE_ENV']}`);
@@ -85,6 +110,7 @@ async function startServer() {
       console.log(`⏱️ FFmpeg timeout: ${process.env['FFMPEG_TIMEOUT'] || 300000}ms`);
       console.log(`☁️ GCP Project ID: ${process.env['GCP_PROJECT_ID'] || 'Non défini'}`);
       console.log(`📋 GCP Job: ${process.env['GCP_JOB_NAME'] || 'video-processing-job'}`);
+      console.log(`🔴 Redis: ${process.env['REDIS_HOST'] || 'localhost'}:${process.env['REDIS_PORT'] || '6379'}`);
     });
   } catch (error) {
     console.error('❌ Erreur lors du démarrage du serveur:', error);
@@ -95,13 +121,15 @@ async function startServer() {
 startServer();
 
 // Gestion de l'arrêt gracieux
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('🛑 Signal SIGTERM reçu, arrêt gracieux...');
+  await redisService.disconnect();
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('🛑 Signal SIGINT reçu, arrêt gracieux...');
+  await redisService.disconnect();
   process.exit(0);
 });
 
