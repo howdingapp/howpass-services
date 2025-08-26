@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { ConversationController } from '../controllers/ConversationController';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/authMiddleware';
 
 const router = Router();
 const conversationController = new ConversationController();
@@ -9,19 +10,17 @@ const conversationController = new ConversationController();
  */
 
 // Démarrer une nouvelle conversation
-router.post('/start', (req, res) => {
+router.post('/start', authenticateToken, (req: AuthenticatedRequest, res) => {
   conversationController.startConversation(req, res);
 });
 
 // Ajouter un message à une conversation
-router.post('/:id/message', (req, res) => {
+router.post('/:id/message', authenticateToken, (req: AuthenticatedRequest, res) => {
   conversationController.addMessage(req, res);
 });
 
-
-
 // Générer le résumé IA d'une conversation
-router.post('/:id/summary', (req, res) => {
+router.post('/:id/summary', authenticateToken, (req: AuthenticatedRequest, res) => {
   conversationController.generateSummary(req, res);
 });
 
