@@ -155,7 +155,6 @@ jobs:
             --task-timeout=900 \
             --max-retries=3 \
             --parallelism=20 \
-            --task-count=20 \
             --command="npm" \
             --args="run,job:ia" \
             --set-env-vars=NODE_ENV=production \
@@ -191,7 +190,6 @@ jobs:
             --task-timeout=900 \
             --max-retries=3 \
             --parallelism=20 \
-            --task-count=20 \
             --command="npm" \
             --args="run,job:ia" \
             --set-env-vars=NODE_ENV=production \
@@ -215,6 +213,8 @@ jobs:
         fi
         
         echo "✅ Cloud Run Job IA configuré avec succès (configuration optimisée coût)"
+        echo "💡 Parallélisme Cloud Run: 20 tâches simultanées"
+        echo "💡 Parallélisme interne: 10 workers dans le job processor"
         echo "💡 Recommandation: Configurer Cloud Scheduler pour exécuter ce job toutes les 10-12 minutes"
         echo "   gcloud scheduler jobs create ia-job-scheduler --schedule='*/10 * * * *' --uri='https://REGION-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/PROJECT/jobs/ia-response-processing-job:run'"
 
