@@ -1,13 +1,16 @@
 import { ConversationService } from './ConversationService';
+import { SupabaseService } from './SupabaseService';
 import { ConversationContext, StartConversationRequest, AddMessageRequest, AIRule } from '../types/conversation';
 import OpenAI from 'openai';
 
 export class ChatBotService {
   private conversationService: ConversationService;
+  private supabaseService: SupabaseService;
   private openai: OpenAI;
 
   constructor() {
     this.conversationService = new ConversationService();
+    this.supabaseService = new SupabaseService();
     
     // Initialiser OpenAI
     this.openai = new OpenAI({
@@ -37,6 +40,7 @@ export class ChatBotService {
       try {
         const firstResponse = await this.generateFirstResponse(result.context);
         if (firstResponse) {
+          // Ajouter le message à la conversation Redis
           await this.conversationService.addMessage(
             result.conversationId,
             {
@@ -45,6 +49,14 @@ export class ChatBotService {
               metadata: { source: 'ai', model: 'gpt-4', type: 'first_response' }
             }
           );
+          
+          // Enregistrer la réponse IA dans Supabase
+          await this.supabaseService.createAIResponse({
+            conversation_id: result.conversationId,
+            user_id: request.userId,
+            response_text: firstResponse,
+            message_type: 'text'
+          });
           
           // Récupérer le contexte mis à jour avec le premier message
           const updatedContext = await this.conversationService.getContext(result.conversationId);
@@ -108,6 +120,7 @@ export class ChatBotService {
             const aiResponse = await this.generateAIResponse(context, request.content);
             
             if (aiResponse) {
+              // Ajouter le message à la conversation Redis
               await this.conversationService.addMessage(
                 conversationId,
                 {
@@ -116,6 +129,14 @@ export class ChatBotService {
                   metadata: { source: 'ai', model: 'gpt-4' }
                 }
               );
+              
+              // Enregistrer la réponse IA dans Supabase
+              await this.supabaseService.createAIResponse({
+                conversation_id: conversationId,
+                user_id: context.userId,
+                response_text: aiResponse,
+                message_type: 'text'
+              });
             }
           }
         } catch (aiError) {

@@ -13,6 +13,15 @@ export interface SupabaseConfig {
   bucketName: string;
 }
 
+export interface AIResponse {
+  id?: string;
+  conversation_id: string;
+  user_id: string;
+  response_text: string;
+  message_type: string;
+  created_at?: string;
+}
+
 export class SupabaseService {
   private supabase;
 
@@ -289,5 +298,227 @@ export class SupabaseService {
 
   getSupabaseClient() {
     return this.supabase;
+  }
+
+  /**
+   * Enregistrer une réponse IA dans la table ai_responses
+   */
+  async createAIResponse(response: AIResponse): Promise<{
+    success: boolean;
+    data?: AIResponse;
+    error?: string;
+  }> {
+    try {
+      const { data, error } = await this.supabase
+        .from('ai_responses')
+        .insert([response])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur lors de la création de la réponse IA:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log(`✅ Réponse IA enregistrée avec succès: ${data.id}`);
+      return {
+        success: true,
+        data
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la création de la réponse IA:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Récupérer toutes les réponses IA d'une conversation
+   */
+  async getAIResponsesByConversation(conversationId: string): Promise<{
+    success: boolean;
+    data?: AIResponse[];
+    error?: string;
+  }> {
+    try {
+      const { data, error } = await this.supabase
+        .from('ai_responses')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des réponses IA:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      return {
+        success: true,
+        data: data || []
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération des réponses IA:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Récupérer toutes les réponses IA d'un utilisateur
+   */
+  async getAIResponsesByUser(userId: string): Promise<{
+    success: boolean;
+    data?: AIResponse[];
+    error?: string;
+  }> {
+    try {
+      const { data, error } = await this.supabase
+        .from('ai_responses')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des réponses IA:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      return {
+        success: true,
+        data: data || []
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération des réponses IA:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Supprimer une réponse IA
+   */
+  async deleteAIResponse(responseId: string): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      const { error } = await this.supabase
+        .from('ai_responses')
+        .delete()
+        .eq('id', responseId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la suppression de la réponse IA:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log(`✅ Réponse IA supprimée avec succès: ${responseId}`);
+      return {
+        success: true
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la suppression de la réponse IA:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Supprimer toutes les réponses IA d'une conversation
+   */
+  async deleteAIResponsesByConversation(conversationId: string): Promise<{
+    success: boolean;
+    deletedCount?: number;
+    error?: string;
+  }> {
+    try {
+      const { data, error } = await this.supabase
+        .from('ai_responses')
+        .delete()
+        .eq('conversation_id', conversationId)
+        .select('id');
+
+      if (error) {
+        console.error('❌ Erreur lors de la suppression des réponses IA:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      const deletedCount = data?.length || 0;
+      console.log(`✅ ${deletedCount} réponses IA supprimées pour la conversation: ${conversationId}`);
+      
+      return {
+        success: true,
+        deletedCount
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la suppression des réponses IA:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Vérifier la connexion à Supabase
+   */
+  async testConnection(): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      const { data, error } = await this.supabase
+        .from('ai_responses')
+        .select('count')
+        .limit(1);
+
+      if (error) {
+        console.error('❌ Erreur de connexion à Supabase:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log('✅ Connexion à Supabase réussie');
+      return {
+        success: true
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors du test de connexion:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
   }
 } 

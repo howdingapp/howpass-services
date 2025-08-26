@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import Redis from 'ioredis';
+import { SupabaseService } from './SupabaseService';
 import {
   ConversationContext,
   ChatMessage,
@@ -11,6 +12,7 @@ import {
 
 export class ConversationService {
   private redis: Redis;
+  private supabaseService: SupabaseService;
   private readonly TTL_SECONDS = 1800; // 30 minutes en secondes
   private readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Nettoyage toutes les 5 minutes
 
@@ -24,6 +26,9 @@ export class ConversationService {
       lazyConnect: true,
       enableOfflineQueue: false,
     });
+
+    // Initialiser le service Supabase
+    this.supabaseService = new SupabaseService();
 
     // Gestion des erreurs Redis
     this.redis.on('error', (error: Error) => {
@@ -149,7 +154,18 @@ export class ConversationService {
       summary: this.generateSummary(context)
     };
 
-    // Supprimer la conversation
+    try {
+      // Nettoyer la table ai_responses dans Supabase avant de supprimer la conversation Redis
+      const cleanupResult = await this.supabaseService.deleteAIResponsesByConversation(conversationId);
+      if (cleanupResult.success && cleanupResult.deletedCount) {
+        console.log(`🧹 Supprimé ${cleanupResult.deletedCount} réponse(s) IA pour la conversation terminée: ${conversationId}`);
+      }
+    } catch (supabaseError) {
+      console.warn(`⚠️ Erreur lors du nettoyage Supabase pour la conversation ${conversationId}:`, supabaseError);
+      // Continuer même si Supabase échoue
+    }
+
+    // Supprimer la conversation Redis
     await this.redis.del(conversationId);
 
     return summary;
@@ -225,17 +241,31 @@ export class ConversationService {
     try {
       const keys = await this.redis.keys('*');
       let cleanedCount = 0;
+      let supabaseCleanedCount = 0;
 
       for (const key of keys) {
         const ttl = await this.redis.ttl(key);
         if (ttl === -1 || ttl === -2) { // Pas de TTL ou clé inexistante
+          try {
+            // Nettoyer la table ai_responses dans Supabase avant de supprimer la conversation Redis
+            const cleanupResult = await this.supabaseService.deleteAIResponsesByConversation(key);
+            if (cleanupResult.success && cleanupResult.deletedCount) {
+              supabaseCleanedCount += cleanupResult.deletedCount;
+              console.log(`🧹 Supprimé ${cleanupResult.deletedCount} réponse(s) IA pour la conversation: ${key}`);
+            }
+          } catch (supabaseError) {
+            console.warn(`⚠️ Erreur lors du nettoyage Supabase pour ${key}:`, supabaseError);
+            // Continuer le nettoyage Redis même si Supabase échoue
+          }
+
+          // Supprimer la conversation Redis
           await this.redis.del(key);
           cleanedCount++;
         }
       }
 
-      if (cleanedCount > 0) {
-        console.log(`🧹 Nettoyage automatique: ${cleanedCount} conversations orphelines supprimées`);
+      if (cleanedCount > 0 || supabaseCleanedCount > 0) {
+        console.log(`🧹 Nettoyage automatique: ${cleanedCount} conversations orphelines supprimées de Redis, ${supabaseCleanedCount} réponses IA supprimées de Supabase`);
       }
     } catch (error) {
       console.error('❌ Erreur lors du nettoyage automatique:', error);
@@ -248,10 +278,26 @@ export class ConversationService {
   async forceCleanup(): Promise<void> {
     try {
       const keys = await this.redis.keys('*');
+      let supabaseCleanedCount = 0;
+
       if (keys.length > 0) {
+        // Nettoyer d'abord toutes les réponses IA dans Supabase
+        for (const key of keys) {
+          try {
+            const cleanupResult = await this.supabaseService.deleteAIResponsesByConversation(key);
+            if (cleanupResult.success && cleanupResult.deletedCount) {
+              supabaseCleanedCount += cleanupResult.deletedCount;
+            }
+          } catch (supabaseError) {
+            console.warn(`⚠️ Erreur lors du nettoyage Supabase pour ${key}:`, supabaseError);
+          }
+        }
+
+        // Puis supprimer toutes les conversations Redis
         await this.redis.del(...keys);
       }
-      console.log('🧹 Nettoyage forcé: toutes les conversations supprimées');
+
+      console.log(`🧹 Nettoyage forcé: ${keys.length} conversations supprimées de Redis, ${supabaseCleanedCount} réponses IA supprimées de Supabase`);
     } catch (error) {
       console.error('❌ Erreur lors du nettoyage forcé:', error);
     }
