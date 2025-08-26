@@ -495,7 +495,7 @@ export class SupabaseService {
     error?: string;
   }> {
     try {
-      const { data, error } = await this.supabase
+      const { error } = await this.supabase
         .from('ai_responses')
         .select('count')
         .limit(1);
