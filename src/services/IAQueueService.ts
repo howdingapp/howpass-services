@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import { redisService } from './RedisService';
 import { ConversationContext } from '../types/conversation';
 
 export interface IAProcessingJob {
@@ -18,29 +18,13 @@ export interface IAProcessingJob {
 }
 
 export class IAQueueService {
-  private redis: Redis;
   private readonly QUEUE_KEY = 'ia_processing_queue';
   private readonly PROCESSING_KEY = 'ia_processing_jobs';
   private readonly COMPLETED_KEY = 'ia_completed_jobs';
   private readonly FAILED_KEY = 'ia_failed_jobs';
 
   constructor() {
-    this.redis = new Redis({
-      host: process.env['REDIS_HOST'] || 'localhost',
-      port: parseInt(process.env['REDIS_PORT'] || '6379'),
-      ...(process.env['REDIS_PASSWORD'] && { password: process.env['REDIS_PASSWORD'] }),
-      maxRetriesPerRequest: 3,
-      lazyConnect: true,
-      enableOfflineQueue: false,
-    });
-
-    this.redis.on('error', (error: Error) => {
-      console.error('❌ Erreur Redis IAQueueService:', error);
-    });
-
-    this.redis.on('connect', () => {
-      console.log('✅ IAQueueService connecté à Redis');
-    });
+    // Le service Redis est maintenant géré par le singleton
   }
 
   /**
@@ -57,7 +41,7 @@ export class IAQueueService {
 
     // Ajouter à la queue avec priorité
     const priorityScore = this.getPriorityScore(job.priority);
-    await this.redis.zadd(this.QUEUE_KEY, priorityScore, JSON.stringify(fullJob));
+    await redisService.getClient().zadd(this.QUEUE_KEY, priorityScore, JSON.stringify(fullJob));
 
     console.log(`📥 Job IA ajouté à la queue: ${jobId} (${job.type}) - Priorité: ${job.priority}`);
     return jobId;
@@ -69,7 +53,7 @@ export class IAQueueService {
   async getNextJob(): Promise<IAProcessingJob | null> {
     try {
       // Récupérer le job avec la priorité la plus élevée
-      const jobs = await this.redis.zrevrange(this.QUEUE_KEY, 0, 0, 'WITHSCORES');
+      const jobs = await redisService.getClient().zrevrange(this.QUEUE_KEY, 0, 0, 'WITHSCORES');
       
       if (jobs.length === 0) {
         return null;
@@ -81,20 +65,20 @@ export class IAQueueService {
       const job: IAProcessingJob = JSON.parse(jobData);
 
       // Vérifier que le job n'est pas déjà en cours de traitement
-      const isProcessing = await this.redis.hexists(this.PROCESSING_KEY, job.id);
+      const isProcessing = await redisService.getClient().hexists(this.PROCESSING_KEY, job.id);
       if (isProcessing) {
         return null;
       }
 
       // Marquer le job comme en cours de traitement
-      await this.redis.hset(this.PROCESSING_KEY, job.id, JSON.stringify({
+      await redisService.getClient().hset(this.PROCESSING_KEY, job.id, JSON.stringify({
         ...job,
         status: 'processing',
         startedAt: new Date().toISOString()
       }));
 
       // Retirer le job de la queue
-      await this.redis.zrem(this.QUEUE_KEY, jobData);
+      await redisService.getClient().zrem(this.QUEUE_KEY, jobData);
 
       console.log(`🔍 Job IA récupéré pour traitement: ${job.id} (${job.type})`);
       return job;
@@ -111,7 +95,7 @@ export class IAQueueService {
   async markJobAsCompleted(jobId: string, result: any): Promise<void> {
     try {
       // Récupérer le job depuis la liste des jobs en cours
-      const jobData = await this.redis.hget(this.PROCESSING_KEY, jobId);
+      const jobData = await redisService.getClient().hget(this.PROCESSING_KEY, jobId);
       if (!jobData) {
         console.warn(`⚠️ Job ${jobId} non trouvé dans la liste des jobs en cours`);
         return;
@@ -126,10 +110,10 @@ export class IAQueueService {
       };
 
       // Ajouter à la liste des jobs terminés
-      await this.redis.hset(this.COMPLETED_KEY, jobId, JSON.stringify(completedJob));
+      await redisService.getClient().hset(this.COMPLETED_KEY, jobId, JSON.stringify(completedJob));
       
       // Retirer de la liste des jobs en cours
-      await this.redis.hdel(this.PROCESSING_KEY, jobId);
+      await redisService.getClient().hdel(this.PROCESSING_KEY, jobId);
 
       console.log(`✅ Job IA marqué comme terminé: ${jobId}`);
 
@@ -144,7 +128,7 @@ export class IAQueueService {
   async markJobAsFailed(jobId: string, error: string): Promise<void> {
     try {
       // Récupérer le job depuis la liste des jobs en cours
-      const jobData = await this.redis.hget(this.PROCESSING_KEY, jobId);
+      const jobData = await redisService.getClient().hget(this.PROCESSING_KEY, jobId);
       if (!jobData) {
         console.warn(`⚠️ Job ${jobId} non trouvé dans la liste des jobs en cours`);
         return;
@@ -164,7 +148,7 @@ export class IAQueueService {
 
         // Remettre dans la queue avec une priorité plus basse
         const priorityScore = this.getPriorityScore(job.priority) - (retryJob.retryCount * 10);
-        await this.redis.zadd(this.QUEUE_KEY, priorityScore, JSON.stringify(retryJob));
+        await redisService.getClient().zadd(this.QUEUE_KEY, priorityScore, JSON.stringify(retryJob));
         
         console.log(`🔄 Job IA remis en queue pour retry: ${jobId} (tentative ${retryJob.retryCount}/${job.maxRetries})`);
       } else {
@@ -177,13 +161,13 @@ export class IAQueueService {
         };
 
         // Ajouter à la liste des jobs échoués
-        await this.redis.hset(this.FAILED_KEY, jobId, JSON.stringify(failedJob));
+        await redisService.getClient().hset(this.FAILED_KEY, jobId, JSON.stringify(failedJob));
         
         console.log(`❌ Job IA marqué comme définitivement échoué: ${jobId}`);
       }
 
       // Retirer de la liste des jobs en cours
-      await this.redis.hdel(this.PROCESSING_KEY, jobId);
+      await redisService.getClient().hdel(this.PROCESSING_KEY, jobId);
 
     } catch (error) {
       console.error('❌ Erreur lors de la gestion de l\'échec du job:', error);
@@ -201,10 +185,10 @@ export class IAQueueService {
   }> {
     try {
       const [pending, processing, completed, failed] = await Promise.all([
-        this.redis.zcard(this.QUEUE_KEY),
-        this.redis.hlen(this.PROCESSING_KEY),
-        this.redis.hlen(this.COMPLETED_KEY),
-        this.redis.hlen(this.FAILED_KEY)
+        redisService.getClient().zcard(this.QUEUE_KEY),
+        redisService.getClient().hlen(this.PROCESSING_KEY),
+        redisService.getClient().hlen(this.COMPLETED_KEY),
+        redisService.getClient().hlen(this.FAILED_KEY)
       ]);
 
       return { pending, processing, completed, failed };
@@ -222,20 +206,20 @@ export class IAQueueService {
       const cutoffTime = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
       
       // Nettoyer les jobs terminés
-      const completedJobs = await this.redis.hgetall(this.COMPLETED_KEY);
+      const completedJobs = await redisService.getClient().hgetall(this.COMPLETED_KEY);
       for (const [jobId, jobData] of Object.entries(completedJobs)) {
         const job: any = JSON.parse(jobData);
         if (job.completedAt && new Date(job.completedAt) < cutoffTime) {
-          await this.redis.hdel(this.COMPLETED_KEY, jobId);
+          await redisService.getClient().hdel(this.COMPLETED_KEY, jobId);
         }
       }
 
       // Nettoyer les jobs échoués
-      const failedJobs = await this.redis.hgetall(this.FAILED_KEY);
+      const failedJobs = await redisService.getClient().hgetall(this.FAILED_KEY);
       for (const [jobId, jobData] of Object.entries(failedJobs)) {
         const job: any = JSON.parse(jobData);
         if (job.failedAt && new Date(job.failedAt) < cutoffTime) {
-          await this.redis.hdel(this.FAILED_KEY, jobId);
+          await redisService.getClient().hdel(this.FAILED_KEY, jobId);
         }
       }
 
@@ -261,6 +245,6 @@ export class IAQueueService {
    * Fermer la connexion Redis
    */
   async disconnect(): Promise<void> {
-    await this.redis.quit();
+    await redisService.getClient().quit();
   }
 }

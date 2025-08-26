@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import Redis from 'ioredis';
+import { redisService } from './RedisService';
 import { SupabaseService } from './SupabaseService';
 import {
   ConversationContext,
@@ -11,33 +11,13 @@ import {
 } from '../types/conversation';
 
 export class ConversationService {
-  private redis: Redis;
   private supabaseService: SupabaseService;
   private readonly TTL_SECONDS = 1800; // 30 minutes en secondes
   private readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Nettoyage toutes les 5 minutes
 
   constructor() {
-    // Configuration Redis
-    this.redis = new Redis({
-      host: process.env['REDIS_HOST'] || 'localhost',
-      port: parseInt(process.env['REDIS_PORT'] || '6379'),
-      ...(process.env['REDIS_PASSWORD'] && { password: process.env['REDIS_PASSWORD'] }),
-      maxRetriesPerRequest: 3,
-      lazyConnect: true,
-      enableOfflineQueue: false,
-    });
-
     // Initialiser le service Supabase
     this.supabaseService = new SupabaseService();
-
-    // Gestion des erreurs Redis
-    this.redis.on('error', (error: Error) => {
-      console.error('❌ Erreur Redis:', error);
-    });
-
-    this.redis.on('connect', () => {
-      console.log('✅ Connecté à Redis');
-    });
 
     // Démarrer le nettoyage automatique (pour les conversations orphelines)
     this.startCleanupScheduler();
@@ -66,7 +46,7 @@ export class ConversationService {
     };
 
     // Stocker avec TTL automatique
-    await this.redis.setex(conversationId, this.TTL_SECONDS, JSON.stringify(context));
+    await redisService.getClient().setex(conversationId, this.TTL_SECONDS, JSON.stringify(context));
 
     return { conversationId, context };
   }
@@ -102,7 +82,7 @@ export class ConversationService {
     context.lastActivity = now;
 
     // Renouveler le TTL en mettant à jour la conversation
-    await this.redis.setex(conversationId, this.TTL_SECONDS, JSON.stringify(context));
+    await redisService.getClient().setex(conversationId, this.TTL_SECONDS, JSON.stringify(context));
 
     return { messageId, context };
   }
@@ -112,7 +92,7 @@ export class ConversationService {
    */
   async getContext(conversationId: string): Promise<ConversationContext | null> {
     try {
-      const contextData = await this.redis.get(conversationId);
+      const contextData = await redisService.getClient().get(conversationId);
       if (!contextData) {
         return null;
       }
@@ -123,7 +103,7 @@ export class ConversationService {
       const lastActivity = new Date(context.lastActivity);
       const now = new Date();
       if ((now.getTime() - lastActivity.getTime()) > (this.TTL_SECONDS * 1000)) {
-        await this.redis.del(conversationId);
+        await redisService.getClient().del(conversationId);
         return null;
       }
 
@@ -174,7 +154,7 @@ export class ConversationService {
     }
 
     // Supprimer la conversation Redis
-    await this.redis.del(conversationId);
+    await redisService.getClient().del(conversationId);
 
     return summary;
   }
@@ -187,15 +167,15 @@ export class ConversationService {
       const now = new Date();
       
       // Compter les conversations actives (clés avec TTL > 0)
-      const keys = await this.redis.keys('*');
+      const keys = await redisService.getClient().keys('*');
       let activeCount = 0;
       let totalSize = 0;
 
       for (const key of keys) {
-        const ttl = await this.redis.ttl(key);
+        const ttl = await redisService.getClient().ttl(key);
         if (ttl > 0) {
           activeCount++;
-          const contextData = await this.redis.get(key);
+          const contextData = await redisService.getClient().get(key);
           if (contextData) {
             totalSize += contextData.length;
           }
@@ -247,12 +227,12 @@ export class ConversationService {
    */
   private async cleanupExpiredConversations(): Promise<void> {
     try {
-      const keys = await this.redis.keys('*');
+      const keys = await redisService.getClient().keys('*');
       let cleanedCount = 0;
       let supabaseCleanedCount = 0;
 
       for (const key of keys) {
-        const ttl = await this.redis.ttl(key);
+        const ttl = await redisService.getClient().ttl(key);
         if (ttl === -1 || ttl === -2) { // Pas de TTL ou clé inexistante
           try {
             // Nettoyer la table ai_responses dans Supabase avant de supprimer la conversation Redis
@@ -267,7 +247,7 @@ export class ConversationService {
           }
 
           // Supprimer la conversation Redis
-          await this.redis.del(key);
+          await redisService.getClient().del(key);
           cleanedCount++;
         }
       }
@@ -285,7 +265,7 @@ export class ConversationService {
    */
   async forceCleanup(): Promise<void> {
     try {
-      const keys = await this.redis.keys('*');
+      const keys = await redisService.getClient().keys('*');
       let supabaseCleanedCount = 0;
 
       if (keys.length > 0) {
@@ -302,7 +282,7 @@ export class ConversationService {
         }
 
         // Puis supprimer toutes les conversations Redis
-        await this.redis.del(...keys);
+        await redisService.getClient().del(...keys);
       }
 
       console.log(`🧹 Nettoyage forcé: ${keys.length} conversations supprimées de Redis, ${supabaseCleanedCount} réponses IA supprimées de Supabase`);
@@ -315,6 +295,6 @@ export class ConversationService {
    * Fermer la connexion Redis
    */
   async disconnect(): Promise<void> {
-    await this.redis.quit();
+    await redisService.getClient().quit();
   }
 }
