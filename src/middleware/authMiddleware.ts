@@ -1,15 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { createClient } from '@supabase/supabase-js';
-
-// Configuration Supabase
-const supabaseUrl = process.env['SUPABASE_URL']!;
-const supabaseServiceKey = process.env['SUPABASE_SERVICE_ROLE_KEY']!;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error('SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont requis');
-}
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+import { SupabaseService } from '../services/SupabaseService';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -38,6 +28,10 @@ export const authenticateToken = async (
       });
     }
 
+    // Utiliser SupabaseService pour vérifier le token
+    const supabaseService = new SupabaseService();
+    const supabase = supabaseService.getSupabaseClient();
+    
     // Vérifier le token avec Supabase
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
