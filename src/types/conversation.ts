@@ -75,9 +75,13 @@ export interface GetContextResponse {
   error?: string;
 }
 
-export interface EndConversationResponse {
+export interface GenerateSummaryResponse {
   success: boolean;
-  summary?: ConversationSummary;
+  message: string;
+  jobId: string;
+  estimatedTime: string;
+  queuePosition?: number;
+  cleanupScheduled: string;
   error?: string;
 }
 

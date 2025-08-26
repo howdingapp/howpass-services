@@ -1,19 +1,20 @@
 import { Request, Response } from 'express';
 import { ConversationService } from '../services/ConversationService';
+import { IAJobTriggerService } from '../services/IAJobTriggerService';
 import {
   StartConversationRequest,
   AddMessageRequest,
   StartConversationResponse,
-  AddMessageResponse,
-  GetContextResponse,
-  EndConversationResponse
+  AddMessageResponse
 } from '../types/conversation';
 
 export class ConversationController {
   private conversationService: ConversationService;
+  private iaJobTriggerService: IAJobTriggerService;
 
   constructor() {
     this.conversationService = new ConversationService();
+    this.iaJobTriggerService = new IAJobTriggerService();
   }
 
   /**
@@ -57,6 +58,20 @@ export class ConversationController {
 
       const { conversationId, context } = await this.conversationService.startConversation(request);
 
+      // Déclencher automatiquement la première réponse IA
+      try {
+        const iaJob = await this.iaJobTriggerService.triggerIAJob({
+          type: 'generate_first_response',
+          conversationId,
+          userId: request.userId,
+          priority: 'high'
+        });
+
+        console.log(`🤖 [START_CONVERSATION] Job IA déclenché pour la première réponse: ${iaJob.jobId}`);
+      } catch (iaError) {
+        console.warn(`⚠️ [START_CONVERSATION] Erreur lors du déclenchement du job IA (non bloquant):`, iaError);
+      }
+
       const response: StartConversationResponse = {
         success: true,
         conversationId,
@@ -76,7 +91,7 @@ export class ConversationController {
   }
 
   /**
-   * Ajouter un message à une conversation
+   * Ajouter un message à une conversation et déclencher une réponse IA
    * POST /api/conversations/:id/message
    */
   async addMessage(req: Request, res: Response): Promise<void> {
@@ -124,7 +139,25 @@ export class ConversationController {
         return;
       }
 
+      // Ajouter le message à la conversation
       const { messageId, context } = await this.conversationService.addMessage(conversationId, request);
+
+      // Si c'est un message utilisateur, déclencher une réponse IA
+      if (request.type === 'user') {
+        try {
+          const iaJob = await this.iaJobTriggerService.triggerIAJob({
+            type: 'generate_response',
+            conversationId,
+            userId: context.userId,
+            userMessage: request.content,
+            priority: 'medium'
+          });
+
+          console.log(`🤖 [ADD_MESSAGE] Job IA déclenché pour la réponse: ${iaJob.jobId}`);
+        } catch (iaError) {
+          console.warn(`⚠️ [ADD_MESSAGE] Erreur lors du déclenchement du job IA (non bloquant):`, iaError);
+        }
+      }
 
       const response: AddMessageResponse = {
         success: true,
@@ -158,11 +191,11 @@ export class ConversationController {
   }
 
   /**
-   * Récupérer le contexte d'une conversation
-   * GET /api/conversations/:id/context
+   * Générer le résumé IA d'une conversation et déclencher le nettoyage automatique
+   * POST /api/conversations/:id/summary
    */
-  async getContext(req: Request, res: Response): Promise<void> {
-    console.log('📝 [GET_CONTEXT] Requête reçue:', {
+  async generateSummary(req: Request, res: Response): Promise<void> {
+    console.log('📝 [GENERATE_SUMMARY] Requête reçue:', {
       method: req.method,
       url: req.url,
       params: req.params,
@@ -176,33 +209,66 @@ export class ConversationController {
     try {
       const { id: conversationId } = req.params;
       if (!conversationId) {
-        console.log('❌ [GET_CONTEXT] conversationId manquant dans les paramètres');
+        console.log('❌ [GENERATE_SUMMARY] conversationId manquant dans les paramètres');
         res.status(400).json({
           success: false,
           error: 'conversationId est requis'
         });
         return;
       }
-      const context = await this.conversationService.getContext(conversationId);
 
+      // Récupérer le contexte de la conversation
+      const context = await this.conversationService.getContext(conversationId);
       if (!context) {
-        console.log(`❌ [GET_CONTEXT] Conversation non trouvée ou expirée: ${conversationId}`);
+        console.log(`❌ [GENERATE_SUMMARY] Conversation non trouvée: ${conversationId}`);
         res.status(404).json({
           success: false,
-          error: 'Conversation non trouvée ou expirée'
+          error: 'Conversation non trouvée'
         });
         return;
       }
 
-      const response: GetContextResponse = {
-        success: true,
-        context
-      };
+      // Déclencher la génération du résumé IA
+      try {
+        const iaJob = await this.iaJobTriggerService.triggerIAJob({
+          type: 'generate_summary',
+          conversationId,
+          userId: context.userId,
+          priority: 'high'
+        });
 
-      res.status(200).json(response);
-      console.log(`📋 [GET_CONTEXT] Contexte récupéré pour la conversation: ${conversationId}`);
+        console.log(`🤖 [GENERATE_SUMMARY] Job IA déclenché pour le résumé: ${iaJob.jobId}`);
+
+        // Programmer le nettoyage automatique dans 2 minutes
+        setTimeout(async () => {
+          try {
+            console.log(`🧹 [GENERATE_SUMMARY] Nettoyage automatique de la conversation: ${conversationId}`);
+            await this.conversationService.forceCleanup();
+            console.log(`✅ [GENERATE_SUMMARY] Nettoyage automatique terminé pour: ${conversationId}`);
+          } catch (cleanupError) {
+            console.error(`❌ [GENERATE_SUMMARY] Erreur lors du nettoyage automatique:`, cleanupError);
+          }
+        }, 2 * 60 * 1000); // 2 minutes
+
+        res.status(200).json({
+          success: true,
+          message: 'Génération du résumé IA déclenchée avec succès',
+          jobId: iaJob.jobId,
+          estimatedTime: iaJob.estimatedTime,
+          queuePosition: iaJob.queuePosition,
+          cleanupScheduled: '2 minutes'
+        });
+
+      } catch (iaError) {
+        console.error('❌ [GENERATE_SUMMARY] Erreur lors du déclenchement du job IA:', iaError);
+        res.status(500).json({
+          success: false,
+          error: 'Erreur lors du déclenchement de la génération du résumé'
+        });
+      }
+
     } catch (error) {
-      console.error('❌ [GET_CONTEXT] Erreur lors de la récupération du contexte:', error);
+      console.error('❌ [GENERATE_SUMMARY] Erreur lors de la génération du résumé:', error);
       res.status(500).json({
         success: false,
         error: 'Erreur interne du serveur'
@@ -210,57 +276,7 @@ export class ConversationController {
     }
   }
 
-  /**
-   * Terminer une conversation
-   * POST /api/conversations/:id/end
-   */
-  async endConversation(req: Request, res: Response): Promise<void> {
-    console.log('📝 [END_CONVERSATION] Requête reçue:', {
-      method: req.method,
-      url: req.url,
-      params: req.params,
-      headers: {
-        'user-agent': req.headers['user-agent'],
-        'authorization': req.headers.authorization ? '***' : undefined
-      },
-      timestamp: new Date().toISOString()
-    });
 
-    try {
-      const { id: conversationId } = req.params;
-      if (!conversationId) {
-        console.log('❌ [END_CONVERSATION] conversationId manquant dans les paramètres');
-        res.status(400).json({
-          success: false,
-          error: 'conversationId est requis'
-        });
-        return;
-      }
-      const summary = await this.conversationService.endConversation(conversationId);
-
-      const response: EndConversationResponse = {
-        success: true,
-        summary
-      };
-
-      res.status(200).json(response);
-      console.log(`✅ [END_CONVERSATION] Conversation terminée: ${conversationId} - ${summary.messageCount} messages`);
-    } catch (error) {
-      if (error instanceof Error && error.message === 'Conversation not found') {
-        console.log(`❌ [END_CONVERSATION] Conversation non trouvée: ${req.params['id']}`);
-        res.status(404).json({
-          success: false,
-          error: 'Conversation non trouvée'
-        });
-      } else {
-        console.error('❌ [END_CONVERSATION] Erreur lors de la terminaison de la conversation:', error);
-        res.status(500).json({
-          success: false,
-          error: 'Erreur interne du serveur'
-        });
-      }
-    }
-  }
 
   /**
    * Obtenir les statistiques du service

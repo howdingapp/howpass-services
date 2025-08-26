@@ -310,6 +310,9 @@ export class ChatBotService {
    */
   private async generateFirstResponse(context: ConversationContext): Promise<string> {
     try {
+
+      console.log('🔍 Génération de la première réponse IA pour la conversation:', context.id);
+
       const systemPrompt = this.buildSystemPrompt(context);
       
       let userPrompt = "Salue l'utilisateur et présente-toi brièvement en tant qu'assistant Howana.";

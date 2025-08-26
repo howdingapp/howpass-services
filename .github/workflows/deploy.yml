@@ -130,11 +130,93 @@ jobs:
             --set-env-vars=GCP_JOB_NAME=video-processing-job \
             --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }} \
             --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }} \
-            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
+            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PORT }} \
             --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
         fi
         
         echo "✅ Cloud Run Job configuré avec succès"
+
+    - name: Create IA Response Processing Job
+      run: |
+        echo "🤖 Création du Cloud Run Job pour le traitement IA avec auto-scaling..."
+        
+        if gcloud run jobs describe ia-response-processing-job --region=${{ env.REGION }} --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
+          echo "✅ Job IA existant trouvé, mise à jour avec auto-scaling..."
+          gcloud run jobs update ia-response-processing-job \
+            --region=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --execution-environment=gen2 \
+            --network=default \
+            --subnet=default \
+            --vpc-egress=private-ranges-only \
+            --memory=1Gi \
+            --cpu=1 \
+            --task-timeout=900 \
+            --max-retries=3 \
+            --parallelism=20 \
+            --task-count=20 \
+            --command="npm" \
+            --args="run,job:ia" \
+            --set-env-vars=NODE_ENV=production \
+            --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
+            --set-env-vars=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+            --set-env-vars=GCP_LOCATION=europe-west1 \
+            --set-env-vars=GCP_JOB_NAME=ia-response-processing-job \
+            --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }} \
+            --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }} \
+            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
+            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars=AI_MODEL=gpt-3.5-turbo \
+            --set-env-vars=AI_MAX_TOKENS=500 \
+            --set-env-vars=AI_TEMPERATURE=0.7 \
+            --set-env-vars=MAX_WORKERS=10 \
+            --set-env-vars=WORKER_POOL_SIZE=10 \
+            --set-env-vars=AUTO_SCALING_ENABLED=false \
+            --set-env-vars=MAX_CONCURRENT_JOBS=200
+        else
+          echo "🆕 Création d'un nouveau job IA avec auto-scaling..."
+          gcloud run jobs create ia-response-processing-job \
+            --region=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --execution-environment=gen2 \
+            --network=default \
+            --subnet=default \
+            --vpc-egress=private-ranges-only \
+            --memory=1Gi \
+            --cpu=1 \
+            --task-timeout=900 \
+            --max-retries=3 \
+            --parallelism=20 \
+            --task-count=20 \
+            --command="npm" \
+            --args="run,job:ia" \
+            --set-env-vars=NODE_ENV=production \
+            --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
+            --set-env-vars=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+            --set-env-vars=GCP_LOCATION=europe-west1 \
+            --set-env-vars=GCP_JOB_NAME=ia-response-processing-job \
+            --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }} \
+            --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }} \
+            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
+            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars=AI_MODEL=gpt-3.5-turbo \
+            --set-env-vars=AI_MAX_TOKENS=500 \
+            --set-env-vars=AI_TEMPERATURE=0.7 \
+            --set-env-vars=MAX_WORKERS=10 \
+            --set-env-vars=WORKER_POOL_SIZE=10 \
+            --set-env-vars=AUTO_SCALING_ENABLED=false \
+            --set-env-vars=MAX_CONCURRENT_JOBS=200
+        fi
+        
+        echo "✅ Cloud Run Job IA configuré avec succès (configuration optimisée coût)"
+        echo "💡 Recommandation: Configurer Cloud Scheduler pour exécuter ce job toutes les 10-12 minutes"
+        echo "   gcloud scheduler jobs create ia-job-scheduler --schedule='*/10 * * * *' --uri='https://REGION-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/PROJECT/jobs/ia-response-processing-job:run'"
 
     - name: Show service URL
       run: |

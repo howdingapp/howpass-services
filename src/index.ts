@@ -5,6 +5,7 @@ import compression from 'compression';
 import { spawn } from 'child_process';
 import { VideoController } from './controllers/VideoController';
 import conversationRoutes from './routes/conversationRoutes';
+import iaJobsRoutes from './routes/iaJobsRoutes';
 import dotenv from 'dotenv';
 
 // Charger les variables d'environnement
@@ -63,6 +64,9 @@ app.get('/health', (req, res) => {
 
 // Routes des conversations
 app.use('/api/conversations', conversationRoutes);
+
+// Routes des jobs IA
+app.use('/api/ia/jobs', iaJobsRoutes);
 
 // Démarrage du serveur
 async function startServer() {

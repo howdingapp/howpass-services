@@ -18,24 +18,12 @@ router.post('/:id/message', (req, res) => {
   conversationController.addMessage(req, res);
 });
 
-// Récupérer le contexte d'une conversation
-router.get('/:id/context', (req, res) => {
-  conversationController.getContext(req, res);
+
+
+// Générer le résumé IA d'une conversation
+router.post('/:id/summary', (req, res) => {
+  conversationController.generateSummary(req, res);
 });
 
-// Terminer une conversation
-router.post('/:id/end', (req, res) => {
-  conversationController.endConversation(req, res);
-});
-
-// Obtenir les statistiques du service
-router.get('/stats', (req, res) => {
-  conversationController.getStats(req, res);
-});
-
-// Forcer le nettoyage (pour les tests)
-router.post('/cleanup', (req, res) => {
-  conversationController.forceCleanup(req, res);
-});
 
 export default router;
