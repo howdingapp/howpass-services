@@ -2,6 +2,7 @@ import { ChatBotService } from './services/ChatBotService';
 import { ConversationService } from './services/ConversationService';
 import { SupabaseService } from './services/SupabaseService';
 import { IAQueueService } from './services/IAQueueService';
+import { redisService } from './services/RedisService';
 import { ConversationContext } from './types/conversation';
 
 interface IAProcessingJob {
@@ -263,13 +264,62 @@ export class IAResponseProcessor {
     // Vérifier la connexion aux services
     await this.checkConnections();
     
-    // Démarrer le traitement en continu avec monitoring
-    this.startProcessing();
-    
-    // Démarrer le monitoring de charge
-    this.startLoadMonitoring();
+    // ✅ Attendre que Redis soit connecté avant de démarrer le traitement
+    await this.waitForRedisConnection();
     
     console.log('✅ Processeur de réponses IA démarré avec succès');
+  }
+
+  /**
+   * Attendre que Redis soit connecté et démarrer le traitement
+   */
+  private async waitForRedisConnection(): Promise<void> {
+    return new Promise((resolve) => {
+      if (redisService.isRedisConnected()) {
+        // Redis est déjà connecté, démarrer immédiatement
+        this.startProcessing();
+        this.startLoadMonitoring();
+        resolve();
+        return;
+      }
+
+      console.log('⏳ En attente de la connexion Redis...');
+      
+      // ✅ Écouter l'événement 'connected' de Redis
+      const redisClient = redisService.getClient();
+      redisClient.once('connected', () => {
+        console.log('🔌 Redis connecté ! Démarrage du traitement...');
+        this.startProcessing();
+        this.startLoadMonitoring();
+        resolve();
+      });
+
+      // ✅ Écouter aussi l'événement 'disconnected' pour arrêter le traitement
+      redisClient.once('disconnected', () => {
+        console.warn('⚠️ Redis déconnecté, arrêt du traitement...');
+        this.stopProcessing();
+      });
+
+      // Timeout de sécurité (30 secondes)
+      setTimeout(() => {
+        if (!redisService.isRedisConnected()) {
+          console.error('❌ Timeout: Redis n\'a pas pu se connecter en 30 secondes');
+          resolve(); // Continuer quand même pour éviter le blocage
+        }
+      }, 30000);
+    });
+  }
+
+  /**
+   * Arrêter le traitement (sans arrêter complètement le processeur)
+   */
+  private stopProcessing(): void {
+    if (this.processingInterval) {
+      clearInterval(this.processingInterval);
+      this.processingInterval = null;
+    }
+    this.isProcessing = false;
+    console.log('🛑 Traitement des jobs arrêté');
   }
 
   /**
@@ -302,16 +352,15 @@ export class IAResponseProcessor {
    */
   private async checkConnections(): Promise<void> {
     try {
-      // Test Supabase
+      // Test Supabase uniquement (Redis sera vérifié via l'événement 'connected')
+      console.log('🔌 Vérification de la connexion Supabase...');
       const supabaseTest = await this.supabaseService.testConnection();
       if (!supabaseTest.success) {
         throw new Error(`Connexion Supabase échouée: ${supabaseTest.error}`);
       }
       console.log('✅ Connexion Supabase OK');
 
-      // Test Redis via IAQueueService
-      const stats = await this.iaQueueService.getQueueStats();
-      console.log('✅ Connexion Redis OK:', stats);
+      console.log('✅ Services de base vérifiés, attente de la connexion Redis...');
 
     } catch (error) {
       console.error('❌ Erreur lors de la vérification des connexions:', error);
@@ -335,24 +384,34 @@ export class IAResponseProcessor {
    */
   private startLoadMonitoring(): void {
     setInterval(async () => {
-      const stats = await this.iaQueueService.getQueueStats();
-      this.currentLoad = stats.pending + stats.processing;
-      
-      // Log des métriques de performance
-      console.log(`📊 Métriques de charge:`, {
-        pending: stats.pending,
-        processing: stats.processing,
-        completed: stats.completed,
-        failed: stats.failed,
-        activeWorkers: this.workerPool.filter(w => w.isWorkerBusy()).length,
-        totalWorkers: this.maxWorkers,
-        loadPercentage: Math.round((this.currentLoad / (this.maxWorkers * 2)) * 100),
-        jobsPerSecond: this.performanceMetrics.jobsPerSecond,
-        averageProcessingTime: Math.round(this.performanceMetrics.averageProcessingTime)
-      });
+      // ✅ Vérifier que Redis soit connecté avant de récupérer les stats
+      if (!redisService.isRedisConnected()) {
+        return; // Monitoring silencieux si Redis déconnecté
+      }
 
-      // Auto-scaling basé sur la charge
-      await this.autoScaleWorkers(stats.pending);
+      try {
+        const stats = await this.iaQueueService.getQueueStats();
+        this.currentLoad = stats.pending + stats.processing;
+        
+        // Log des métriques de performance
+        console.log(`📊 Métriques de charge:`, {
+          pending: stats.pending,
+          processing: stats.processing,
+          completed: stats.completed,
+          failed: stats.failed,
+          activeWorkers: this.workerPool.filter(w => w.isWorkerBusy()).length,
+          totalWorkers: this.maxWorkers,
+          loadPercentage: Math.round((this.currentLoad / (this.maxWorkers * 2)) * 100),
+          jobsPerSecond: this.performanceMetrics.jobsPerSecond,
+          averageProcessingTime: Math.round(this.performanceMetrics.averageProcessingTime)
+        });
+
+        // Auto-scaling basé sur la charge
+        await this.autoScaleWorkers(stats.pending);
+        
+      } catch (error) {
+        console.error('❌ Erreur lors du monitoring de charge:', error);
+      }
       
     }, 5000); // Mise à jour toutes les 5 secondes
   }
@@ -362,6 +421,12 @@ export class IAResponseProcessor {
    */
   private async processJobsWithAutoScaling(): Promise<void> {
     try {
+      // ✅ Vérifier que Redis soit toujours connecté avant de traiter
+      if (!redisService.isRedisConnected()) {
+        console.warn('⚠️ Redis déconnecté, arrêt du traitement');
+        return; // Le traitement reprendra automatiquement quand Redis se reconnecte
+      }
+
       this.isProcessing = true;
       
       // Récupérer plusieurs jobs selon la capacité des workers
