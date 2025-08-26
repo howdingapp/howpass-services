@@ -55,6 +55,11 @@ export class IAJobTriggerService {
       const stats = await this.iaQueueService.getQueueStats();
       const estimatedTime = this.calculateEstimatedTime(stats.pending, priority);
 
+      // Déclencher le Cloud Run Job IA si c'est le premier job en queue
+      if (stats.pending === 1) {
+        await this.triggerCloudRunJob();
+      }
+
       console.log(`✅ Job IA créé: ${jobId} (${request.type}) - Priorité: ${priority} - Temps estimé: ${estimatedTime}`);
 
       return {
@@ -67,6 +72,35 @@ export class IAJobTriggerService {
     } catch (error) {
       console.error('❌ Erreur lors du déclenchement du job IA:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Déclencher le Cloud Run Job IA via l'API Google Cloud
+   */
+  private async triggerCloudRunJob(): Promise<void> {
+    try {
+      const projectId = process.env['GCP_PROJECT_ID'];
+      const region = process.env['GCP_LOCATION'] || 'europe-west1';
+      const jobName = process.env['GCP_JOB_NAME'] || 'ia-response-processing-job';
+
+      if (!projectId) {
+        console.warn('⚠️ GCP_PROJECT_ID non défini, impossible de déclencher le Cloud Run Job');
+        return;
+      }
+
+      // Construire l'URL de l'API Cloud Run Jobs
+      const apiUrl = `https://${region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${projectId}/jobs/${jobName}:run`;
+
+      console.log(`🚀 Déclenchement du Cloud Run Job: ${apiUrl}`);
+
+      // Pour l'instant, on log l'action
+      // TODO: Implémenter l'appel HTTP avec authentification GCP
+      console.log(`📋 Le Cloud Run Job ${jobName} doit être déclenché manuellement ou via Cloud Scheduler`);
+      console.log(`💡 Command: gcloud run jobs execute ${jobName} --region=${region} --project=${projectId}`);
+
+    } catch (error) {
+      console.error('❌ Erreur lors du déclenchement du Cloud Run Job:', error);
     }
   }
 
