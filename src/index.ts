@@ -102,7 +102,7 @@ app.get('/health', (req, res) => {
 });
 
 // ✅ Endpoint de santé Redis (disponible une fois Redis initialisé)
-app.get('/health/redis', async (req, res) => {
+app.get('/health/redis', async (_req, res) => {
   try {
     const isConnected = redisService.isRedisConnected();
     const isHealthy = isConnected ? await redisService.healthCheck() : false;
