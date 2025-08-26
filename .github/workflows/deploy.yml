@@ -59,7 +59,6 @@ jobs:
           --concurrency=10
           --max-instances=10
           --set-env-vars=NODE_ENV=production
-          --set-env-vars=PORT=8080
           --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
           --set-env-vars=FFMPEG_TIMEOUT=300000
