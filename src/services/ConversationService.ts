@@ -15,12 +15,6 @@ export class ConversationService {
   private readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Nettoyage toutes les 5 minutes
 
   constructor() {
-
-    console.log("Config Redis");
-    console.log("REDIS_HOST", `'${process.env['REDIS_HOST']}'`);
-    console.log("REDIS_PORT", `'${process.env['REDIS_PORT']}'`);
-    console.log("REDIS_PASSWORD", `'${process.env['REDIS_PASSWORD']}'`);
-
     // Configuration Redis
     this.redis = new Redis({
       host: process.env['REDIS_HOST'] || 'localhost',
@@ -41,7 +35,7 @@ export class ConversationService {
     });
 
     // Démarrer le nettoyage automatique (pour les conversations orphelines)
-    this.startCleanupScheduler();
+    //this.startCleanupScheduler();
   }
 
   /**
