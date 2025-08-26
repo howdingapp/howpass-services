@@ -35,9 +35,7 @@ export class ConversationService {
     });
 
     // Démarrer le nettoyage automatique (pour les conversations orphelines)
-    if(false) {
-      this.startCleanupScheduler();
-    }
+    this.startCleanupScheduler();
   }
 
   /**
