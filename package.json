@@ -7,10 +7,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "job": "node dist/job-processor.js",
-    "job:ia": "node dist/job-ia-processor.js",
     "dev": "ts-node src/index.ts",
     "dev:job": "ts-node src/job-processor.ts",
-    "dev:job:ia": "ts-node src/job-ia-processor.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix"
   },
@@ -25,6 +23,7 @@
   "author": "HowPass Team",
   "license": "MIT",
   "dependencies": {
+    "@google-cloud/tasks": "^4.1.0",
     "@supabase/supabase-js": "^2.38.4",
     "@types/ioredis": "^4.28.10",
     "compression": "^1.7.4",

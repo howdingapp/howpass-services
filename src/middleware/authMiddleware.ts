@@ -7,6 +7,7 @@ export interface AuthenticatedRequest extends Request {
     email?: string;
     role?: string;
   };
+  authToken?: string; // Token d'authentification pour les tâches IA
 }
 
 export const authenticateToken = async (
@@ -46,12 +47,15 @@ export const authenticateToken = async (
       });
     }
 
-    // Ajouter les informations utilisateur à la requête
+    // Ajouter les informations utilisateur et le token à la requête
     req.user = {
       id: user.id,
       ...(user.email && { email: user.email }),
       ...(user.role && { role: user.role })
     };
+    
+    // Ajouter le token d'authentification pour les tâches IA
+    req.authToken = token;
 
     console.log(`✅ Utilisateur authentifié: ${user.email} (${user.id})`);
     return next();

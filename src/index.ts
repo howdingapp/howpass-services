@@ -4,8 +4,8 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { spawn } from 'child_process';
 import { VideoController } from './controllers/VideoController';
+import { IAController } from './controllers/IAController';
 import conversationRoutes from './routes/conversationRoutes';
-import iaJobsRoutes from './routes/iaJobsRoutes';
 import { redisService } from './services/RedisService';
 import dotenv from 'dotenv';
 
@@ -153,8 +153,11 @@ app.get('/health/redis', async (_req, res) => {
 // Routes des conversations
 app.use('/api/conversations', conversationRoutes);
 
-// Routes des jobs IA
-app.use('/api/ia/jobs', iaJobsRoutes);
+// Routes des jobs IA supprimées - remplacées par Google Cloud Tasks
+
+// ✅ Endpoint de traitement IA pour Google Cloud Tasks (appelé automatiquement par les tâches)
+const iaController = new IAController();
+app.post('/api/ia/process', (req, res) => iaController.processIATask(req, res));
 
 // Démarrage du serveur Express
 function startExpressServer(): void {

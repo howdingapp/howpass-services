@@ -169,10 +169,13 @@ Le service utilise les variables d'environnement suivantes :
 
 ## 🗄️ **Configuration Redis pour les Conversations **
 
-### **A. Activer l'API Memorystore**
+### **A. Activer les APIs requises**
 ```bash
 # Activer Memorystore for Redis
 gcloud services enable redis.googleapis.com
+
+# Activer Google Cloud Tasks
+gcloud services enable cloudtasks.googleapis.com
 ```
 
 ### **B. Créer l'instance Redis**

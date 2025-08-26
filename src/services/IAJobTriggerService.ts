@@ -1,5 +1,5 @@
-import { IAQueueService } from './IAQueueService';
 import { ConversationService } from './ConversationService';
+import { GoogleCloudTasksService } from './GoogleCloudTasksService';
 
 export interface IAJobRequest {
   type: 'generate_response' | 'generate_summary' | 'generate_first_response';
@@ -7,25 +7,25 @@ export interface IAJobRequest {
   userId: string;
   userMessage?: string;
   priority?: 'low' | 'medium' | 'high';
+  authToken?: string; // Token d'authentification pour sécuriser les tâches
 }
 
 export class IAJobTriggerService {
-  private iaQueueService: IAQueueService;
   private conversationService: ConversationService;
+  private googleCloudTasksService: GoogleCloudTasksService;
 
   constructor() {
-    this.iaQueueService = new IAQueueService();
     this.conversationService = new ConversationService();
+    this.googleCloudTasksService = new GoogleCloudTasksService();
   }
 
   /**
-   * Déclencher un job IA et le mettre en queue
+   * Déclencher un job IA via Google Cloud Tasks
    */
-  async triggerIAJob(request: IAJobRequest): Promise<{
+  async triggerIAJob(request: IAJobRequest, authToken: string): Promise<{
     success: boolean;
     jobId: string;
     estimatedTime: string;
-    queuePosition?: number | undefined;
   }> {
     try {
       console.log(`🚀 Déclenchement d'un job IA: ${request.type} pour la conversation ${request.conversationId}`);
@@ -39,34 +39,18 @@ export class IAJobTriggerService {
       // Déterminer la priorité
       const priority = this.determinePriority(request.priority, request.type);
 
-      // Créer le job
-      const jobId = await this.iaQueueService.addJob({
-        type: request.type,
-        conversationId: request.conversationId,
-        userId: request.userId,
-        userMessage: request.userMessage || '',
-        context,
-        priority,
-        retryCount: 0,
-        maxRetries: parseInt(process.env['MAX_JOB_RETRIES'] || '3')
-      });
+      // ✅ Créer directement une tâche Google Cloud Tasks
+      const task = await this.createGoogleCloudTask(request, authToken);
 
-      // Obtenir les statistiques de la queue
-      const stats = await this.iaQueueService.getQueueStats();
-      const estimatedTime = this.calculateEstimatedTime(stats.pending, priority);
+      // Calculer le temps estimé basé sur la priorité
+      const estimatedTime = this.calculateEstimatedTime(priority);
 
-      // Déclencher le Cloud Run Job IA si c'est le premier job en queue
-      if (stats.pending === 1) {
-        await this.triggerCloudRunJob();
-      }
-
-      console.log(`✅ Job IA créé: ${jobId} (${request.type}) - Priorité: ${priority} - Temps estimé: ${estimatedTime}`);
+      console.log(`✅ Tâche IA créée: ${task.name} (${request.type}) - Priorité: ${priority} - Temps estimé: ${estimatedTime}`);
 
       return {
         success: true,
-        jobId,
-        estimatedTime,
-        queuePosition: stats.pending
+        jobId: task.name || `task_${Date.now()}`,
+        estimatedTime
       };
 
     } catch (error) {
@@ -76,43 +60,94 @@ export class IAJobTriggerService {
   }
 
   /**
-   * Déclencher le Cloud Run Job IA via l'API Google Cloud
+   * Créer une tâche Google Cloud Tasks pour le traitement IA
    */
-  private async triggerCloudRunJob(): Promise<void> {
+  private async createGoogleCloudTask(request: IAJobRequest, authToken: string): Promise<any> {
     try {
-      const projectId = process.env['GCP_PROJECT_ID'];
-      const region = process.env['GCP_LOCATION'] || 'europe-west1';
-      const jobName = process.env['GCP_JOB_NAME'] || 'ia-response-processing-job';
+      console.log(`🚀 Création de la tâche Google Cloud Tasks pour: ${request.type}`);
 
-      if (!projectId) {
-        console.warn('⚠️ GCP_PROJECT_ID non défini, impossible de déclencher le Cloud Run Job');
-        return;
+      // S'assurer que la priorité est définie
+      const priority = request.priority || 'medium';
+
+      // Créer la tâche avec priorité et token d'authentification
+      const taskData: Parameters<typeof this.googleCloudTasksService.createPriorityIATask>[0] = {
+        type: request.type,
+        conversationId: request.conversationId,
+        userId: request.userId,
+        priority: priority,
+        authToken: authToken // Ajouter le token d'authentification
+      };
+      
+      // Ajouter userMessage seulement s'il est défini
+      if (request.userMessage) {
+        taskData.userMessage = request.userMessage;
       }
+      
+      const task = await this.googleCloudTasksService.createPriorityIATask(taskData);
 
-      // Construire l'URL de l'API Cloud Run Jobs
-      const apiUrl = `https://${region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${projectId}/jobs/${jobName}:run`;
+      console.log(`✅ Tâche Google Cloud Tasks créée avec succès: ${task.name}`);
+      console.log(`📋 Queue: ${this.getPriorityQueueName(priority)}`);
+      console.log(`⏱️ Délai max: ${this.getPriorityDeadline(priority)}s`);
 
-      console.log(`🚀 Déclenchement du Cloud Run Job: ${apiUrl}`);
-
-      // Pour l'instant, on log l'action
-      // TODO: Implémenter l'appel HTTP avec authentification GCP
-      console.log(`📋 Le Cloud Run Job ${jobName} doit être déclenché manuellement ou via Cloud Scheduler`);
-      console.log(`💡 Command: gcloud run jobs execute ${jobName} --region=${region} --project=${projectId}`);
+      return task;
 
     } catch (error) {
-      console.error('❌ Erreur lors du déclenchement du Cloud Run Job:', error);
+      console.error('❌ Erreur lors de la création de la tâche Google Cloud Tasks:', error);
+      
+      // Fallback : log des informations de debug
+      console.log(`💡 Fallback - Informations de debug:`, {
+        type: request.type,
+        conversationId: request.conversationId,
+        priority: request.priority || 'medium',
+        gcpProjectId: process.env['GCP_PROJECT_ID'],
+        gcpLocation: process.env['GCP_LOCATION'],
+        queueName: process.env['GCP_TASKS_QUEUE_NAME'] || 'ia-processing-queue'
+      });
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Obtenir le nom de la queue basé sur la priorité
+   */
+  private getPriorityQueueName(priority: 'low' | 'medium' | 'high'): string {
+    switch (priority) {
+      case 'high':
+        return 'ia-processing-high-priority';
+      case 'medium':
+        return 'ia-processing-medium-priority';
+      case 'low':
+        return 'ia-processing-low-priority';
+      default:
+        return 'ia-processing-queue';
+    }
+  }
+
+  /**
+   * Obtenir le délai de dispatch basé sur la priorité
+   */
+  private getPriorityDeadline(priority: 'low' | 'medium' | 'high'): number {
+    switch (priority) {
+      case 'high':
+        return 60; // 1 minute max
+      case 'medium':
+        return 300; // 5 minutes max
+      case 'low':
+        return 900; // 15 minutes max
+      default:
+        return 300;
     }
   }
 
   /**
    * Déclencher plusieurs jobs IA en parallèle
    */
-  async triggerMultipleIAJobs(requests: IAJobRequest[]): Promise<{
+  async triggerMultipleIAJobs(requests: IAJobRequest[], authToken: string): Promise<{
     success: boolean;
     results: Array<{
       jobId: string;
       estimatedTime: string;
-      queuePosition?: number | undefined;
     }>;
     totalJobs: number;
   }> {
@@ -120,7 +155,7 @@ export class IAJobTriggerService {
       console.log(`🚀 Déclenchement de ${requests.length} jobs IA en parallèle`);
 
       const results = await Promise.all(
-        requests.map(request => this.triggerIAJob(request))
+        requests.map(request => this.triggerIAJob(request, authToken))
       );
 
       const successfulJobs = results.filter(result => result.success);
@@ -132,90 +167,13 @@ export class IAJobTriggerService {
         success: true,
         results: successfulJobs.map(result => ({
           jobId: result.jobId,
-          estimatedTime: result.estimatedTime,
-          queuePosition: result.queuePosition
+          estimatedTime: result.estimatedTime
         })),
         totalJobs
       };
 
     } catch (error) {
       console.error('❌ Erreur lors du déclenchement de plusieurs jobs IA:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Vérifier le statut d'un job IA
-   */
-  async getJobStatus(_jobId: string): Promise<{
-    success: boolean;
-    status: 'pending' | 'processing' | 'completed' | 'failed';
-    progress?: number;
-    estimatedCompletion?: string;
-    result?: any;
-    error?: string;
-  }> {
-    try {
-      // Cette méthode devra être implémentée dans IAQueueService
-      // Pour l'instant, on retourne un statut basique
-      return {
-        success: true,
-        status: 'pending',
-        progress: 0,
-        estimatedCompletion: 'calculating...'
-      };
-    } catch (error) {
-      console.error('❌ Erreur lors de la vérification du statut du job:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Obtenir les statistiques de la queue
-   */
-  async getQueueStats(): Promise<{
-    success: boolean;
-    stats: {
-      pending: number;
-      processing: number;
-      completed: number;
-      failed: number;
-      estimatedWaitTime: string;
-    };
-  }> {
-    try {
-      const stats = await this.iaQueueService.getQueueStats();
-      const estimatedWaitTime = this.calculateEstimatedTime(stats.pending, 'medium');
-
-      return {
-        success: true,
-        stats: {
-          ...stats,
-          estimatedWaitTime
-        }
-      };
-    } catch (error) {
-      console.error('❌ Erreur lors de la récupération des statistiques de la queue:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Nettoyer les anciens jobs terminés
-   */
-  async cleanupOldJobs(maxAgeHours: number = 24): Promise<{
-    success: boolean;
-    cleanedJobs: number;
-  }> {
-    try {
-      await this.iaQueueService.cleanupOldJobs(maxAgeHours);
-      
-      return {
-        success: true,
-        cleanedJobs: 0 // Le nombre exact sera calculé par IAQueueService
-      };
-    } catch (error) {
-      console.error('❌ Erreur lors du nettoyage des anciens jobs:', error);
       throw error;
     }
   }
@@ -244,7 +202,7 @@ export class IAJobTriggerService {
   /**
    * Calculer le temps estimé de traitement
    */
-  private calculateEstimatedTime(pendingJobs: number, priority: 'low' | 'medium' | 'high'): string {
+  private calculateEstimatedTime(priority: 'low' | 'medium' | 'high'): string {
     const baseTimePerJob = 2; // 2 secondes par job en moyenne
     const priorityMultiplier = {
       high: 0.5,    // Priorité haute = 2x plus rapide
@@ -252,7 +210,7 @@ export class IAJobTriggerService {
       low: 2        // Priorité basse = 2x plus lent
     };
 
-    const estimatedSeconds = Math.ceil(pendingJobs * baseTimePerJob * priorityMultiplier[priority]);
+    const estimatedSeconds = Math.ceil(baseTimePerJob * priorityMultiplier[priority]);
     
     if (estimatedSeconds < 60) {
       return `${estimatedSeconds} secondes`;
@@ -269,9 +227,6 @@ export class IAJobTriggerService {
    * Fermer les connexions
    */
   async disconnect(): Promise<void> {
-    await Promise.all([
-      this.iaQueueService.disconnect(),
-      this.conversationService.disconnect()
-    ]);
+    await this.googleCloudTasksService.close();
   }
 }

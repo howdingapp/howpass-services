@@ -1,6 +1,7 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { ConversationService } from '../services/ConversationService';
 import { IAJobTriggerService } from '../services/IAJobTriggerService';
+import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import {
   StartConversationRequest,
   AddMessageRequest,
@@ -21,7 +22,7 @@ export class ConversationController {
    * Démarrer une nouvelle conversation
    * POST /api/conversations/start
    */
-  async startConversation(req: Request, res: Response): Promise<void> {
+  async startConversation(req: AuthenticatedRequest, res: Response): Promise<void> {
     console.log('📝 [START_CONVERSATION] Requête reçue:', {
       method: req.method,
       url: req.url,
@@ -65,7 +66,7 @@ export class ConversationController {
           conversationId,
           userId: request.userId,
           priority: 'high'
-        });
+        }, req.authToken || '');
 
         console.log(`🤖 [START_CONVERSATION] Job IA déclenché pour la première réponse: ${iaJob.jobId}`);
       } catch (iaError) {
@@ -94,7 +95,7 @@ export class ConversationController {
    * Ajouter un message à une conversation et déclencher une réponse IA
    * POST /api/conversations/:id/message
    */
-  async addMessage(req: Request, res: Response): Promise<void> {
+  async addMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
     console.log('📝 [ADD_MESSAGE] Requête reçue:', {
       method: req.method,
       url: req.url,
@@ -145,13 +146,13 @@ export class ConversationController {
       // Si c'est un message utilisateur, déclencher une réponse IA
       if (request.type === 'user') {
         try {
-          const iaJob = await this.iaJobTriggerService.triggerIAJob({
-            type: 'generate_response',
-            conversationId,
-            userId: context.userId,
-            userMessage: request.content,
-            priority: 'medium'
-          });
+                  const iaJob = await this.iaJobTriggerService.triggerIAJob({
+          type: 'generate_response',
+          conversationId,
+          userId: context.userId,
+          userMessage: request.content,
+          priority: 'medium'
+        }, req.authToken || '');
 
           console.log(`🤖 [ADD_MESSAGE] Job IA déclenché pour la réponse: ${iaJob.jobId}`);
         } catch (iaError) {
@@ -194,7 +195,7 @@ export class ConversationController {
    * Générer le résumé IA d'une conversation et déclencher le nettoyage automatique
    * POST /api/conversations/:id/summary
    */
-  async generateSummary(req: Request, res: Response): Promise<void> {
+  async generateSummary(req: AuthenticatedRequest, res: Response): Promise<void> {
     console.log('📝 [GENERATE_SUMMARY] Requête reçue:', {
       method: req.method,
       url: req.url,
@@ -235,7 +236,7 @@ export class ConversationController {
           conversationId,
           userId: context.userId,
           priority: 'high'
-        });
+        }, req.authToken || '');
 
         console.log(`🤖 [GENERATE_SUMMARY] Job IA déclenché pour le résumé: ${iaJob.jobId}`);
 
@@ -255,7 +256,6 @@ export class ConversationController {
           message: 'Génération du résumé IA déclenchée avec succès',
           jobId: iaJob.jobId,
           estimatedTime: iaJob.estimatedTime,
-          queuePosition: iaJob.queuePosition,
           cleanupScheduled: '2 minutes'
         });
 
@@ -282,7 +282,7 @@ export class ConversationController {
    * Obtenir les statistiques du service
    * GET /api/conversations/stats
    */
-  async getStats(req: Request, res: Response): Promise<void> {
+  async getStats(req: AuthenticatedRequest, res: Response): Promise<void> {
     console.log('📝 [GET_STATS] Requête reçue:', {
       method: req.method,
       url: req.url,
@@ -313,7 +313,7 @@ export class ConversationController {
    * Forcer le nettoyage (pour les tests)
    * POST /api/conversations/cleanup
    */
-  async forceCleanup(req: Request, res: Response): Promise<void> {
+  async forceCleanup(req: AuthenticatedRequest, res: Response): Promise<void> {
     console.log('📝 [FORCE_CLEANUP] Requête reçue:', {
       method: req.method,
       url: req.url,

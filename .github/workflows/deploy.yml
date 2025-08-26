@@ -67,14 +67,16 @@ jobs:
           --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
           --set-env-vars=GCP_LOCATION=europe-west1
           --set-env-vars=GCP_JOB_NAME=video-processing-job
+          --set-env-vars=GCP_TASKS_QUEUE_NAME=ia-processing-queue
+          --set-env-vars=IA_PROCESSING_SERVICE_URL=https://${{ secrets.GCP_PROJECT_ID }}-europe-west1.run.app/api/ia/process
           --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }}
           --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }}
           --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
           --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
 
-    - name: Create Cloud Run Job
+    - name: Create Cloud Run Job (Video Processing Only)
       run: |
-        echo "📋 Création du Cloud Run Job..."
+        echo "📋 Création du Cloud Run Job pour le traitement vidéo..."
         
         if gcloud run jobs describe video-processing-job --region=${{ env.REGION }} --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
           echo "✅ Job existant trouvé, mise à jour..."
@@ -99,11 +101,7 @@ jobs:
             --set-env-vars=FFMPEG_THREADS=4 \
             --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
             --set-env-vars=GCP_LOCATION=europe-west1 \
-            --set-env-vars=GCP_JOB_NAME=video-processing-job \
-            --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }} \
-            --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }} \
-            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
-            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            --set-env-vars=GCP_JOB_NAME=video-processing-job
         else
           echo "🆕 Création d'un nouveau job..."
           gcloud run jobs create video-processing-job \
@@ -127,96 +125,121 @@ jobs:
             --set-env-vars=FFMPEG_THREADS=4 \
             --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
             --set-env-vars=GCP_LOCATION=europe-west1 \
-            --set-env-vars=GCP_JOB_NAME=video-processing-job \
-            --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }} \
-            --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }} \
-            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
-            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            --set-env-vars=GCP_JOB_NAME=video-processing-job
         fi
         
-        echo "✅ Cloud Run Job configuré avec succès"
+        echo "✅ Cloud Run Job configuré avec succès (traitement vidéo uniquement)"
 
-    - name: Create IA Response Processing Job
+    - name: Create Google Cloud Tasks Queues
       run: |
-        echo "🤖 Création du Cloud Run Job pour le traitement IA avec auto-scaling..."
+        echo "🚀 Configuration des Google Cloud Tasks pour le traitement IA..."
         
-        if gcloud run jobs describe ia-response-processing-job --region=${{ env.REGION }} --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
-          echo "✅ Job IA existant trouvé, mise à jour avec auto-scaling..."
-          gcloud run jobs update ia-response-processing-job \
-            --region=${{ env.REGION }} \
+        # Créer la queue principale
+        if gcloud tasks queues describe ia-processing-queue --location=${{ env.REGION }} --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
+          echo "✅ Queue principale existante, mise à jour..."
+          gcloud tasks queues update ia-processing-queue \
+            --location=${{ env.REGION }} \
             --project=${{ secrets.GCP_PROJECT_ID }} \
-            --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            --execution-environment=gen2 \
-            --network=default \
-            --subnet=default \
-            --vpc-egress=private-ranges-only \
-            --memory=1Gi \
-            --cpu=1 \
-            --task-timeout=900 \
-            --max-retries=3 \
-            --parallelism=20 \
-            --command="npm" \
-            --args="run,job:ia" \
-            --set-env-vars=NODE_ENV=production \
-            --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
-            --set-env-vars=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
-            --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
-            --set-env-vars=GCP_LOCATION=europe-west1 \
-            --set-env-vars=GCP_JOB_NAME=ia-response-processing-job \
-            --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }} \
-            --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }} \
-            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
-            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-            --set-env-vars=AI_MODEL=gpt-3.5-turbo \
-            --set-env-vars=AI_MAX_TOKENS=500 \
-            --set-env-vars=AI_TEMPERATURE=0.7 \
-            --set-env-vars=MAX_WORKERS=10 \
-            --set-env-vars=WORKER_POOL_SIZE=10 \
-            --set-env-vars=AUTO_SCALING_ENABLED=false \
-            --set-env-vars=MAX_CONCURRENT_JOBS=200
+            --max-concurrent-dispatches=50 \
+            --max-dispatches-per-second=100 \
+            --max-attempts=3 \
+            --min-backoff=10s \
+            --max-backoff=3600s \
+            --max-doublings=5
         else
-          echo "🆕 Création d'un nouveau job IA avec auto-scaling..."
-          gcloud run jobs create ia-response-processing-job \
-            --region=${{ env.REGION }} \
+          echo "🆕 Création de la queue principale..."
+          gcloud tasks queues create ia-processing-queue \
+            --location=${{ env.REGION }} \
             --project=${{ secrets.GCP_PROJECT_ID }} \
-            --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            --execution-environment=gen2 \
-            --network=default \
-            --subnet=default \
-            --vpc-egress=private-ranges-only \
-            --memory=1Gi \
-            --cpu=1 \
-            --task-timeout=900 \
-            --max-retries=3 \
-            --parallelism=20 \
-            --command="npm" \
-            --args="run,job:ia" \
-            --set-env-vars=NODE_ENV=production \
-            --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
-            --set-env-vars=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
-            --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
-            --set-env-vars=GCP_LOCATION=europe-west1 \
-            --set-env-vars=GCP_JOB_NAME=ia-response-processing-job \
-            --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }} \
-            --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }} \
-            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
-            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-            --set-env-vars=AI_MODEL=gpt-3.5-turbo \
-            --set-env-vars=AI_MAX_TOKENS=500 \
-            --set-env-vars=AI_TEMPERATURE=0.7 \
-            --set-env-vars=MAX_WORKERS=10 \
-            --set-env-vars=WORKER_POOL_SIZE=10 \
-            --set-env-vars=AUTO_SCALING_ENABLED=false \
-            --set-env-vars=MAX_CONCURRENT_JOBS=200
+            --max-concurrent-dispatches=50 \
+            --max-dispatches-per-second=100 \
+            --max-attempts=3 \
+            --min-backoff=10s \
+            --max-backoff=3600s \
+            --max-doublings=5
         fi
         
-        echo "✅ Cloud Run Job IA configuré avec succès (configuration optimisée coût)"
-        echo "💡 Parallélisme Cloud Run: 20 tâches simultanées"
-        echo "💡 Parallélisme interne: 10 workers dans le job processor"
-        echo "💡 Recommandation: Configurer Cloud Scheduler pour exécuter ce job toutes les 10-12 minutes"
-        echo "   gcloud scheduler jobs create ia-job-scheduler --schedule='*/10 * * * *' --uri='https://REGION-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/PROJECT/jobs/ia-response-processing-job:run'"
+        # Créer la queue haute priorité
+        if gcloud tasks queues describe ia-processing-high-priority --location=${{ env.REGION }} --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
+          echo "✅ Queue haute priorité existante, mise à jour..."
+          gcloud tasks queues update ia-processing-high-priority \
+            --location=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --max-concurrent-dispatches=20 \
+            --max-dispatches-per-second=50 \
+            --max-attempts=3 \
+            --min-backoff=5s \
+            --max-backoff=300s \
+            --max-doublings=3
+        else
+          echo "🆕 Création de la queue haute priorité..."
+          gcloud tasks queues create ia-processing-high-priority \
+            --location=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --max-concurrent-dispatches=20 \
+            --max-dispatches-per-second=50 \
+            --max-attempts=3 \
+            --min-backoff=5s \
+            --max-backoff=300s \
+            --max-doublings=3
+        fi
+        
+        # Créer la queue moyenne priorité
+        if gcloud tasks queues describe ia-processing-medium-priority --location=${{ env.REGION }} --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
+          echo "✅ Queue moyenne priorité existante, mise à jour..."
+          gcloud tasks queues update ia-processing-medium-priority \
+            --location=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --max-concurrent-dispatches=30 \
+            --max-dispatches-per-second=75 \
+            --max-attempts=3 \
+            --min-backoff=10s \
+            --max-backoff=600s \
+            --max-doublings=4
+        else
+          echo "🆕 Création de la queue moyenne priorité..."
+          gcloud tasks queues create ia-processing-medium-priority \
+            --location=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --max-concurrent-dispatches=30 \
+            --max-dispatches-per-second=75 \
+            --max-attempts=3 \
+            --min-backoff=10s \
+            --max-backoff=600s \
+            --max-doublings=4
+        fi
+        
+        # Créer la queue basse priorité
+        if gcloud tasks queues describe ia-processing-low-priority --location=${{ env.REGION }} --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
+          echo "✅ Queue basse priorité existante, mise à jour..."
+          gcloud tasks queues update ia-processing-low-priority \
+            --location=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --max-concurrent-dispatches=40 \
+            --max-dispatches-per-second=60 \
+            --max-attempts=3 \
+            --min-backoff=30s \
+            --max-backoff=1800s \
+            --max-doublings=5
+        else
+          echo "🆕 Création de la queue basse priorité..."
+          gcloud tasks queues create ia-processing-low-priority \
+            --location=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --max-concurrent-dispatches=40 \
+            --max-dispatches-per-second=60 \
+            --max-attempts=3 \
+            --min-backoff=30s \
+            --max-backoff=1800s \
+            --max-doublings=5
+        fi
+        
+        echo "✅ Google Cloud Tasks configurées avec succès"
+        echo "💡 Queue principale: ia-processing-queue (50 tâches simultanées)"
+        echo "💡 Queue haute priorité: ia-processing-high-priority (20 tâches simultanées)"
+        echo "💡 Queue moyenne priorité: ia-processing-medium-priority (30 tâches simultanées)"
+        echo "💡 Queue basse priorité: ia-processing-low-priority (40 tâches simultanées)"
+        echo "💡 Les tâches sont automatiquement dispatchées vers le service Cloud Run"
 
     - name: Show service URL
       run: |
