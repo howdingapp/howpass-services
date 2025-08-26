@@ -258,6 +258,10 @@ curl $SERVICE_URL/api/conversations/stats
 gcloud redis instances describe howpass-conversations \
   --region=europe-west1 \
   --format="value(currentLocationId,state,redisVersion,memorySizeGb)"
+
+gcloud redis instances describe howpass-conversations \
+  --region=europe-west1 \
+  --format="table(name,region,host,port,authorizedNetwork,transitEncryptionMode)"
 ```
 
 ### **H. Estimation des coûts Redis**

@@ -49,6 +49,10 @@ jobs:
         region: ${{ env.REGION }}
         flags: |
           --allow-unauthenticated
+          --execution-environment=gen2
+          --network=default
+          --subnet=default
+          --vpc-egress=private-ranges-only
           --memory=2Gi
           --cpu=2
           --timeout=900
@@ -72,13 +76,16 @@ jobs:
       run: |
         echo "📋 Création du Cloud Run Job..."
         
-        # Vérifier si le job existe déjà
         if gcloud run jobs describe video-processing-job --region=${{ env.REGION }} --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
           echo "✅ Job existant trouvé, mise à jour..."
           gcloud run jobs update video-processing-job \
             --region=${{ env.REGION }} \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --execution-environment=gen2 \
+            --network=default \
+            --subnet=default \
+            --vpc-egress=private-ranges-only \
             --memory=2Gi \
             --cpu=2 \
             --task-timeout=3600 \
@@ -103,6 +110,10 @@ jobs:
             --region=${{ env.REGION }} \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --execution-environment=gen2 \
+            --network=default \
+            --subnet=default \
+            --vpc-egress=private-ranges-only \
             --memory=2Gi \
             --cpu=2 \
             --task-timeout=3600 \
