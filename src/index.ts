@@ -40,6 +40,18 @@ function checkFFmpeg(): Promise<boolean> {
 // Vérifier que Redis est disponible
 async function checkRedis(): Promise<boolean> {
   try {
+    console.log('🔌 Vérification de la connexion Redis...');
+    
+    // Attendre que Redis soit connecté
+    const isConnected = await redisService.waitForConnection(15000);
+    if (!isConnected) {
+      console.error('❌ Redis n\'a pas pu se connecter en 15 secondes');
+      return false;
+    }
+    
+    console.log('✅ Connexion Redis établie, vérification de la santé...');
+    
+    // Vérifier la santé
     const isHealthy = await redisService.healthCheck();
     if (isHealthy) {
       console.log('✅ Redis est disponible et en bonne santé');
