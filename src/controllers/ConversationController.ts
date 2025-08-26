@@ -21,11 +21,24 @@ export class ConversationController {
    * POST /api/conversations/start
    */
   async startConversation(req: Request, res: Response): Promise<void> {
+    console.log('📝 [START_CONVERSATION] Requête reçue:', {
+      method: req.method,
+      url: req.url,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'content-type': req.headers['content-type'],
+        'authorization': req.headers.authorization ? '***' : undefined
+      },
+      body: req.body,
+      timestamp: new Date().toISOString()
+    });
+
     try {
       const request: StartConversationRequest = req.body;
 
       // Validation des données
       if (!request.userId || !request.type) {
+        console.log('❌ [START_CONVERSATION] Validation échouée:', { userId: request.userId, type: request.type });
         res.status(400).json({
           success: false,
           error: 'userId et type sont requis'
@@ -34,6 +47,7 @@ export class ConversationController {
       }
 
       if (!['bilan', 'activity'].includes(request.type)) {
+        console.log('❌ [START_CONVERSATION] Type invalide:', { type: request.type });
         res.status(400).json({
           success: false,
           error: 'type doit être "bilan" ou "activity"'
@@ -51,9 +65,9 @@ export class ConversationController {
       };
 
       res.status(201).json(response);
-      console.log(`🚀 Nouvelle conversation démarrée: ${conversationId} (${request.type})`);
+      console.log(`🚀 [START_CONVERSATION] Nouvelle conversation démarrée: ${conversationId} (${request.type})`);
     } catch (error) {
-      console.error('❌ Erreur lors du démarrage de la conversation:', error);
+      console.error('❌ [START_CONVERSATION] Erreur lors du démarrage de la conversation:', error);
       res.status(500).json({
         success: false,
         error: 'Erreur interne du serveur'
@@ -66,9 +80,23 @@ export class ConversationController {
    * POST /api/conversations/:id/message
    */
   async addMessage(req: Request, res: Response): Promise<void> {
+    console.log('📝 [ADD_MESSAGE] Requête reçue:', {
+      method: req.method,
+      url: req.url,
+      params: req.params,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'content-type': req.headers['content-type'],
+        'authorization': req.headers.authorization ? '***' : undefined
+      },
+      body: req.body,
+      timestamp: new Date().toISOString()
+    });
+
     try {
       const { id: conversationId } = req.params;
       if (!conversationId) {
+        console.log('❌ [ADD_MESSAGE] conversationId manquant dans les paramètres');
         res.status(400).json({
           success: false,
           error: 'conversationId est requis'
@@ -79,6 +107,7 @@ export class ConversationController {
 
       // Validation des données
       if (!request.content || !request.type) {
+        console.log('❌ [ADD_MESSAGE] Validation échouée:', { content: request.content, type: request.type });
         res.status(400).json({
           success: false,
           error: 'content et type sont requis'
@@ -87,6 +116,7 @@ export class ConversationController {
       }
 
       if (!['user', 'bot'].includes(request.type)) {
+        console.log('❌ [ADD_MESSAGE] Type de message invalide:', { type: request.type });
         res.status(400).json({
           success: false,
           error: 'type doit être "user" ou "bot"'
@@ -103,20 +133,22 @@ export class ConversationController {
       };
 
       res.status(200).json(response);
-      console.log(`💬 Message ajouté à la conversation ${conversationId}: ${messageId}`);
+      console.log(`💬 [ADD_MESSAGE] Message ajouté à la conversation ${conversationId}: ${messageId}`);
     } catch (error) {
       if (error instanceof Error && error.message === 'Conversation not found') {
+        console.log(`❌ [ADD_MESSAGE] Conversation non trouvée: ${req.params['id']}`);
         res.status(404).json({
           success: false,
           error: 'Conversation non trouvée'
         });
       } else if (error instanceof Error && error.message === 'Conversation is not active') {
+        console.log(`❌ [ADD_MESSAGE] Conversation non active: ${req.params['id']}`);
         res.status(400).json({
           success: false,
           error: 'La conversation n\'est plus active'
         });
       } else {
-        console.error('❌ Erreur lors de l\'ajout du message:', error);
+        console.error('❌ [ADD_MESSAGE] Erreur lors de l\'ajout du message:', error);
         res.status(500).json({
           success: false,
           error: 'Erreur interne du serveur'
@@ -130,9 +162,21 @@ export class ConversationController {
    * GET /api/conversations/:id/context
    */
   async getContext(req: Request, res: Response): Promise<void> {
+    console.log('📝 [GET_CONTEXT] Requête reçue:', {
+      method: req.method,
+      url: req.url,
+      params: req.params,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'authorization': req.headers.authorization ? '***' : undefined
+      },
+      timestamp: new Date().toISOString()
+    });
+
     try {
       const { id: conversationId } = req.params;
       if (!conversationId) {
+        console.log('❌ [GET_CONTEXT] conversationId manquant dans les paramètres');
         res.status(400).json({
           success: false,
           error: 'conversationId est requis'
@@ -142,6 +186,7 @@ export class ConversationController {
       const context = await this.conversationService.getContext(conversationId);
 
       if (!context) {
+        console.log(`❌ [GET_CONTEXT] Conversation non trouvée ou expirée: ${conversationId}`);
         res.status(404).json({
           success: false,
           error: 'Conversation non trouvée ou expirée'
@@ -155,8 +200,9 @@ export class ConversationController {
       };
 
       res.status(200).json(response);
+      console.log(`📋 [GET_CONTEXT] Contexte récupéré pour la conversation: ${conversationId}`);
     } catch (error) {
-      console.error('❌ Erreur lors de la récupération du contexte:', error);
+      console.error('❌ [GET_CONTEXT] Erreur lors de la récupération du contexte:', error);
       res.status(500).json({
         success: false,
         error: 'Erreur interne du serveur'
@@ -169,9 +215,21 @@ export class ConversationController {
    * POST /api/conversations/:id/end
    */
   async endConversation(req: Request, res: Response): Promise<void> {
+    console.log('📝 [END_CONVERSATION] Requête reçue:', {
+      method: req.method,
+      url: req.url,
+      params: req.params,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'authorization': req.headers.authorization ? '***' : undefined
+      },
+      timestamp: new Date().toISOString()
+    });
+
     try {
       const { id: conversationId } = req.params;
       if (!conversationId) {
+        console.log('❌ [END_CONVERSATION] conversationId manquant dans les paramètres');
         res.status(400).json({
           success: false,
           error: 'conversationId est requis'
@@ -186,15 +244,16 @@ export class ConversationController {
       };
 
       res.status(200).json(response);
-      console.log(`✅ Conversation terminée: ${conversationId} - ${summary.messageCount} messages`);
+      console.log(`✅ [END_CONVERSATION] Conversation terminée: ${conversationId} - ${summary.messageCount} messages`);
     } catch (error) {
       if (error instanceof Error && error.message === 'Conversation not found') {
+        console.log(`❌ [END_CONVERSATION] Conversation non trouvée: ${req.params['id']}`);
         res.status(404).json({
           success: false,
           error: 'Conversation non trouvée'
         });
       } else {
-        console.error('❌ Erreur lors de la terminaison de la conversation:', error);
+        console.error('❌ [END_CONVERSATION] Erreur lors de la terminaison de la conversation:', error);
         res.status(500).json({
           success: false,
           error: 'Erreur interne du serveur'
@@ -207,15 +266,26 @@ export class ConversationController {
    * Obtenir les statistiques du service
    * GET /api/conversations/stats
    */
-  async getStats(_req: Request, res: Response): Promise<void> {
+  async getStats(req: Request, res: Response): Promise<void> {
+    console.log('📝 [GET_STATS] Requête reçue:', {
+      method: req.method,
+      url: req.url,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'authorization': req.headers.authorization ? '***' : undefined
+      },
+      timestamp: new Date().toISOString()
+    });
+
     try {
       const stats = await this.conversationService.getStats();
       res.status(200).json({
         success: true,
         ...stats
       });
+      console.log('📊 [GET_STATS] Statistiques récupérées avec succès');
     } catch (error) {
-      console.error('❌ Erreur lors de la récupération des statistiques:', error);
+      console.error('❌ [GET_STATS] Erreur lors de la récupération des statistiques:', error);
       res.status(500).json({
         success: false,
         error: 'Erreur interne du serveur'
@@ -227,16 +297,26 @@ export class ConversationController {
    * Forcer le nettoyage (pour les tests)
    * POST /api/conversations/cleanup
    */
-  async forceCleanup(_req: Request, res: Response): Promise<void> {
+  async forceCleanup(req: Request, res: Response): Promise<void> {
+    console.log('📝 [FORCE_CLEANUP] Requête reçue:', {
+      method: req.method,
+      url: req.url,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'authorization': req.headers.authorization ? '***' : undefined
+      },
+      timestamp: new Date().toISOString()
+    });
+
     try {
       await this.conversationService.forceCleanup();
       res.status(200).json({
         success: true,
         message: 'Nettoyage forcé effectué'
       });
-      console.log('🧹 Nettoyage forcé effectué');
+      console.log('🧹 [FORCE_CLEANUP] Nettoyage forcé effectué');
     } catch (error) {
-      console.error('❌ Erreur lors du nettoyage forcé:', error);
+      console.error('❌ [FORCE_CLEANUP] Erreur lors du nettoyage forcé:', error);
       res.status(500).json({
         success: false,
         error: 'Erreur interne du serveur'
