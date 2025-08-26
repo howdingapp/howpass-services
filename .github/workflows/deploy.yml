@@ -59,6 +59,7 @@ jobs:
           --concurrency=10
           --max-instances=10
           --set-env-vars=NODE_ENV=production
+          --set-env-vars=PORT=8080
           --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
           --set-env-vars=FFMPEG_TIMEOUT=300000
@@ -130,7 +131,7 @@ jobs:
             --set-env-vars=GCP_JOB_NAME=video-processing-job \
             --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }} \
             --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }} \
-            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PORT }} \
+            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
             --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
         fi
         
