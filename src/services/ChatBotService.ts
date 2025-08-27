@@ -32,9 +32,7 @@ export class ChatBotService {
     try {
       // Démarrer la conversation via le service local
       const result = await this.conversationService.startConversation({
-        conversationId: request.conversationId,
-        userId: request.userId,
-        type: request.type,
+        ...request,
         initialContext: request.initialContext || {}
       });
 
