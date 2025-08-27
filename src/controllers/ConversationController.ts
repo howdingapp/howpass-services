@@ -6,7 +6,8 @@ import {
   StartConversationRequest,
   AddMessageRequest,
   StartConversationResponse,
-  AddMessageResponse
+  AddMessageResponse,
+  GenerateSummaryRequest
 } from '../types/conversation';
 
 export class ConversationController {
@@ -220,6 +221,7 @@ export class ConversationController {
         });
         return;
       }
+      const request: GenerateSummaryRequest = req.body;
 
       // Récupérer le contexte de la conversation
       const context = await this.conversationService.getContext(conversationId);
@@ -237,7 +239,7 @@ export class ConversationController {
         const iaJob = await this.iaJobTriggerService.triggerIAJob({
           type: 'generate_summary',
           conversationId,
-          aiResponseId: context.aiResponseId,
+          aiResponseId: request.aiResponseId,
           userId: context.userId,
           priority: 'high'
         }, req.authToken || '');
