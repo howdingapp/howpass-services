@@ -8,9 +8,7 @@ import { IAController } from './controllers/IAController';
 import conversationRoutes from './routes/conversationRoutes';
 import { redisService } from './services/RedisService';
 import dotenv from 'dotenv';
-import { authenticateToken } from './middleware/authMiddleware';
 import { validateIAToken } from './middleware/iaAuthMiddleware';
-import { ConversationController } from './controllers/ConversationController';
 
 // Charger les variables d'environnement
 dotenv.config();
