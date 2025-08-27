@@ -66,6 +66,7 @@ jobs:
           --set-env-vars=CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
           --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
           --set-env-vars=GCP_LOCATION=europe-west1
+          --set-env-vars=GCP_SERVICE_ACCOUNT_EMAIL=${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
           --set-env-vars=GCP_JOB_NAME=video-processing-job
           --set-env-vars=GCP_TASKS_QUEUE_NAME=ia-processing-queue
           --set-env-vars=IA_PROCESSING_SERVICE_URL=https://${{ secrets.GCP_PROJECT_ID }}-europe-west1.run.app/api/ia/process
