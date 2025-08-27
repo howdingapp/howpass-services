@@ -360,7 +360,6 @@ export class SupabaseService {
         .update({
           response_text: updateData.response_text,
           metadata: updateData.metadata || {},
-          updated_at: new Date().toISOString()
         })
         .eq('id', aiResponseId)
         .select()
