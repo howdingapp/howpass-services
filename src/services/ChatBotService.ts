@@ -10,36 +10,37 @@ const ActivitySummaryJsonOutputSchema = {
     // Pour ActivityDetailsStep
     shortDescription: {
       type: "string",
-      description: "Description courte et accrocheuse de l'activité, mettant en avant ce qui la rend unique (max 200 caractères)"
+      description: "Description courte et accrocheuse de l'activité, mettant en avant ce qui la rend unique (max 200 caractères). Strictement basé sur les informations fournies par l'utilisateur."
     },
     longDescription: {
       type: "string", 
-      description: "Description détaillée de l'activité expliquant le déroulement, l'approche et ce que vivront les participants (max 500 caractères)"
+      description: "Description détaillée de l'activité expliquant le déroulement, l'approche et ce que vivront les participants (max 500 caractères). Strictement basé sur les informations fournies par l'utilisateur."
     },
     title: {
       type: "string",
-      description: "Titre optimisé et descriptif de l'activité (max 100 caractères)"
+      description: "Titre optimisé et descriptif de l'activité (max 100 caractères). Strictement basé sur les informations fournies par l'utilisateur."
     },
     
     // Pour ActivityKeywordsStep
     selectedKeywords: {
       type: "array",
       items: { type: "string" },
-      description: "Liste des mots-clés les plus pertinents pour cette activité"
+      description: "Liste des mots-clés les plus pertinents pour cette activité. Strictement basé sur les informations fournies par l'utilisateur."
     },
     
     // Pour ActivitySummaryStep (uniquement benefits)
     benefits: {
       type: "array",
       items: { type: "string" },
-      description: "Liste des bénéfices concrets et mesurables que les participants peuvent attendre de cette activité"
+      description: "Liste des bénéfices concrets et mesurables que les participants peuvent attendre de cette activité. Strictement basé sur les informations fournies par l'utilisateur."
     },
     
     // Nouveau champ pour décrire la situation idéale
     typicalSituations: {
       type: "string",
-      description: "Description de la situation idéale d'un utilisateur qui serait à même de profiter pleinement de cette pratique. Inclure le profil psychologique, les expériences vécues, les besoins spécifiques, etc."
-    }
+      description: "Description de la situation idéale d'un utilisateur qui serait à même de profiter pleinement de cette pratique. Inclure le profil psychologique, les expériences vécues, les besoins spécifiques, etc. Strictement basé sur les informations fournies par l'utilisateur."
+    },
+
   },
   required: ["shortDescription", "longDescription", "title", "selectedKeywords", "benefits", "typicalSituations"],
   additionalProperties: false
@@ -462,6 +463,9 @@ export class ChatBotService {
         
         Indique que tu es là pour l'aider à compléter et optimiser sa déclaration d'activité.
         
+        OBJECTIF SPÉCIFIQUE: Collecter les informations nécessaires pour générer automatiquement un résumé structuré avec:
+        - Titre optimisé, descriptions (courte et détaillée), mots-clés, bénéfices, et profil utilisateur idéal.
+        
         Commence par un accueil chaleureux et pose une première question engageante pour mieux comprendre son activité et commencer à établir la conformité avec sa pratique associée.`;
       } else if (context.type === 'bilan') {
         userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts.
@@ -548,7 +552,23 @@ export class ChatBotService {
     } else if(context.type === 'activity') {
       // COMPORTEMENT PAR DÉFAUT : Howana experte des pratiques
       basePrompt += `\n1. [EXPERTISE] Expertise des pratiques: Tu es experte des pratiques de bien-être et de santé. 
-      Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.`;
+      Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.
+      
+      OBJECTIFS SPÉCIFIQUES POUR LE RÉSUMÉ STRUCTURÉ:
+      Tu dois collecter des informations précises pour générer automatiquement un résumé structuré avec ces 6 éléments:
+      
+      A) TITRE (max 100 caractères): Un titre optimisé et descriptif de l'activité
+      B) DESCRIPTION COURTE (max 200 caractères): Description accrocheuse mettant en avant l'unicité
+      C) DESCRIPTION DÉTAILLÉE (max 500 caractères): Déroulement, approche et expérience des participants
+      D) MOTS-CLÉS: Liste des termes les plus pertinents pour cette activité
+      E) BÉNÉFICES: Liste des bénéfices concrets et mesurables pour les participants
+      F) PROFIL IDÉAL: Description du profil psychologique et situation idéale de l'utilisateur cible
+      
+      STRATÉGIE DE COLLECTE:
+      - Pose des questions ciblées pour chaque élément
+      - Demande des exemples concrets et spécifiques
+      - Vérifie la cohérence avec la pratique associée
+      - Collecte des détails qui permettront de remplir automatiquement les formulaires`;
     } else /* bilan */ {
        // COMPORTEMENT PAR DÉFAUT : Howana analyste du mood et de l'état du jour
        basePrompt += `\n1. [ANALYSE] Analyse du mood et de l'état du jour: Tu es spécialisée dans l'analyse approfondie du bien-être quotidien. 
@@ -576,6 +596,16 @@ export class ChatBotService {
         - Description courte: ${practice.shortDescription || 'Non disponible'}
         - Description détaillée: ${practice.longDescription || 'Non disponible'}`;
       }
+      
+      // Ajouter des instructions pour la collecte des informations manquantes
+      basePrompt += `\n\nOBJECTIF DE LA CONVERSATION:
+      Collecter les informations manquantes pour générer un résumé structuré complet.
+      Vérifier et enrichir les informations existantes pour optimiser l'auto-remplissage des formulaires.
+      
+      POINTS D'ATTENTION:
+      - Si des informations sont déjà présentes, demande des précisions ou des améliorations
+      - Si des informations manquent, pose des questions ciblées pour les collecter
+      - Assure-toi que chaque élément du résumé sera suffisamment détaillé et précis`;
       
     } else if (context.type === 'bilan') {
 
@@ -605,6 +635,13 @@ export class ChatBotService {
     - Pose des questions pertinentes pour mieux comprendre l'activité et établir la conformité
     - Identifie le profil d'utilisateur idéal pour cette activité/pratique
     - Suggère des ajustements si nécessaire pour optimiser la synergie
+    
+    COLLECTE POUR LE RÉSUMÉ STRUCTURÉ:
+    - Guide la conversation pour collecter les 6 éléments requis du résumé
+    - Demande des précisions sur chaque aspect (titre, descriptions, mots-clés, bénéfices, profil cible)
+    - Vérifie que les informations sont suffisamment détaillées pour l'auto-remplissage
+    - Adapte tes questions selon les informations déjà fournies
+    
     - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
              } else if (context.type === 'bilan') {
