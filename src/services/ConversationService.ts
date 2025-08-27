@@ -27,7 +27,7 @@ export class ConversationService {
    * Démarrer une nouvelle conversation
    */
   async startConversation(request: StartConversationRequest): Promise<{ conversationId: string; context: ConversationContext }> {
-    const conversationId = uuidv4();
+    const conversationId = request.conversationId;
     const now = new Date().toISOString();
 
     console.log('🔍 Sauvegarde d\'une nouvelle conversation dans Redis:', request);

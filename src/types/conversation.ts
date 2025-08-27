@@ -39,6 +39,7 @@ export interface ChatMessage {
 }
 
 export interface StartConversationRequest {
+  conversationId: string;
   userId: string;
   type: 'bilan' | 'activity';
   initialContext?: {
