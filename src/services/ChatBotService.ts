@@ -541,13 +541,20 @@ export class ChatBotService {
       
       // Personnaliser le prompt selon le type de conversation et les données disponibles
       if (context.type === 'activity' && context.activityData) {
-        userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts. 
-        Le praticien souhaite déclarer une activité: "${context.activityData.title}".
-        ${context.activityData.shortDescription ? `Description courte: ${context.activityData.shortDescription}` : ''}
+        userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts.
+        
+        Fais un petit état des lieux résumé de ce qui a été déclaré :
+        - Activité : "${context.activityData.title}"
+        ${context.activityData.shortDescription ? `- Description : ${context.activityData.shortDescription}` : ''}
+        
+        Indique que tu es là pour l'aider à compléter et optimiser sa déclaration d'activité.
+        
         Commence par un accueil chaleureux et pose une première question engageante pour mieux comprendre son activité et commencer à établir la conformité avec sa pratique associée.`;
       } else if (context.type === 'bilan') {
-        userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts. 
-        Le praticien souhaite faire un bilan de son activité ou de sa pratique. 
+        userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts.
+        
+        Indique que tu es là pour l'aider à faire un bilan approfondi de son activité ou de sa pratique.
+        
         Commence par un accueil chaleureux et pose une première question engageante pour l'accompagner dans cette réflexion.`;
       }
 
