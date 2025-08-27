@@ -31,7 +31,8 @@ export class ConversationService {
     const now = new Date().toISOString();
 
     console.log('🔍 Sauvegarde d\'une nouvelle conversation dans Redis:', request);
-
+    console.log('🔍 Conversation ID:', conversationId);
+    
     const context: ConversationContext = {
       id: conversationId,
       userId: request.userId,
