@@ -220,27 +220,27 @@ export class IAController {
   private async processGenerateFirstResponse(taskData: IATaskRequest, context: ConversationContext): Promise<any> {
     console.log(`👋 Génération d'une première réponse IA pour: ${taskData.conversationId}`);
     
-    const firstResponse = await this.chatBotService['generateFirstResponse'](context);
+    const firstResponseResult = await this.chatBotService['generateFirstResponse'](context);
     
     // Ajouter la réponse à la conversation
     await this.conversationService.addMessage(taskData.conversationId, {
-      content: firstResponse,
+      content: firstResponseResult.response,
       type: 'bot',
-      metadata: { source: 'ai', model: this.chatBotService.getAIModel(), type: 'first_response' }
+      metadata: { source: 'ai', model: this.chatBotService.getAIModel(), type: 'first_response', messageId: firstResponseResult.messageId }
     });
 
     // Enregistrer dans Supabase
     await this.supabaseService.createAIResponse({
       conversation_id: taskData.conversationId,
       user_id: taskData.userId,
-      response_text: firstResponse,
+      response_text: firstResponseResult.response,
       message_type: 'text'
     });
 
     return {
       success: true,
-      response: firstResponse,
-      messageId: `msg_${Date.now()}`,
+      response: firstResponseResult.response,
+      messageId: firstResponseResult.messageId || `msg_${Date.now()}`,
       workerId: 'google-cloud-tasks'
     };
   }

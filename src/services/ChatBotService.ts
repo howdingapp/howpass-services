@@ -3,6 +3,49 @@ import { SupabaseService } from './SupabaseService';
 import { ConversationContext, StartConversationRequest, AddMessageRequest, AIRule } from '../types/conversation';
 import OpenAI from 'openai';
 
+
+const ActivitySummaryJsonOutputSchema = {
+  type: "object",
+  properties: {
+    // Pour ActivityDetailsStep
+    shortDescription: {
+      type: "string",
+      description: "Description courte et accrocheuse de l'activité, mettant en avant ce qui la rend unique (max 200 caractères)"
+    },
+    longDescription: {
+      type: "string", 
+      description: "Description détaillée de l'activité expliquant le déroulement, l'approche et ce que vivront les participants (max 500 caractères)"
+    },
+    title: {
+      type: "string",
+      description: "Titre optimisé et descriptif de l'activité (max 100 caractères)"
+    },
+    
+    // Pour ActivityKeywordsStep
+    selectedKeywords: {
+      type: "array",
+      items: { type: "string" },
+      description: "Liste des mots-clés les plus pertinents pour cette activité"
+    },
+    
+    // Pour ActivitySummaryStep (uniquement benefits)
+    benefits: {
+      type: "array",
+      items: { type: "string" },
+      description: "Liste des bénéfices concrets et mesurables que les participants peuvent attendre de cette activité"
+    },
+    
+    // Nouveau champ pour décrire la situation idéale
+    typicalSituations: {
+      type: "string",
+      description: "Description de la situation idéale d'un utilisateur qui serait à même de profiter pleinement de cette pratique. Inclure le profil psychologique, les expériences vécues, les besoins spécifiques, etc."
+    }
+  },
+  required: ["shortDescription", "longDescription", "title", "selectedKeywords", "benefits", "typicalSituations"],
+  additionalProperties: false
+};
+
+
 export class ChatBotService {
   private conversationService: ConversationService;
   private supabaseService: SupabaseService;
@@ -131,7 +174,7 @@ export class ChatBotService {
             // Générer une réponse IA
             const aiResponse = await this.generateAIResponse(context, request.content);
             
-                         if (aiResponse) {
+             if (aiResponse) {
                // Créer un messageId unique pour la réponse IA
                const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                
@@ -344,10 +387,118 @@ export class ChatBotService {
   }
 
   /**
-   * Générer un résumé de la conversation
+   * Générer un résumé structuré de la conversation pour les activités
    */
-  private async generateConversationSummary(context: ConversationContext): Promise<string> {
+  private async generateConversationSummary(context: ConversationContext): Promise<any> {
     try {
+      // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
+      const previousCallId = context.metadata?.['previousCallId'];
+      
+      if (previousCallId && context.type === 'activity') {
+        // Utiliser l'API responses pour référencer l'appel précédent
+        console.log('🔍 Génération du résumé via API responses avec callID:', previousCallId);
+        
+        try {
+          const systemPrompt = `Tu es un assistant spécialisé dans l'analyse de conversations entre praticiens et experts. 
+          Analyse la conversation et génère un résumé structuré qui permettra de remplir automatiquement les formulaires d'activité.
+          
+          Tu dois extraire et structurer les informations suivantes :
+          - shortDescription: Description courte et accrocheuse (max 200 caractères)
+          - longDescription: Description détaillée du déroulement et de l'approche (max 500 caractères)  
+          - title: Titre optimisé et descriptif (max 100 caractères)
+          - selectedKeywords: Mots-clés pertinents parmi la liste disponible
+          - benefits: Bénéfices concrets et mesurables pour les participants
+          - typicalSituations: Profil idéal de l'utilisateur qui profiterait de cette pratique
+          
+          Réponds UNIQUEMENT au format JSON valide selon le schéma fourni.`;
+
+          const conversationText = context.messages
+            .map(msg => `${msg.type === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`)
+            .join('\n');
+
+          const result = await this.openai.responses.create({
+            model: this.AI_MODEL,
+            input: [
+              {
+                role: "user",
+                content: [{ type: "input_text", text: `Analyse cette conversation et génère un résumé structuré:\n${conversationText}` }],
+              },
+              {
+                type: "message",
+                role: "system",
+                content: [{ 
+                  type: "input_text", 
+                  text: systemPrompt
+                }],
+                status: "completed",
+              },
+            ],
+          });
+
+          const resultText = result.output
+            .filter((output) => output.type === "message")
+            .map((output) => (output as any).content?.[0]?.text)[0];
+
+          if (resultText) {
+            try {
+              const parsedSummary = JSON.parse(resultText);
+              console.log('🔍 Résumé structuré généré:', parsedSummary);
+              return parsedSummary;
+            } catch (parseError) {
+              console.warn('⚠️ Erreur de parsing JSON, fallback vers résumé simple:', parseError);
+            }
+          }
+        } catch (responseError) {
+          console.warn('⚠️ Erreur avec l\'API responses, fallback vers chat classique:', responseError);
+        }
+      }
+
+      // Fallback vers l'API chat classique
+      console.log('🔍 Génération du résumé via API chat classique');
+      
+      if (context.type === 'activity') {
+        // Pour les activités, générer un résumé structuré
+        const systemPrompt = `Tu es un assistant spécialisé dans l'analyse de conversations entre praticiens et experts. 
+        Analyse la conversation et génère un résumé structuré qui permettra de remplir automatiquement les formulaires d'activité.
+        
+        Tu dois extraire et structurer les informations suivantes :
+        - shortDescription: Description courte et accrocheuse (max 200 caractères)
+        - longDescription: Description détaillée du déroulement et de l'approche (max 500 caractères)  
+        - title: Titre optimisé et descriptif (max 100 caractères)
+        - selectedKeywords: Mots-clés pertinents parmi la liste disponible
+        - benefits: Bénéfices concrets et mesurables pour les participants
+        - typicalSituations: Profil idéal de l'utilisateur qui profiterait de cette pratique
+        
+        Réponds UNIQUEMENT au format JSON valide selon le schéma fourni.`;
+
+        const conversationText = context.messages
+          .map(msg => `${msg.type === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`)
+          .join('\n');
+
+        const completion = await this.openai.chat.completions.create({
+          model: this.AI_MODEL,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Analyse cette conversation et génère un résumé structuré:\n${conversationText}` }
+          ],
+          max_tokens: 800,
+          temperature: 0.3,
+          response_format: { type: "json_object" }
+        });
+
+        const response = completion.choices[0]?.message?.content;
+        if (response) {
+          try {
+            const parsedSummary = JSON.parse(response);
+            console.log('🔍 Résumé structuré généré via chat classique:', parsedSummary);
+            return parsedSummary;
+          } catch (parseError) {
+            console.warn('⚠️ Erreur de parsing JSON, fallback vers résumé simple:', parseError);
+          }
+        }
+      }
+
+      // Résumé simple pour les autres types ou en cas d'erreur
       const systemPrompt = `Tu es un assistant spécialisé dans la création de résumés concis et utiles de conversations. 
       Analyse la conversation et fournis un résumé en 2-3 phrases maximum, en français.`;
 
@@ -365,10 +516,14 @@ export class ChatBotService {
         temperature: 0.3
       });
 
-      return completion.choices[0]?.message?.content || "Résumé de la conversation généré automatiquement.";
+      return {
+        summary: completion.choices[0]?.message?.content || "Résumé de la conversation généré automatiquement."
+      };
     } catch (error) {
       console.error('❌ Erreur lors de la génération du résumé:', error);
-      return "Résumé de la conversation généré automatiquement.";
+      return {
+        summary: "Résumé de la conversation généré automatiquement."
+      };
     }
   }
 
@@ -520,7 +675,9 @@ export class ChatBotService {
     - Réponds toujours en français
     - Sois concis mais utile
     - Reste professionnel et bienveillant
-    - Si tu ne sais pas quelque chose, dis-le honnêtement`;
+    - Si tu ne sais pas quelque chose, dis-le honnêtement
+    - L'échange doit contenir environ 10 questions maximum
+    - Chaque réponse doit TOUJOURS contenir une question pertinente`;
     
     // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
     if (!context.aiRules || !Array.isArray(context.aiRules) || context.aiRules.length === 0) {
@@ -529,12 +686,16 @@ export class ChatBotService {
     - Ton objectif principal est d'aider le praticien à valider la conformité de son activité avec la pratique associée
     - Pose des questions pertinentes pour mieux comprendre l'activité et établir la conformité
     - Identifie le profil d'utilisateur idéal pour cette activité/pratique
-    - Suggère des ajustements si nécessaire pour optimiser la synergie`;
+    - Suggère des ajustements si nécessaire pour optimiser la synergie
+    - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
+    - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
              } else if (context.type === 'bilan') {
          basePrompt += `
      - Aide l'utilisateur à faire un bilan approfondi de son état du jour et de son mood
      - Identifie les points importants que l'analyse statique n'a pas vus
-     - Approfondis pour comprendre les nuances et les détails significatifs`;
+     - Approfondis pour comprendre les nuances et les détails significatifs
+     - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
+     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
        }
     }
 
