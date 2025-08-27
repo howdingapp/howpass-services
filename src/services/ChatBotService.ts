@@ -453,77 +453,90 @@ export class ChatBotService {
    */
   private buildSystemPrompt(context: ConversationContext): string {
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
-    Tu es bienveillant, professionnel et tu aides les utilisateurs à améliorer leur qualité de vie.`;
+    Tu es bienveillant et professionnel.`;
 
-    // Si des règles IA personnalisées sont présentes, les utiliser exclusivement
+    // Règles de comportement et d'information spécifiques à respecter
+    basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
+    
     if (context.aiRules && Array.isArray(context.aiRules) && context.aiRules.length > 0) {
       // Filtrer seulement les règles actives
       const activeRules = context.aiRules.filter((rule: AIRule) => rule.isActive);
       
       if (activeRules.length > 0) {
-        basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
-        
         // Trier les règles par priorité (priorité élevée en premier)
         const sortedRules = activeRules.sort((a: AIRule, b: AIRule) => b.priority - a.priority);
         
         sortedRules.forEach((rule: AIRule, index: number) => {
           basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
         });
-        
-        // Retourner le prompt avec seulement les règles personnalisées
-        return basePrompt;
       }
-    }
-
-    // COMPORTEMENT PAR DÉFAUT : Howana experte des pratiques
-    basePrompt += `\n\nTu es également experte des pratiques de bien-être et de santé. 
-    Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.`;
+    } else if(context.type === 'activity') {
+      // COMPORTEMENT PAR DÉFAUT : Howana experte des pratiques
+      basePrompt += `\n1. [EXPERTISE] Expertise des pratiques: Tu es experte des pratiques de bien-être et de santé. 
+      Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.`;
+    } else /* bilan */ {
+       // COMPORTEMENT PAR DÉFAUT : Howana analyste du mood et de l'état du jour
+       basePrompt += `\n1. [ANALYSE] Analyse du mood et de l'état du jour: Tu es spécialisée dans l'analyse approfondie du bien-être quotidien. 
+       Ton objectif est d'aider l'utilisateur à faire un bilan détaillé de son état du jour et de son mood, 
+       en identifiant les points importants que l'analyse statique n'a pas vus.`;
+     }
 
     // Ajouter le contexte de l'activité et de la pratique si disponible
     if (context.type === 'activity' && context.activityData) {
-      basePrompt += `\n\nL'utilisateur discute d'une activité spécifique: "${context.activityData.title}".`;
+      basePrompt += `\n\nINFORMATIONS DE L'ACTIVITÉ (déclarées par le praticien):
+      - Titre: "${context.activityData.title}"`;
       
       if (context.activityData.shortDescription) {
-        basePrompt += `\nDescription courte: ${context.activityData.shortDescription}`;
+        basePrompt += `\n- Description courte: ${context.activityData.shortDescription}`;
       }
       if (context.activityData.longDescription) {
-        basePrompt += `\nDescription détaillée: ${context.activityData.longDescription}`;
+        basePrompt += `\n- Description détaillée: ${context.activityData.longDescription}`;
       }
 
       // Intégrer les informations de la pratique si disponibles
       if (context.activityData.practice) {
         const practice = context.activityData.practice;
-        basePrompt += `\n\nPRATIQUE ASSOCIÉE:
+        basePrompt += `\n\nPRATIQUE ASSOCIÉE (référentiel certifié):
         - Nom: ${practice.title}
         - Description courte: ${practice.shortDescription || 'Non disponible'}
         - Description détaillée: ${practice.longDescription || 'Non disponible'}
         - Catégorie ID: ${practice.categoryId || 'Non définie'}
         - Famille ID: ${practice.familyId || 'Non définie'}`;
-        
-        basePrompt += `\n\nEn tant qu'experte de cette pratique, tu dois:
-        1. Analyser la cohérence entre l'activité et la pratique
-        2. Poser des questions intelligentes pour mieux comprendre l'activité
-        3. Identifier le profil d'utilisateur idéal (état psychologique, vécu, besoins spécifiques)
-        4. Valider si l'activité respecte les principes de la pratique
-        5. Suggérer des ajustements si nécessaire pour optimiser la synergie`;
       }
       
-      basePrompt += `\n\nAide l'utilisateur à optimiser cette activité en te basant sur ton expertise de la pratique associée.`;
-      
     } else if (context.type === 'bilan') {
-      basePrompt += `\n\nL'utilisateur fait un bilan de son bien-être. 
-      Aide-le à analyser sa situation et propose des améliorations personnalisées.`;
+
+       if (context.aiRules && Array.isArray(context.aiRules) && context.aiRules.length > 0) {
+         basePrompt += `\n\nL'utilisateur fait un bilan de son état du jour et de son mood. Utilise ces informations pour appliquer tes règles personnalisées.`;
+       } else {
+         basePrompt += `\n\nL'utilisateur fait un bilan de son état du jour et de son mood. 
+         Aide-le à approfondir son analyse pour identifier les points importants que l'analyse statique n'a pas vus.`;
+       }
+    
     }
 
+    // Règles générales (toujours présentes)
     basePrompt += `\n\nRègles importantes:
     - Réponds toujours en français
     - Sois concis mais utile
-    - Adapte tes conseils au contexte de l'utilisateur
     - Reste professionnel et bienveillant
-    - Si tu ne sais pas quelque chose, dis-le honnêtement
-    - En mode "expertise des pratiques" par défaut, pose des questions pertinentes pour valider la cohérence
-    - Identifie toujours le profil d'utilisateur idéal pour l'activité/pratique
+    - Si tu ne sais pas quelque chose, dis-le honnêtement`;
+    
+    // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
+    if (!context.aiRules || !Array.isArray(context.aiRules) || context.aiRules.length === 0) {
+      if (context.type === 'activity') {
+        basePrompt += `
+    - Ton objectif principal est d'aider le praticien à valider la conformité de son activité avec la pratique associée
+    - Pose des questions pertinentes pour mieux comprendre l'activité et établir la conformité
+    - Identifie le profil d'utilisateur idéal pour cette activité/pratique
     - Suggère des ajustements si nécessaire pour optimiser la synergie`;
+             } else if (context.type === 'bilan') {
+         basePrompt += `
+     - Aide l'utilisateur à faire un bilan approfondi de son état du jour et de son mood
+     - Identifie les points importants que l'analyse statique n'a pas vus
+     - Approfondis pour comprendre les nuances et les détails significatifs`;
+       }
+    }
 
     return basePrompt;
   }
