@@ -51,7 +51,8 @@ export class ChatBotService {
   private conversationService: ConversationService;
   private supabaseService: SupabaseService;
   private openai: OpenAI;
-  private AI_MODEL = "gpt-3.5-turbo";
+  private AI_MODEL = "gpt-4o-mini";
+  private AI_MODEL_QUALITY = "gpt-4o-mini";
 
   constructor() {
     this.conversationService = new ConversationService();
@@ -352,7 +353,7 @@ export class ChatBotService {
             .join('\n');
 
           const result = await this.openai.responses.create({
-            model: this.AI_MODEL,
+            model: this.AI_MODEL_QUALITY,
             input: [
               {
                 role: "user",
@@ -570,7 +571,8 @@ export class ChatBotService {
       POINTS D'ATTENTION:
       - Si des informations sont déjà présentes, demande des précisions ou des améliorations
       - Si des informations manquent, pose des questions ciblées pour les collecter
-      - Assure-toi que chaque élément du résumé sera suffisamment détaillé et précis`;
+      - Assure-toi que chaque élément du résumé sera suffisamment détaillé et précis
+      - Le format de sortie doit etre un texte adapté à un chat sur mobile`;
       
     } else if (context.type === 'bilan') {
 
