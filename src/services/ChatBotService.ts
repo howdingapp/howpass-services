@@ -654,9 +654,7 @@ export class ChatBotService {
         basePrompt += `\n\nPRATIQUE ASSOCIÉE (référentiel certifié):
         - Nom: ${practice.title}
         - Description courte: ${practice.shortDescription || 'Non disponible'}
-        - Description détaillée: ${practice.longDescription || 'Non disponible'}
-        - Catégorie ID: ${practice.categoryId || 'Non définie'}
-        - Famille ID: ${practice.familyId || 'Non définie'}`;
+        - Description détaillée: ${practice.longDescription || 'Non disponible'}`;
       }
       
     } else if (context.type === 'bilan') {
