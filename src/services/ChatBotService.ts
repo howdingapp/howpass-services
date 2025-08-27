@@ -539,6 +539,7 @@ export class ChatBotService {
       F) PROFIL IDÉAL: Description du profil psychologique et situation idéale de l'utilisateur cible
       
       STRATÉGIE DE COLLECTE:
+      -Tu n'as le droit de poser qu'une seule question ou demade d'information dans chacune de tes réponses pour ne pas surcharger l'utilisateur.
       - Pose des questions ciblées pour chaque élément
       - Demande des exemples concrets et spécifiques
       - Vérifie la cohérence avec la pratique associée
