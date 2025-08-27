@@ -69,7 +69,7 @@ jobs:
           --set-env-vars=GCP_SERVICE_ACCOUNT_EMAIL=${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
           --set-env-vars=GCP_JOB_NAME=video-processing-job
           --set-env-vars=GCP_TASKS_QUEUE_NAME=ia-processing-queue
-          --set-env-vars=IA_PROCESSING_SERVICE_URL=${{ env.IA_PROCESSING_SERVICE_URL }}
+          --set-env-vars=IA_PROCESSING_SERVICE_URL=${{ secrets.IA_PROCESSING_SERVICE_URL }}
           --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }}
           --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }}
           --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
