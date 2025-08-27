@@ -186,9 +186,6 @@ export class GoogleCloudTasksService {
         }
       };
 
-      console.log('task', JSON.stringify(task, null, 2));
-      this.diagnoseQueues();
-
       console.log(`🎯 Création de la tâche IA prioritaire (${taskData.priority}): ${taskData.type} pour ${taskData.conversationId}`);
       
       const [response] = await this.client.createTask(task);
