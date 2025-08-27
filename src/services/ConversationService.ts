@@ -45,6 +45,8 @@ export class ConversationService {
       ...(request.initialContext?.activityData && { activityData: request.initialContext.activityData })
     };
 
+    console.log('🔍 Conversation context:', context);
+
     // Stocker avec TTL automatique
     await redisService.getClient().setex(conversationId, this.TTL_SECONDS, JSON.stringify(context));
 
