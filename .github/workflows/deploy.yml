@@ -75,6 +75,31 @@ jobs:
           --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
           --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
 
+    - name: Redirect traffic to new revision
+      run: |
+        echo "🔄 Redirection du trafic vers la nouvelle révision..."
+        
+        # Récupérer l'URL du service
+        SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+          --region=${{ env.REGION }} \
+          --format='value(status.url)')
+        
+        echo "📍 Service URL: $SERVICE_URL"
+        
+        # Rediriger 100% du trafic vers la dernière révision
+        gcloud run services update-traffic ${{ env.SERVICE_NAME }} \
+          --region=${{ env.REGION }} \
+          --to-latest
+        
+        echo "✅ Trafic redirigé vers la dernière révision avec succès"
+        
+        # Vérifier la configuration du trafic
+        echo "📊 Configuration actuelle du trafic:"
+        gcloud run services describe ${{ env.SERVICE_NAME }} \
+          --region=${{ env.REGION }} \
+          --format='value(status.traffic[].percent,status.traffic[].revisionName)' \
+          --flatten='status.traffic[]'
+
     - name: Create Cloud Run Job (Video Processing Only)
       run: |
         echo "📋 Création du Cloud Run Job pour le traitement vidéo..."
