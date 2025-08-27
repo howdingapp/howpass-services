@@ -52,9 +52,9 @@ async function checkRedisAndStartServer(): Promise<void> {
 
     console.log('⏳ En attente de la connexion Redis...');
     
-    // ✅ Écouter l'événement 'connected' de Redis
+    // ✅ Écouter l'événement 'connect' de Redis (pas 'connected')
     const redisClient = redisService.getClient();
-    redisClient.once('connected', () => {
+    redisClient.once('connect', () => {
       console.log('🔌 Redis connecté ! Démarrage du serveur...');
       
       // ✅ Configurer les événements Redis une fois connecté
