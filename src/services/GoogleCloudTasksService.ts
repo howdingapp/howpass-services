@@ -221,7 +221,7 @@ export class GoogleCloudTasksService {
   private getPriorityDeadline(priority: 'low' | 'medium' | 'high'): number {
     switch (priority) {
       case 'high':
-        return 60; // 1 minute max
+        return 120; // 2 minutes max
       case 'medium':
         return 300; // 5 minutes max
       case 'low':
