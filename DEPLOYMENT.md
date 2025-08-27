@@ -309,3 +309,32 @@ gcloud redis instances update howpass-conversations \
   --region=europe-west1 \
   --redis-version=redis_7_0
 ``` 
+
+## Configuration Google Cloud Tasks pour le Traitement IA
+
+### 1. Activation de l'API
+```bash
+gcloud services enable cloudtasks.googleapis.com
+```
+
+### 2. Configuration des rôles pour le service account
+```bash
+# Rôle pour exécuter des tâches Cloud Tasks
+gcloud projects add-iam-policy-binding tonal-nova-467213-a3 \
+  --member="serviceAccount:400252973135-compute@developer.gserviceaccount.com" \
+  --role="roles/cloudtasks.taskRunner"
+
+# Rôle pour invoquer le service Cloud Run (CRUCIAL pour que les tâches appellent votre service)
+gcloud projects add-iam-policy-binding tonal-nova-467213-a3 \
+  --member="serviceAccount:400252973135-compute@developer.gserviceaccount.com" \
+  --role="roles/run.invoker"
+```
+
+### 3. Vérification des rôles
+```bash
+# Vérifier que les rôles sont bien attribués
+gcloud projects get-iam-policy tonal-nova-467213-a3 \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:400252973135-compute@developer.gserviceaccount.com" \
+  --format="table(bindings.role,bindings.members)"
+``` 

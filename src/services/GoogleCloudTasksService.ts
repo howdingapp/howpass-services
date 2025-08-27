@@ -40,7 +40,7 @@ export class GoogleCloudTasksService {
 
       // URL de destination (endpoint de traitement IA)
       const serviceUrl = process.env['IA_PROCESSING_SERVICE_URL'] || 
-        `https://${process.env['GCP_PROJECT_ID']}-${this.location}.run.app/api/ia/process`;
+        `https://${this.projectId}-${this.location}.run.app/api/ia/process`;
 
       const task: CreateTaskRequest = {
         parent: this.queuePath,
