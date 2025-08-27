@@ -6,7 +6,6 @@ import {
   ChatMessage,
   StartConversationRequest,
   AddMessageRequest,
-  ConversationSummary,
   ConversationStats
 } from '../types/conversation';
 
@@ -118,51 +117,6 @@ export class ConversationService {
   }
 
   /**
-   * Terminer une conversation et générer un résumé
-   */
-  async endConversation(conversationId: string): Promise<ConversationSummary> {
-    
-    console.log('🔍 Terminaison d\'une conversation dans Redis:', conversationId);
-    
-    const context = await this.getContext(conversationId);
-    if (!context) {
-      throw new Error('Conversation not found');
-    }
-
-    const now = new Date();
-    const endTime = now.toISOString();
-    const startTime = new Date(context.startTime);
-    const duration = now.getTime() - startTime.getTime();
-
-    const summary: ConversationSummary = {
-      conversationId,
-      userId: context.userId,
-      type: context.type,
-      startTime: context.startTime,
-      endTime,
-      duration,
-      messageCount: context.messages.length,
-      summary: this.generateSummary(context)
-    };
-
-    try {
-      // Nettoyer la table ai_responses dans Supabase avant de supprimer la conversation Redis
-      const cleanupResult = await this.supabaseService.deleteAIResponsesByConversation(conversationId);
-      if (cleanupResult.success && cleanupResult.deletedCount) {
-        console.log(`🧹 Supprimé ${cleanupResult.deletedCount} réponse(s) IA pour la conversation terminée: ${conversationId}`);
-      }
-    } catch (supabaseError) {
-      console.warn(`⚠️ Erreur lors du nettoyage Supabase pour la conversation ${conversationId}:`, supabaseError);
-      // Continuer même si Supabase échoue
-    }
-
-    // Supprimer la conversation Redis
-    await redisService.getClient().del(conversationId);
-
-    return summary;
-  }
-
-  /**
    * Obtenir les statistiques du service
    */
   async getStats(): Promise<ConversationStats> {
@@ -200,16 +154,6 @@ export class ConversationService {
         timestamp: new Date().toISOString()
       };
     }
-  }
-
-  /**
-   * Générer un résumé de la conversation
-   */
-  private generateSummary(context: ConversationContext): string {
-    const userMessages = context.messages.filter(m => m.type === 'user').length;
-    const botMessages = context.messages.filter(m => m.type === 'bot').length;
-    
-    return `Conversation ${context.type} avec ${userMessages} messages utilisateur et ${botMessages} réponses du bot. Type: ${context.type}`;
   }
 
   /**
@@ -260,37 +204,6 @@ export class ConversationService {
       }
     } catch (error) {
       console.error('❌ Erreur lors du nettoyage automatique:', error);
-    }
-  }
-
-  /**
-   * Forcer le nettoyage de toutes les conversations (pour les tests)
-   */
-  async forceCleanup(): Promise<void> {
-    try {
-      const keys = await redisService.getClient().keys('*');
-      let supabaseCleanedCount = 0;
-
-      if (keys.length > 0) {
-        // Nettoyer d'abord toutes les réponses IA dans Supabase
-        for (const key of keys) {
-          try {
-            const cleanupResult = await this.supabaseService.deleteAIResponsesByConversation(key);
-            if (cleanupResult.success && cleanupResult.deletedCount) {
-              supabaseCleanedCount += cleanupResult.deletedCount;
-            }
-          } catch (supabaseError) {
-            console.warn(`⚠️ Erreur lors du nettoyage Supabase pour ${key}:`, supabaseError);
-          }
-        }
-
-        // Puis supprimer toutes les conversations Redis
-        await redisService.getClient().del(...keys);
-      }
-
-      console.log(`🧹 Nettoyage forcé: ${keys.length} conversations supprimées de Redis, ${supabaseCleanedCount} réponses IA supprimées de Supabase`);
-    } catch (error) {
-      console.error('❌ Erreur lors du nettoyage forcé:', error);
     }
   }
 

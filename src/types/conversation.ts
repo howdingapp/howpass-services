@@ -101,17 +101,6 @@ export interface GenerateSummaryResponse {
   error?: string;
 }
 
-export interface ConversationSummary {
-  conversationId: string;
-  userId: string;
-  type: 'bilan' | 'activity';
-  startTime: string;
-  endTime: string;
-  duration: number; // millisecondes
-  messageCount: number;
-  summary: string;
-}
-
 export interface ConversationStats {
   activeConversations: number;
   totalConversations: number;

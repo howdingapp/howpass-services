@@ -243,23 +243,11 @@ export class ConversationController {
 
         console.log(`🤖 [GENERATE_SUMMARY] Job IA déclenché pour le résumé: ${iaJob.jobId}`);
 
-        // Programmer le nettoyage automatique dans 2 minutes
-        setTimeout(async () => {
-          try {
-            console.log(`🧹 [GENERATE_SUMMARY] Nettoyage automatique de la conversation: ${conversationId}`);
-            await this.conversationService.forceCleanup();
-            console.log(`✅ [GENERATE_SUMMARY] Nettoyage automatique terminé pour: ${conversationId}`);
-          } catch (cleanupError) {
-            console.error(`❌ [GENERATE_SUMMARY] Erreur lors du nettoyage automatique:`, cleanupError);
-          }
-        }, 2 * 60 * 1000); // 2 minutes
-
         res.status(200).json({
           success: true,
           message: 'Génération du résumé IA déclenchée avec succès',
           jobId: iaJob.jobId,
           estimatedTime: iaJob.estimatedTime,
-          cleanupScheduled: '2 minutes'
         });
 
       } catch (iaError) {
@@ -305,37 +293,6 @@ export class ConversationController {
       console.log('📊 [GET_STATS] Statistiques récupérées avec succès');
     } catch (error) {
       console.error('❌ [GET_STATS] Erreur lors de la récupération des statistiques:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Erreur interne du serveur'
-      });
-    }
-  }
-
-  /**
-   * Forcer le nettoyage (pour les tests)
-   * POST /api/conversations/cleanup
-   */
-  async forceCleanup(req: AuthenticatedRequest, res: Response): Promise<void> {
-    console.log('📝 [FORCE_CLEANUP] Requête reçue:', {
-      method: req.method,
-      url: req.url,
-      headers: {
-        'user-agent': req.headers['user-agent'],
-        'authorization': req.headers.authorization ? '***' : undefined
-      },
-      timestamp: new Date().toISOString()
-    });
-
-    try {
-      await this.conversationService.forceCleanup();
-      res.status(200).json({
-        success: true,
-        message: 'Nettoyage forcé effectué'
-      });
-      console.log('🧹 [FORCE_CLEANUP] Nettoyage forcé effectué');
-    } catch (error) {
-      console.error('❌ [FORCE_CLEANUP] Erreur lors du nettoyage forcé:', error);
       res.status(500).json({
         success: false,
         error: 'Erreur interne du serveur'
