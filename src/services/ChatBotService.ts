@@ -101,13 +101,22 @@ export class ChatBotService {
             result.context.metadata = { ...result.context.metadata, previousCallId: messageId };
           }
           
-          // Enregistrer la réponse IA dans Supabase
-          await this.supabaseService.createAIResponse({
-            conversation_id: result.conversationId,
-            user_id: request.userId,
-            response_text: firstResponseResult.response,
-            message_type: 'text'
-          });
+          // Mettre à jour l'entrée ai_response pré-créée
+          if (request.aiResponseId) {
+            await this.supabaseService.updateAIResponse(request.aiResponseId, {
+              response_text: firstResponseResult.response,
+              metadata: { 
+                source: 'ai', 
+                model: this.AI_MODEL, 
+                type: 'first_response', 
+                messageId: messageId,
+                status: 'completed'
+              }
+            });
+            console.log('✅ Entrée ai_response mise à jour avec succès:', request.aiResponseId);
+          } else {
+            console.warn('⚠️ Aucun aiResponseId fourni pour la première réponse');
+          }
           
           // Récupérer le contexte mis à jour avec le premier message
           const updatedContext = await this.conversationService.getContext(result.conversationId);
@@ -174,30 +183,38 @@ export class ChatBotService {
             // Générer une réponse IA
             const aiResponse = await this.generateAIResponse(context, request.content);
             
-             if (aiResponse) {
+            if (aiResponse) {
                // Créer un messageId unique pour la réponse IA
                const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                
-               // Ajouter le message à la conversation Redis
-               await this.conversationService.addMessage(
-                 conversationId,
-                 {
-                   content: aiResponse,
-                   type: 'bot',
+              // Ajouter le message à la conversation Redis
+              await this.conversationService.addMessage(
+                conversationId,
+                {
+                  content: aiResponse,
+                  type: 'bot',
                    metadata: { source: 'ai', model: this.AI_MODEL, messageId: messageId }
-                 }
-               );
+                }
+              );
                
                // Mettre à jour le contexte avec le nouveau messageId
                context.metadata = { ...context.metadata, previousCallId: messageId };
               
-              // Enregistrer la réponse IA dans Supabase
-              await this.supabaseService.createAIResponse({
-                conversation_id: conversationId,
-                user_id: context.userId,
-                response_text: aiResponse,
-                message_type: 'text'
-              });
+              // Mettre à jour l'entrée ai_response pré-créée
+              if (request.aiResponseId) {
+                await this.supabaseService.updateAIResponse(request.aiResponseId, {
+                  response_text: aiResponse,
+                  metadata: { 
+                    source: 'ai', 
+                    model: this.AI_MODEL, 
+                    messageId: messageId,
+                    status: 'completed'
+                  }
+                });
+                console.log('✅ Entrée ai_response mise à jour avec succès:', request.aiResponseId);
+              } else {
+                console.warn('⚠️ Aucun aiResponseId fourni pour la réponse IA');
+              }
             }
           }
         } catch (aiError) {
@@ -258,7 +275,7 @@ export class ChatBotService {
   /**
    * Terminer une conversation et générer un résumé
    */
-  async endConversation(conversationId: string): Promise<{
+  async endConversation(conversationId: string, aiResponseId?: string): Promise<{
     success: boolean;
     summary?: any;
     error?: string;
@@ -619,7 +636,7 @@ export class ChatBotService {
 
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
-    
+
     if (context.aiRules && Array.isArray(context.aiRules) && context.aiRules.length > 0) {
       // Filtrer seulement les règles actives
       const activeRules = context.aiRules.filter((rule: AIRule) => rule.isActive);

@@ -150,6 +150,7 @@ export class GoogleCloudTasksService {
     userMessage?: string;
     priority: 'low' | 'medium' | 'high';
     authToken: string; // Token d'authentification pour sécuriser les tâches
+    aiResponseId?: string; // ID de l'entrée ai_response pré-créée
   }): Promise<Task> {
     try {
       if (!this.projectId) {

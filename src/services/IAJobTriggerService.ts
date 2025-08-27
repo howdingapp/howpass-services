@@ -8,6 +8,7 @@ export interface IAJobRequest {
   userMessage?: string;
   priority?: 'low' | 'medium' | 'high';
   authToken?: string; // Token d'authentification pour sécuriser les tâches
+  aiResponseId?: string | undefined; // ID de l'entrée ai_response pré-créée
 }
 
 export class IAJobTriggerService {
@@ -81,6 +82,11 @@ export class IAJobTriggerService {
       // Ajouter userMessage seulement s'il est défini
       if (request.userMessage) {
         taskData.userMessage = request.userMessage;
+      }
+      
+      // Ajouter aiResponseId seulement s'il est défini
+      if (request.aiResponseId) {
+        taskData.aiResponseId = request.aiResponseId;
       }
       
       const task = await this.googleCloudTasksService.createPriorityIATask(taskData);

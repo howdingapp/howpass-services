@@ -56,6 +56,7 @@ export interface StartConversationRequest {
     activityData?: ActivityData;
     [key: string]: any;
   };
+  aiResponseId?: string; // ID de l'entrée ai_response pré-créée
 }
 
 export interface StartConversationResponse {
@@ -70,6 +71,7 @@ export interface AddMessageRequest {
   content: string;
   type: 'user' | 'bot';
   metadata?: Record<string, any>;
+  aiResponseId?: string; // ID de l'entrée ai_response pré-créée
 }
 
 export interface AddMessageResponse {
@@ -83,6 +85,10 @@ export interface GetContextResponse {
   success: boolean;
   context?: ConversationContext;
   error?: string;
+}
+
+export interface GenerateSummaryRequest {
+  aiResponseId?: string; // ID de l'entrée ai_response pré-créée
 }
 
 export interface GenerateSummaryResponse {

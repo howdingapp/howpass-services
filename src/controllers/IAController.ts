@@ -11,6 +11,7 @@ interface IATaskRequest {
   userId: string;
   userMessage?: string;
   priority?: 'low' | 'medium' | 'high';
+  aiResponseId?: string; // ID de l'entrée ai_response pré-créée
 }
 
 export class IAController {
@@ -134,13 +135,20 @@ export class IAController {
       metadata: { source: 'ai', model: this.chatBotService.getAIModel() }
     });
 
-    // Enregistrer dans Supabase
-    await this.supabaseService.createAIResponse({
-      conversation_id: taskData.conversationId,
-      user_id: taskData.userId,
-      response_text: aiResponse,
-      message_type: 'text'
-    });
+    // Mettre à jour l'entrée ai_response pré-créée
+    if (taskData.aiResponseId) {
+      await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
+        response_text: aiResponse,
+        metadata: { 
+          source: 'ai', 
+          model: this.chatBotService.getAIModel(),
+          status: 'completed'
+        }
+      });
+      console.log(`✅ aiResponse mise à jour pour la réponse: ${taskData.aiResponseId}`);
+    } else {
+      console.warn(`⚠️ Aucun aiResponseId fourni pour la réponse de la conversation: ${taskData.conversationId}`);
+    }
 
     return {
       success: true,
@@ -184,27 +192,34 @@ export class IAController {
       // Continuer malgré l'erreur de sauvegarde
     }
     
-    // TOUJOURS créer une aiResponse pour notifier le frontend
-    try {
-      // Créer un objet avec le résumé et les métadonnées
-      const responseData = {
-        summary: summary,
-        target_table: context.type === 'bilan' ? 'bilans' : context.type === 'activity' ? 'activities' : 'ai_responses',
-        target_id: context.metadata?.['bilanId'] || context.metadata?.['activityId'] || null,
-        summary_type: 'conversation_summary'
-      };
+    // Mettre à jour l'entrée ai_response pré-créée pour notifier le frontend
+    if (taskData.aiResponseId) {
+      try {
+        // Créer un objet avec le résumé et les métadonnées
+        const responseData = {
+          summary: summary,
+          target_table: context.type === 'bilan' ? 'bilans' : context.type === 'activity' ? 'activities' : 'ai_responses',
+          target_id: context.metadata?.['bilanId'] || context.metadata?.['activityId'] || null,
+          summary_type: 'conversation_summary'
+        };
 
-      await this.supabaseService.createAIResponse({
-        conversation_id: taskData.conversationId,
-        user_id: taskData.userId,
-        response_text: JSON.stringify(responseData),
-        message_type: 'summary'
-      });
-      console.log(`✅ aiResponse créée pour notifier le frontend du résumé disponible`);
-    } catch (error) {
-      console.error(`❌ Erreur lors de la création de l'aiResponse:`, error);
-      // Cette erreur est critique car le frontend ne sera pas notifié
-      throw error;
+        await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
+          response_text: JSON.stringify(responseData),
+          metadata: { 
+            source: 'ai', 
+            model: this.chatBotService.getAIModel(), 
+            type: 'summary',
+            status: 'completed'
+          }
+        });
+        console.log(`✅ aiResponse mise à jour pour notifier le frontend du résumé disponible: ${taskData.aiResponseId}`);
+      } catch (error) {
+        console.error(`❌ Erreur lors de la mise à jour de l'aiResponse:`, error);
+        // Cette erreur est critique car le frontend ne sera pas notifié
+        throw error;
+      }
+    } else {
+      console.warn(`⚠️ Aucun aiResponseId fourni pour le résumé de la conversation: ${taskData.conversationId}`);
     }
     
     return {
@@ -229,13 +244,22 @@ export class IAController {
       metadata: { source: 'ai', model: this.chatBotService.getAIModel(), type: 'first_response', messageId: firstResponseResult.messageId }
     });
 
-    // Enregistrer dans Supabase
-    await this.supabaseService.createAIResponse({
-      conversation_id: taskData.conversationId,
-      user_id: taskData.userId,
-      response_text: firstResponseResult.response,
-      message_type: 'text'
-    });
+    // Mettre à jour l'entrée ai_response pré-créée
+    if (taskData.aiResponseId) {
+      await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
+        response_text: firstResponseResult.response,
+        metadata: { 
+          source: 'ai', 
+          model: this.chatBotService.getAIModel(), 
+          type: 'first_response', 
+          messageId: firstResponseResult.messageId,
+          status: 'completed'
+        }
+      });
+      console.log(`✅ aiResponse mise à jour pour la première réponse: ${taskData.aiResponseId}`);
+    } else {
+      console.warn(`⚠️ Aucun aiResponseId fourni pour la première réponse de la conversation: ${taskData.conversationId}`);
+    }
 
     return {
       success: true,

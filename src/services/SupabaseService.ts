@@ -342,6 +342,54 @@ export class SupabaseService {
   }
 
   /**
+   * Mettre à jour une réponse IA existante
+   */
+  async updateAIResponse(aiResponseId: string, updateData: {
+    response_text: string;
+    metadata?: Record<string, any>;
+  }): Promise<{
+    success: boolean;
+    data?: AIResponse;
+    error?: string;
+  }> {
+    try {
+      console.log('🔍 Mise à jour de la réponse IA:', aiResponseId);
+
+      const { data, error } = await this.supabase
+        .from('ai_responses')
+        .update({
+          response_text: updateData.response_text,
+          metadata: updateData.metadata || {},
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', aiResponseId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour de la réponse IA:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log(`✅ Réponse IA mise à jour avec succès: ${aiResponseId}`);
+      return {
+        success: true,
+        data
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la mise à jour de la réponse IA:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
    * Récupérer toutes les réponses IA d'une conversation
    */
   async getAIResponsesByConversation(conversationId: string): Promise<{

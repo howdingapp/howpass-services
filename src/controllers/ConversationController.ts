@@ -66,7 +66,8 @@ export class ConversationController {
           type: 'generate_first_response',
           conversationId: conversationId,
           userId: request.userId,
-          priority: 'high'
+          priority: 'high',
+          aiResponseId: request.aiResponseId
         }, req.authToken || '');
 
         console.log(`🤖 [START_CONVERSATION] Job IA déclenché pour la première réponse: ${iaJob.jobId}`);
@@ -152,7 +153,8 @@ export class ConversationController {
           conversationId,
           userId: context.userId,
           userMessage: request.content,
-          priority: 'medium'
+          priority: 'medium',
+          aiResponseId: request.aiResponseId
         }, req.authToken || '');
 
           console.log(`🤖 [ADD_MESSAGE] Job IA déclenché pour la réponse: ${iaJob.jobId}`);
