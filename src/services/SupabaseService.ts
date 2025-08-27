@@ -671,4 +671,66 @@ export class SupabaseService {
       };
     }
   }
+
+  /**
+   * Récupérer toutes les activités
+   */
+  async getActivities(): Promise<{
+    data: Array<{
+      id: string;
+      title: string;
+      short_description?: string;
+      long_description?: string;
+      category_id: string;
+      tags?: string[];
+    }> | null;
+    error?: any;
+  }> {
+    try {
+      const { data, error } = await this.supabase
+        .from('activities')
+        .select('id, title, short_description, long_description, category_id, tags');
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des activités:', error);
+        return { data: null, error };
+      }
+
+      return { data };
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération des activités:', error);
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Récupérer toutes les pratiques
+   */
+  async getPractices(): Promise<{
+    data: Array<{
+      id: string;
+      title: string;
+      short_description?: string;
+      long_description?: string;
+      category_id: string;
+      tags?: string[];
+    }> | null;
+    error?: any;
+  }> {
+    try {
+      const { data, error } = await this.supabase
+        .from('practices')
+        .select('id, title, short_description, long_description, category_id, tags');
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des pratiques:', error);
+        return { data: null, error };
+      }
+
+      return { data };
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération des pratiques:', error);
+      return { data: null, error };
+    }
+  }
 } 
