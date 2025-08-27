@@ -3,14 +3,14 @@ import { ChatBotService } from '../services/ChatBotService';
 import { ConversationService } from '../services/ConversationService';
 import { SupabaseService } from '../services/SupabaseService';
 import { ConversationContext } from '../types/conversation';
+import { IAAuthenticatedRequest } from '../middleware/iaAuthMiddleware';
 
 interface IATaskRequest {
   type: 'generate_response' | 'generate_summary' | 'generate_first_response';
   conversationId: string;
   userId: string;
   userMessage?: string;
-  priority: 'low' | 'medium' | 'high';
-  authToken: string; // Token d'authentification pour sécuriser les tâches
+  priority?: 'low' | 'medium' | 'high';
 }
 
 export class IAController {
@@ -26,119 +26,90 @@ export class IAController {
 
   /**
    * Traiter une tâche IA reçue de Google Cloud Tasks
-   * POST /api/ia/process
    */
-  async processIATask(req: Request, res: Response): Promise<void> {
-    console.log('🤖 [PROCESS_IA_TASK] Tâche IA reçue:', {
-      method: req.method,
-      url: req.url,
-      headers: {
-        'user-agent': req.headers['user-agent'],
-        'content-type': req.headers['content-type'],
-        'x-task-priority': req.headers['x-task-priority'],
-        'x-conversation-id': req.headers['x-conversation-id']
-      },
-      body: req.body,
-      timestamp: new Date().toISOString()
-    });
-
+  async processIATask(req: IAAuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const taskData: IATaskRequest = req.body;
-
-      // ✅ Validation des données et de l'authentification
-      if (!taskData.type || !taskData.conversationId || !taskData.userId || !taskData.authToken) {
-        console.log('❌ [PROCESS_IA_TASK] Validation échouée:', { 
-          type: taskData.type, 
-          conversationId: taskData.conversationId, 
-          userId: taskData.userId,
-          hasAuthToken: !!taskData.authToken
-        });
-        res.status(400).json({
-          success: false,
-          error: 'type, conversationId, userId et authToken sont requis'
+      console.log('🚀 Tâche IA reçue:', req.body);
+      
+      // Le token a déjà été validé par le middleware
+      const authToken = req.validatedAuthToken;
+      
+      if (!authToken) {
+        console.error('❌ Token d\'authentification manquant après validation');
+        res.status(401).json({
+          error: 'Token d\'authentification manquant',
+          message: 'Le token d\'authentification est requis'
         });
         return;
       }
 
-      // ✅ Vérifier l'authentification avec le token reçu
-      const isValidToken = await this.validateAuthToken(taskData.authToken);
-      if (!isValidToken) {
-        console.log('❌ [PROCESS_IA_TASK] Token d\'authentification invalide');
-        res.status(401).json({ error: 'Invalid auth token' });
+      const taskData = req.body as IATaskRequest;
+      
+      // Validation supplémentaire des données
+      if (!taskData.type || !taskData.conversationId || !taskData.userId) {
+        console.error('❌ Données de tâche incomplètes:', taskData);
+        res.status(400).json({
+          error: 'Données de tâche incomplètes',
+          message: 'Les champs type, conversationId et userId sont requis'
+        });
         return;
       }
 
       // Vérifier que la conversation existe et est active
       const context = await this.conversationService.getContext(taskData.conversationId);
       if (!context) {
-        console.log(`❌ [PROCESS_IA_TASK] Conversation non trouvée: ${taskData.conversationId}`);
+        console.error(`❌ Conversation non trouvée: ${taskData.conversationId}`);
         res.status(404).json({
-          success: false,
-          error: 'Conversation non trouvée'
+          error: 'Conversation non trouvée',
+          message: `La conversation ${taskData.conversationId} n'existe pas`
         });
         return;
       }
 
       if (context.status !== 'active') {
-        console.log(`❌ [PROCESS_IA_TASK] Conversation non active: ${taskData.conversationId}`);
+        console.error(`❌ Conversation non active: ${taskData.conversationId}`);
         res.status(400).json({
-          success: false,
-          error: 'La conversation n\'est plus active'
+          error: 'Conversation non active',
+          message: `La conversation ${taskData.conversationId} n'est plus active`
         });
         return;
       }
 
-      console.log(`🔧 [PROCESS_IA_TASK] Traitement de la tâche: ${taskData.type} pour ${taskData.conversationId}`);
+      console.log(`🎯 Traitement de la tâche IA: ${taskData.type} pour ${taskData.conversationId}`);
 
-      let result: any;
-      const startTime = Date.now();
-
-      try {
-        // Traiter selon le type de tâche
-        switch (taskData.type) {
-          case 'generate_response':
-            result = await this.processGenerateResponse(taskData, context);
-            break;
-          case 'generate_summary':
-            result = await this.processGenerateSummary(taskData, context);
-            break;
-          case 'generate_first_response':
-            result = await this.processGenerateFirstResponse(taskData, context);
-            break;
-          default:
-            throw new Error(`Type de tâche non supporté: ${taskData.type}`);
-        }
-
-        const processingTime = Date.now() - startTime;
-
-        console.log(`✅ [PROCESS_IA_TASK] Tâche traitée avec succès: ${taskData.type} en ${processingTime}ms`);
-
-        res.status(200).json({
-          success: true,
-          taskType: taskData.type,
-          conversationId: taskData.conversationId,
-          processingTime: `${processingTime}ms`,
-          result
-        });
-
-      } catch (processingError) {
-        const processingTime = Date.now() - startTime;
-        console.error(`❌ [PROCESS_IA_TASK] Erreur lors du traitement:`, processingError);
-
-        res.status(500).json({
-          success: false,
-          taskType: taskData.type,
-          conversationId: taskData.conversationId,
-          processingTime: `${processingTime}ms`,
-          error: (processingError as Error).message
-        });
+      // Traiter selon le type de tâche
+      switch (taskData.type) {
+        case 'generate_response':
+          await this.processGenerateResponse(taskData, context);
+          break;
+        case 'generate_summary':
+          await this.processGenerateSummary(taskData, context);
+          break;
+        case 'generate_first_response':
+          await this.processGenerateFirstResponse(taskData, context);
+          break;
+        default:
+          console.error('❌ Type de tâche non reconnu:', taskData.type);
+          res.status(400).json({
+            error: 'Type de tâche non reconnu',
+            message: `Le type '${taskData.type}' n'est pas supporté`
+          });
+          return;
       }
 
+      console.log(`✅ Tâche IA traitée avec succès: ${taskData.type}`);
+      res.status(200).json({
+        success: true,
+        message: `Tâche ${taskData.type} traitée avec succès`,
+        conversationId: taskData.conversationId,
+        type: taskData.type
+      });
+
     } catch (error) {
-      console.error('❌ [PROCESS_IA_TASK] Erreur fatale:', error);
+      console.error('❌ Erreur lors du traitement de la tâche IA:', error);
       res.status(500).json({
-        success: false,
-        error: 'Erreur interne du serveur'
+        error: 'Erreur interne',
+        message: 'Une erreur est survenue lors du traitement de la tâche IA'
       });
     }
   }
@@ -274,31 +245,7 @@ export class IAController {
     };
   }
 
-  /**
-   * Vérifier la validité du token d'authentification
-   */
-  private async validateAuthToken(token: string): Promise<boolean> {
-    try {
-      // ✅ Implémenter votre logique de validation de token ici
-      // Pour l'instant, on accepte tous les tokens non vides
-      // Vous pouvez ajouter une validation JWT, un appel à votre service d'auth, etc.
-      
-      if (!token || token.trim() === '') {
-        return false;
-      }
 
-      // Exemple de validation basique (à remplacer par votre logique)
-      // const decoded = jwt.verify(token, process.env['JWT_SECRET']);
-      // return !!decoded;
-
-      console.log(`🔐 Validation du token d'authentification: ${token.substring(0, 10)}...`);
-      return true; // À remplacer par votre logique de validation
-
-    } catch (error) {
-      console.error('❌ Erreur lors de la validation du token:', error);
-      return false;
-    }
-  }
 
   /**
    * Endpoint de santé pour Google Cloud Tasks

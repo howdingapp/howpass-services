@@ -8,6 +8,9 @@ import { IAController } from './controllers/IAController';
 import conversationRoutes from './routes/conversationRoutes';
 import { redisService } from './services/RedisService';
 import dotenv from 'dotenv';
+import { authenticateToken } from './middleware/authMiddleware';
+import { validateIAToken } from './middleware/iaAuthMiddleware';
+import { ConversationController } from './controllers/ConversationController';
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -157,7 +160,7 @@ app.use('/api/conversations', conversationRoutes);
 
 // ✅ Endpoint de traitement IA pour Google Cloud Tasks (appelé automatiquement par les tâches)
 const iaController = new IAController();
-app.post('/api/ia/process', (req, res) => iaController.processIATask(req, res));
+app.post('/api/ia/process', validateIAToken, (req, res) => iaController.processIATask(req, res));
 
 // Démarrage du serveur Express
 function startExpressServer(): void {
