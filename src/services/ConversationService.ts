@@ -56,9 +56,15 @@ export class ConversationService {
   /**
    * Ajouter un message à une conversation
    */
-  async addMessage(conversationId: string, request: AddMessageRequest, updatedContext: ConversationContext): Promise<{ messageId: string; context: ConversationContext }> {
+  async addMessage(conversationId: string, request: AddMessageRequest, updatedContext?: ConversationContext): Promise<{ messageId: string; context: ConversationContext }> {
     
     console.log('🔍 Ajout d\'un message à la conversation dans Redis:', conversationId);
+
+    const context = updatedContext || await this.getContext(conversationId);
+
+    if(!context) {
+      throw new Error('Conversation not found');
+    }
 
     const messageId = uuidv4();
     const now = new Date().toISOString();
@@ -71,13 +77,13 @@ export class ConversationService {
       ...(request.metadata && { metadata: request.metadata })
     };
 
-    updatedContext.messages.push(message);
-    updatedContext.lastActivity = now;
+    context.messages.push(message);
+    context.lastActivity = now;
 
     // Renouveler le TTL en mettant à jour la conversation
-    await redisService.getClient().setex(conversationId, this.TTL_SECONDS, JSON.stringify(updatedContext));
+    await redisService.getClient().setex(conversationId, this.TTL_SECONDS, JSON.stringify(context));
 
-    return { messageId, context: updatedContext };
+    return { messageId, context };
   }
 
   /**
