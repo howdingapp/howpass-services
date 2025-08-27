@@ -295,11 +295,11 @@ export class ChatBotService {
           },
         ],
       });
+      const messageId =  result.id
 
       // Récupérer le messageId du nouveau résultat de type "message"
       const messageOutput = result.output.find(output => output.type === "message");
-      const messageId = messageOutput?.id;
-      
+
       // Extraire le texte de la réponse en gérant les types
       let resultText = "Je n'ai pas pu générer de réponse.";
       if (messageOutput?.content?.[0]) {
@@ -314,7 +314,7 @@ export class ChatBotService {
       }
 
       console.log('🔍 Réponse IA via API responses:', resultText);
-      console.log('🔍 MessageID OpenAI:', messageId);
+      console.log('🔍 OutputID OpenAI:', messageId);
 
       return { 
         response: resultText, 
@@ -464,7 +464,7 @@ export class ChatBotService {
 
       // Récupérer le messageId du premier résultat de type "message"
       const messageOutput = result.output.find(output => output.type === "message");
-      const messageId = messageOutput?.id;
+      const messageId = result.id;
       
       // Extraire le texte de la réponse en gérant les types
       let response = "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
