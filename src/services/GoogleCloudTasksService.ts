@@ -186,6 +186,8 @@ export class GoogleCloudTasksService {
         }
       };
 
+      console.log('task', task);
+
       console.log(`🎯 Création de la tâche IA prioritaire (${taskData.priority}): ${taskData.type} pour ${taskData.conversationId}`);
       
       const [response] = await this.client.createTask(task);
