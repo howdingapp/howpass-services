@@ -186,7 +186,8 @@ export class GoogleCloudTasksService {
         }
       };
 
-      console.log('task', task);
+      console.log('task', JSON.stringify(task, null, 2));
+      this.diagnoseQueues();
 
       console.log(`🎯 Création de la tâche IA prioritaire (${taskData.priority}): ${taskData.type} pour ${taskData.conversationId}`);
       
@@ -280,6 +281,142 @@ export class GoogleCloudTasksService {
     } catch (error) {
       console.error('❌ Erreur lors de la purge de la queue:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Lister toutes les queues disponibles
+   */
+  async listAllQueues(): Promise<{
+    name: string;
+    state: string;
+    maxConcurrentDispatches?: number;
+    maxDispatchesPerSecond?: number;
+    maxAttempts?: number;
+  }[]> {
+    try {
+      console.log('🔍 Récupération de toutes les queues...');
+      
+      const [queues] = await this.client.listQueues({
+        parent: this.client.locationPath(this.projectId, this.location)
+      });
+      
+      const queueInfo = queues.map(queue => {
+        const info: {
+          name: string;
+          state: string;
+          maxConcurrentDispatches?: number;
+          maxDispatchesPerSecond?: number;
+          maxAttempts?: number;
+        } = {
+          name: queue.name?.split('/').pop() || 'unknown',
+          state: String(queue.state || 'unknown')
+        };
+        
+        if (queue.rateLimits?.maxConcurrentDispatches !== undefined && queue.rateLimits.maxConcurrentDispatches !== null) {
+          info.maxConcurrentDispatches = queue.rateLimits.maxConcurrentDispatches;
+        }
+        if (queue.rateLimits?.maxDispatchesPerSecond !== undefined && queue.rateLimits.maxDispatchesPerSecond !== null) {
+          info.maxDispatchesPerSecond = queue.rateLimits.maxDispatchesPerSecond;
+        }
+        if (queue.retryConfig?.maxAttempts !== undefined && queue.retryConfig.maxAttempts !== null) {
+          info.maxAttempts = queue.retryConfig.maxAttempts;
+        }
+        
+        return info;
+      });
+      
+      console.log(`✅ ${queueInfo.length} queues trouvées`);
+      return queueInfo;
+      
+    } catch (error) {
+      console.error('❌ Erreur lors de la liste des queues:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Vérifier l'état d'une queue spécifique
+   */
+  async getQueueInfo(queueName: string): Promise<any> {
+    try {
+      const queuePath = this.client.queuePath(this.projectId, this.location, queueName);
+      console.log(`🔍 Vérification de la queue: ${queueName}`);
+      
+      const [queue] = await this.client.getQueue({ name: queuePath });
+      
+      console.log(`✅ Queue ${queueName} trouvée:`, {
+        name: queue.name,
+        state: queue.state,
+        rateLimits: queue.rateLimits,
+        retryConfig: queue.retryConfig
+      });
+      
+      return queue;
+      
+    } catch (error) {
+      console.error(`❌ Erreur lors de la vérification de la queue ${queueName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Diagnostic complet des queues
+   */
+  async diagnoseQueues(): Promise<{
+    projectId: string;
+    location: string;
+    queues: Array<{
+      name: string;
+      state: string;
+      maxConcurrentDispatches?: number;
+      maxDispatchesPerSecond?: number;
+      maxAttempts?: number;
+    }>;
+    errors: string[];
+  }> {
+    const result: {
+      projectId: string;
+      location: string;
+      queues: Array<{
+        name: string;
+        state: string;
+        maxConcurrentDispatches?: number;
+        maxDispatchesPerSecond?: number;
+        maxAttempts?: number;
+      }>;
+      errors: string[];
+    } = {
+      projectId: this.projectId,
+      location: this.location,
+      queues: [],
+      errors: []
+    };
+    
+    try {
+      console.log('🔍 Diagnostic complet des queues...');
+      console.log(`📋 Projet: ${this.projectId}`);
+      console.log(`🌍 Région: ${this.location}`);
+      
+      // Lister toutes les queues
+      result.queues = await this.listAllQueues();
+      
+      // Vérifier chaque queue individuellement
+      for (const queue of result.queues) {
+        try {
+          await this.getQueueInfo(queue.name);
+        } catch (error: any) {
+          result.errors.push(`Queue ${queue.name}: ${error.message}`);
+        }
+      }
+      
+      console.log(`✅ Diagnostic terminé: ${result.queues.length} queues, ${result.errors.length} erreurs`);
+      return result;
+      
+    } catch (error) {
+      console.error('❌ Erreur lors du diagnostic:', error);
+      result.errors.push(`Erreur générale: ${(error as Error).message}`);
+      return result;
     }
   }
 
