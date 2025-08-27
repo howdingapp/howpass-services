@@ -57,13 +57,14 @@ export class ConversationController {
         return;
       }
 
-      const { conversationId, context } = await this.conversationService.startConversation(request);
+      const conversationId = request.conversationId;
+      const { context } = await this.conversationService.startConversation(request);
 
       // Déclencher automatiquement la première réponse IA
       try {
         const iaJob = await this.iaJobTriggerService.triggerIAJob({
           type: 'generate_first_response',
-          conversationId,
+          conversationId: conversationId,
           userId: request.userId,
           priority: 'high'
         }, req.authToken || '');
