@@ -365,7 +365,7 @@ export class ChatBotService {
   /**
    * Générer un résumé structuré de la conversation pour les activités
    */
-  private async generateConversationSummary(context: ConversationContext): Promise<any> {
+  async generateConversationSummary(context: ConversationContext): Promise<any> {
     try {
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
       const previousCallId = context.metadata?.['previousCallId'];
