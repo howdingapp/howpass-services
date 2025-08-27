@@ -237,6 +237,7 @@ export class ConversationController {
         const iaJob = await this.iaJobTriggerService.triggerIAJob({
           type: 'generate_summary',
           conversationId,
+          aiResponseId: context.aiResponseId,
           userId: context.userId,
           priority: 'high'
         }, req.authToken || '');
