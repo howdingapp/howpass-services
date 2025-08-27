@@ -273,47 +273,6 @@ export class ChatBotService {
   }
 
   /**
-   * Terminer une conversation et générer un résumé
-   */
-  async endConversation(conversationId: string, aiResponseId?: string): Promise<{
-    success: boolean;
-    summary?: any;
-    error?: string;
-  }> {
-    try {
-      // Récupérer le contexte final
-      const context = await this.conversationService.getContext(conversationId);
-      if (!context) {
-        return {
-          success: false,
-          error: 'Impossible de récupérer le contexte de la conversation'
-        };
-      }
-
-      // Générer un résumé IA
-      const summary = await this.generateConversationSummary(context);
-      
-      // Terminer la conversation
-      const endResult = await this.conversationService.endConversation(conversationId);
-      
-      return {
-        success: true,
-        summary: {
-          ...endResult,
-          aiSummary: summary
-        }
-      };
-
-    } catch (error) {
-      console.error('❌ Erreur dans ChatBotService.endConversation:', error);
-      return {
-        success: false,
-        error: 'Erreur interne du service'
-      };
-    }
-  }
-
-  /**
    * Générer une réponse IA basée sur le contexte de la conversation
    */
   private async generateAIResponse(context: ConversationContext, userMessage: string): Promise<string> {
@@ -411,23 +370,17 @@ export class ChatBotService {
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
       const previousCallId = context.metadata?.['previousCallId'];
       
-      if (previousCallId && context.type === 'activity') {
+      if(!previousCallId) {
+        throw new Error('No previous call ID found');
+      }
+
+      if (context.type === 'activity') {
         // Utiliser l'API responses pour référencer l'appel précédent
         console.log('🔍 Génération du résumé via API responses avec callID:', previousCallId);
         
         try {
           const systemPrompt = `Tu es un assistant spécialisé dans l'analyse de conversations entre praticiens et experts. 
-          Analyse la conversation et génère un résumé structuré qui permettra de remplir automatiquement les formulaires d'activité.
-          
-          Tu dois extraire et structurer les informations suivantes :
-          - shortDescription: Description courte et accrocheuse (max 200 caractères)
-          - longDescription: Description détaillée du déroulement et de l'approche (max 500 caractères)  
-          - title: Titre optimisé et descriptif (max 100 caractères)
-          - selectedKeywords: Mots-clés pertinents parmi la liste disponible
-          - benefits: Bénéfices concrets et mesurables pour les participants
-          - typicalSituations: Profil idéal de l'utilisateur qui profiterait de cette pratique
-          
-          Réponds UNIQUEMENT au format JSON valide selon le schéma fourni.`;
+          Analyse la conversation et génère un résumé structuré qui permettra de remplir automatiquement les formulaires d'activité.`;
 
           const conversationText = context.messages
             .map(msg => `${msg.type === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`)
@@ -450,6 +403,14 @@ export class ChatBotService {
                 status: "completed",
               },
             ],
+            text: {
+              format: { 
+                type: "json_schema",
+                name: "ActivitySummary",
+                schema: ActivitySummaryJsonOutputSchema,
+                strict: true
+              }
+            }
           });
 
           const resultText = result.output
@@ -470,72 +431,7 @@ export class ChatBotService {
         }
       }
 
-      // Fallback vers l'API chat classique
-      console.log('🔍 Génération du résumé via API chat classique');
       
-      if (context.type === 'activity') {
-        // Pour les activités, générer un résumé structuré
-        const systemPrompt = `Tu es un assistant spécialisé dans l'analyse de conversations entre praticiens et experts. 
-        Analyse la conversation et génère un résumé structuré qui permettra de remplir automatiquement les formulaires d'activité.
-        
-        Tu dois extraire et structurer les informations suivantes :
-        - shortDescription: Description courte et accrocheuse (max 200 caractères)
-        - longDescription: Description détaillée du déroulement et de l'approche (max 500 caractères)  
-        - title: Titre optimisé et descriptif (max 100 caractères)
-        - selectedKeywords: Mots-clés pertinents parmi la liste disponible
-        - benefits: Bénéfices concrets et mesurables pour les participants
-        - typicalSituations: Profil idéal de l'utilisateur qui profiterait de cette pratique
-        
-        Réponds UNIQUEMENT au format JSON valide selon le schéma fourni.`;
-
-        const conversationText = context.messages
-          .map(msg => `${msg.type === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`)
-          .join('\n');
-
-        const completion = await this.openai.chat.completions.create({
-          model: this.AI_MODEL,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: `Analyse cette conversation et génère un résumé structuré:\n${conversationText}` }
-          ],
-          max_tokens: 800,
-          temperature: 0.3,
-          response_format: { type: "json_object" }
-        });
-
-        const response = completion.choices[0]?.message?.content;
-        if (response) {
-          try {
-            const parsedSummary = JSON.parse(response);
-            console.log('🔍 Résumé structuré généré via chat classique:', parsedSummary);
-            return parsedSummary;
-          } catch (parseError) {
-            console.warn('⚠️ Erreur de parsing JSON, fallback vers résumé simple:', parseError);
-          }
-        }
-      }
-
-      // Résumé simple pour les autres types ou en cas d'erreur
-      const systemPrompt = `Tu es un assistant spécialisé dans la création de résumés concis et utiles de conversations. 
-      Analyse la conversation et fournis un résumé en 2-3 phrases maximum, en français.`;
-
-      const conversationText = context.messages
-        .map(msg => `${msg.type === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`)
-        .join('\n');
-
-      const completion = await this.openai.chat.completions.create({
-        model: this.AI_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Résume cette conversation:\n${conversationText}` }
-        ],
-        max_tokens: 200,
-        temperature: 0.3
-      });
-
-      return {
-        summary: completion.choices[0]?.message?.content || "Résumé de la conversation généré automatiquement."
-      };
     } catch (error) {
       console.error('❌ Erreur lors de la génération du résumé:', error);
       return {

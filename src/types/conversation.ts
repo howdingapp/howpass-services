@@ -118,3 +118,16 @@ export interface ConversationStats {
   memoryUsage: number; // bytes
   timestamp: string;
 }
+
+/**
+ * Interface pour la sortie structurée du résumé d'activité
+ * Correspond au schéma ActivitySummaryJsonOutputSchema
+ */
+export interface ActivitySummaryOutput {
+  shortDescription: string;
+  longDescription: string;
+  title: string;
+  selectedKeywords: string[];
+  benefits: string[];
+  typicalSituations: string;
+}
