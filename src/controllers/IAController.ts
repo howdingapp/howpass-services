@@ -134,7 +134,7 @@ export class IAController {
     const messageId = aiResponse.messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Mettre à jour le contexte avec le nouveau messageId pour les futures réponses
-    context.metadata = { ...context.metadata, previousCallId: messageId };
+    context.metadata = { ...context.metadata, previousCallId: messageId, previousResponse: aiResponse.response };
     
     // Ajouter la réponse à la conversation (cela met à jour automatiquement le contexte dans Redis)
     await this.conversationService.addMessage(taskData.conversationId, {
@@ -246,7 +246,7 @@ export class IAController {
     
     const firstResponseResult = await this.chatBotService['generateFirstResponse'](context);
     
-    context.metadata = { ...context.metadata, previousCallId: firstResponseResult.messageId };
+    context.metadata = { ...context.metadata, previousCallId: firstResponseResult.messageId, previousResponse: firstResponseResult.response };
 
     // Ajouter la réponse à la conversation
     await this.conversationService.addMessage(taskData.conversationId, {

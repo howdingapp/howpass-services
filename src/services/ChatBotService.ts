@@ -287,21 +287,11 @@ export class ChatBotService {
       
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
+        previous_response_id: previousCallId,
         input: [
           {
             role: "user",
             content: [{ type: "input_text", text: userMessage }],
-          },
-          {
-            type: "message",
-            role: "assistant",
-            content: [{ 
-              type: "output_text", 
-              text: "Réponse précédente",
-              annotations: []
-            }],
-            id: previousCallId,
-            status: "completed",
           },
         ],
       });
