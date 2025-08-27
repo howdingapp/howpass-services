@@ -130,20 +130,27 @@ export class IAController {
     // Générer la réponse IA
     const aiResponse = await this.chatBotService['generateAIResponse'](context, taskData.userMessage);
     
-    // Ajouter la réponse à la conversation
+    // Utiliser le messageId d'OpenAI si disponible, sinon créer un messageId local
+    const messageId = aiResponse.messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Mettre à jour le contexte avec le nouveau messageId pour les futures réponses
+    context.metadata = { ...context.metadata, previousCallId: messageId };
+    
+    // Ajouter la réponse à la conversation (cela met à jour automatiquement le contexte dans Redis)
     await this.conversationService.addMessage(taskData.conversationId, {
-      content: aiResponse,
+      content: aiResponse.response,
       type: 'bot',
-      metadata: { source: 'ai', model: this.chatBotService.getAIModel() }
+      metadata: { source: 'ai', model: this.chatBotService.getAIModel(), messageId: messageId }
     });
 
     // Mettre à jour l'entrée ai_response pré-créée
     if (taskData.aiResponseId) {
       await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
-        response_text: aiResponse,
+        response_text: aiResponse.response,
         metadata: { 
           source: 'ai', 
           model: this.chatBotService.getAIModel(),
+          messageId: messageId,
           status: 'completed'
         }
       });
@@ -154,8 +161,8 @@ export class IAController {
 
     return {
       success: true,
-      response: aiResponse,
-      messageId: `msg_${Date.now()}`,
+      response: aiResponse.response,
+      messageId: messageId,
       workerId: 'google-cloud-tasks'
     };
   }
