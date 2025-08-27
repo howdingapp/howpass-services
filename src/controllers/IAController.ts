@@ -141,7 +141,7 @@ export class IAController {
       content: aiResponse.response,
       type: 'bot',
       metadata: { source: 'ai', model: this.chatBotService.getAIModel(), messageId: messageId }
-    });
+    }, context);
 
     // Mettre à jour l'entrée ai_response pré-créée
     if (taskData.aiResponseId) {
@@ -246,12 +246,14 @@ export class IAController {
     
     const firstResponseResult = await this.chatBotService['generateFirstResponse'](context);
     
+    context.metadata = { ...context.metadata, previousCallId: firstResponseResult.messageId };
+
     // Ajouter la réponse à la conversation
     await this.conversationService.addMessage(taskData.conversationId, {
       content: firstResponseResult.response,
       type: 'bot',
       metadata: { source: 'ai', model: this.chatBotService.getAIModel(), type: 'first_response', messageId: firstResponseResult.messageId }
-    });
+    }, context);
 
     // Mettre à jour l'entrée ai_response pré-créée
     if (taskData.aiResponseId) {
