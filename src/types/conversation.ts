@@ -12,9 +12,18 @@ export interface AIRule {
 export interface ActivityData {
   id: string;
   title: string;
-  description?: string;
+  shortDescription?: string;
+  longDescription?: string;
   type?: string;
   category?: string;
+  practice?: {
+    id: string;
+    title: string;
+    shortDescription?: string;
+    longDescription?: string;
+    categoryId?: string;
+    familyId?: string;
+  };
 }
 
 export interface ConversationContext {

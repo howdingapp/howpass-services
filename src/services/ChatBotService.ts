@@ -318,14 +318,14 @@ export class ChatBotService {
       
       // Personnaliser le prompt selon le type de conversation et les données disponibles
       if (context.type === 'activity' && context.activityData) {
-        userPrompt = `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans les activités de bien-être. 
-        L'utilisateur souhaite discuter de l'activité: "${context.activityData.title}".
-        ${context.activityData.description ? `Description: ${context.activityData.description}` : ''}
-        Commence par un accueil chaleureux et propose de l'aider avec cette activité.`;
+        userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts. 
+        Le praticien souhaite déclarer une activité: "${context.activityData.title}".
+        ${context.activityData.shortDescription ? `Description courte: ${context.activityData.shortDescription}` : ''}
+        Commence par un accueil chaleureux et pose une première question engageante pour mieux comprendre son activité et commencer à établir la conformité avec sa pratique associée.`;
       } else if (context.type === 'bilan') {
-        userPrompt = `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans le bilan de bien-être. 
-        L'utilisateur souhaite faire un bilan de sa situation. 
-        Commence par un accueil chaleureux et propose de l'accompagner dans cette réflexion.`;
+        userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts. 
+        Le praticien souhaite faire un bilan de son activité ou de sa pratique. 
+        Commence par un accueil chaleureux et pose une première question engageante pour l'accompagner dans cette réflexion.`;
       }
 
       console.log('🔍 System prompt:', systemPrompt);
@@ -341,6 +341,7 @@ export class ChatBotService {
         temperature: 0.7
       });
 
+      console.log('🔍 Completion:', completion);
       console.log('🔍 Première réponse IA:', completion.choices[0]?.message?.content || 'Aucune réponse générée');
 
       return completion.choices[0]?.message?.content || "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
@@ -357,8 +358,8 @@ export class ChatBotService {
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
     Tu es bienveillant, professionnel et tu aides les utilisateurs à améliorer leur qualité de vie.`;
 
-    // Ajouter les règles IA spécifiques si elles existent
-    if (context.aiRules && Array.isArray(context.aiRules)) {
+    // Si des règles IA personnalisées sont présentes, les utiliser exclusivement
+    if (context.aiRules && Array.isArray(context.aiRules) && context.aiRules.length > 0) {
       // Filtrer seulement les règles actives
       const activeRules = context.aiRules.filter((rule: AIRule) => rule.isActive);
       
@@ -371,14 +372,47 @@ export class ChatBotService {
         sortedRules.forEach((rule: AIRule, index: number) => {
           basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
         });
+        
+        // Retourner le prompt avec seulement les règles personnalisées
+        return basePrompt;
       }
     }
 
-    // Ajouter le contexte de l'activité si disponible
+    // COMPORTEMENT PAR DÉFAUT : Howana experte des pratiques
+    basePrompt += `\n\nTu es également experte des pratiques de bien-être et de santé. 
+    Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.`;
+
+    // Ajouter le contexte de l'activité et de la pratique si disponible
     if (context.type === 'activity' && context.activityData) {
-      basePrompt += `\n\nL'utilisateur discute d'une activité spécifique: "${context.activityData.title}". 
-      ${context.activityData.description ? `Description: ${context.activityData.description}` : ''}
-      Aide-le à optimiser cette activité, réponds à ses questions et donne des conseils pratiques.`;
+      basePrompt += `\n\nL'utilisateur discute d'une activité spécifique: "${context.activityData.title}".`;
+      
+      if (context.activityData.shortDescription) {
+        basePrompt += `\nDescription courte: ${context.activityData.shortDescription}`;
+      }
+      if (context.activityData.longDescription) {
+        basePrompt += `\nDescription détaillée: ${context.activityData.longDescription}`;
+      }
+
+      // Intégrer les informations de la pratique si disponibles
+      if (context.activityData.practice) {
+        const practice = context.activityData.practice;
+        basePrompt += `\n\nPRATIQUE ASSOCIÉE:
+        - Nom: ${practice.title}
+        - Description courte: ${practice.shortDescription || 'Non disponible'}
+        - Description détaillée: ${practice.longDescription || 'Non disponible'}
+        - Catégorie ID: ${practice.categoryId || 'Non définie'}
+        - Famille ID: ${practice.familyId || 'Non définie'}`;
+        
+        basePrompt += `\n\nEn tant qu'experte de cette pratique, tu dois:
+        1. Analyser la cohérence entre l'activité et la pratique
+        2. Poser des questions intelligentes pour mieux comprendre l'activité
+        3. Identifier le profil d'utilisateur idéal (état psychologique, vécu, besoins spécifiques)
+        4. Valider si l'activité respecte les principes de la pratique
+        5. Suggérer des ajustements si nécessaire pour optimiser la synergie`;
+      }
+      
+      basePrompt += `\n\nAide l'utilisateur à optimiser cette activité en te basant sur ton expertise de la pratique associée.`;
+      
     } else if (context.type === 'bilan') {
       basePrompt += `\n\nL'utilisateur fait un bilan de son bien-être. 
       Aide-le à analyser sa situation et propose des améliorations personnalisées.`;
@@ -390,7 +424,9 @@ export class ChatBotService {
     - Adapte tes conseils au contexte de l'utilisateur
     - Reste professionnel et bienveillant
     - Si tu ne sais pas quelque chose, dis-le honnêtement
-    - Respecte strictement toutes les règles de comportement et d'information spécifiées ci-dessus`;
+    - En mode "expertise des pratiques" par défaut, pose des questions pertinentes pour valider la cohérence
+    - Identifie toujours le profil d'utilisateur idéal pour l'activité/pratique
+    - Suggère des ajustements si nécessaire pour optimiser la synergie`;
 
     return basePrompt;
   }
