@@ -38,29 +38,31 @@ export class ChatBotService {
 
       // Générer automatiquement une première réponse IA basée sur le contexte
       try {
-        const firstResponse = await this.generateFirstResponse(result.context);
-        if (firstResponse) {
-          // Créer un messageId unique pour la première réponse
-          const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const firstResponseResult = await this.generateFirstResponse(result.context);
+        if (firstResponseResult.response) {
+          // Utiliser le messageId d'OpenAI si disponible
+          const messageId = firstResponseResult.messageId;
           
           // Ajouter le message à la conversation Redis
           await this.conversationService.addMessage(
             result.conversationId,
             {
-              content: firstResponse,
+              content: firstResponseResult.response,
               type: 'bot',
               metadata: { source: 'ai', model: this.AI_MODEL, type: 'first_response', messageId: messageId }
             }
           );
           
-          // Sauvegarder le messageId dans le contexte pour les réponses suivantes
-          result.context.metadata = { ...result.context.metadata, previousCallId: messageId };
+          // Sauvegarder le messageId d'OpenAI dans le contexte pour les réponses suivantes
+          if (messageId) {
+            result.context.metadata = { ...result.context.metadata, previousCallId: messageId };
+          }
           
           // Enregistrer la réponse IA dans Supabase
           await this.supabaseService.createAIResponse({
             conversation_id: result.conversationId,
             user_id: request.userId,
-            response_text: firstResponse,
+            response_text: firstResponseResult.response,
             message_type: 'text'
           });
           
@@ -373,7 +375,7 @@ export class ChatBotService {
   /**
    * Générer une première réponse IA basée sur le contexte de la conversation
    */
-  private async generateFirstResponse(context: ConversationContext): Promise<string> {
+  private async generateFirstResponse(context: ConversationContext): Promise<{ response: string; messageId: string | undefined }> {
     try {
 
       console.log('🔍 Génération de la première réponse IA pour la conversation:', context.id);
@@ -397,23 +399,52 @@ export class ChatBotService {
       console.log('🔍 System prompt:', systemPrompt);
       console.log('🔍 Génération de la première réponse IA:', userPrompt);
 
-      const completion = await this.openai.chat.completions.create({
+      // Utiliser l'API responses pour la première réponse
+      const result = await this.openai.responses.create({
         model: this.AI_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
+        input: [
+          {
+            role: "user",
+            content: [{ type: "input_text", text: userPrompt }],
+          },
+          {
+            type: "message",
+            role: "system",
+            content: [{ 
+              type: "input_text", 
+              text: systemPrompt
+            }],
+            status: "completed",
+          },
         ],
-        max_tokens: 200,
-        temperature: 0.7
       });
 
-      console.log('🔍 Completion:', completion);
-      console.log('🔍 Première réponse IA:', completion.choices[0]?.message?.content || 'Aucune réponse générée');
+      // Récupérer le messageId du premier résultat de type "message"
+      const messageOutput = result.output.find(output => output.type === "message");
+      const messageId = messageOutput?.id;
+      
+      // Extraire le texte de la réponse en gérant les types
+      let response = "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
+      if (messageOutput?.content?.[0]) {
+        const content = messageOutput.content[0];
+        if ('text' in content) {
+          response = content.text;
+        }
+      }
 
-      return completion.choices[0]?.message?.content || "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
+      console.log('🔍 Première réponse IA via API responses:', response);
+      console.log('🔍 MessageID OpenAI:', messageId);
+
+      return { 
+        response, 
+        messageId 
+      };
     } catch (error) {
       console.error('❌ Erreur lors de la génération de la première réponse:', error);
-      return "Bonjour ! Je suis Howana, votre assistant personnel. Comment puis-je vous aider aujourd'hui ?";
+      return { 
+        response: "Bonjour ! Je suis Howana, votre assistant personnel. Comment puis-je vous aider aujourd'hui ?",
+        messageId: undefined
+      };
     }
   }
 
