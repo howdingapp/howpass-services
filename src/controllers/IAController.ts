@@ -78,6 +78,8 @@ export class IAController {
 
       console.log(`🎯 Traitement de la tâche IA: ${taskData.type} pour ${taskData.conversationId}`);
 
+      console.log('🔍 Contexte de la conversation:', context);
+
       // Traiter selon le type de tâche
       switch (taskData.type) {
         case 'generate_response':
