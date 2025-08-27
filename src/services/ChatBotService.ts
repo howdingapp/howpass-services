@@ -40,15 +40,21 @@ export class ChatBotService {
       try {
         const firstResponse = await this.generateFirstResponse(result.context);
         if (firstResponse) {
+          // Créer un messageId unique pour la première réponse
+          const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
           // Ajouter le message à la conversation Redis
           await this.conversationService.addMessage(
             result.conversationId,
             {
               content: firstResponse,
               type: 'bot',
-                             metadata: { source: 'ai', model: this.AI_MODEL, type: 'first_response' }
+              metadata: { source: 'ai', model: this.AI_MODEL, type: 'first_response', messageId: messageId }
             }
           );
+          
+          // Sauvegarder le messageId dans le contexte pour les réponses suivantes
+          result.context.metadata = { ...result.context.metadata, previousCallId: messageId };
           
           // Enregistrer la réponse IA dans Supabase
           await this.supabaseService.createAIResponse({
@@ -123,16 +129,22 @@ export class ChatBotService {
             // Générer une réponse IA
             const aiResponse = await this.generateAIResponse(context, request.content);
             
-            if (aiResponse) {
-              // Ajouter le message à la conversation Redis
-              await this.conversationService.addMessage(
-                conversationId,
-                {
-                  content: aiResponse,
-                  type: 'bot',
-                  metadata: { source: 'ai', model: this.AI_MODEL }
-                }
-              );
+                         if (aiResponse) {
+               // Créer un messageId unique pour la réponse IA
+               const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+               
+               // Ajouter le message à la conversation Redis
+               await this.conversationService.addMessage(
+                 conversationId,
+                 {
+                   content: aiResponse,
+                   type: 'bot',
+                   metadata: { source: 'ai', model: this.AI_MODEL, messageId: messageId }
+                 }
+               );
+               
+               // Mettre à jour le contexte avec le nouveau messageId
+               context.metadata = { ...context.metadata, previousCallId: messageId };
               
               // Enregistrer la réponse IA dans Supabase
               await this.supabaseService.createAIResponse({
@@ -244,20 +256,58 @@ export class ChatBotService {
    */
   private async generateAIResponse(context: ConversationContext, userMessage: string): Promise<string> {
     try {
-      const systemPrompt = this.buildSystemPrompt(context);
-      
-      // Construire l'historique des messages
-      const messages = [
-        { role: "system" as const, content: systemPrompt },
-        ...context.messages.map(msg => ({
-          role: (msg.type === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: msg.content
-        })),
-        { role: "user" as const, content: userMessage }
-      ];
-
       console.log('🔍 Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
       console.log('Dernier message de l\'utilisateur:', userMessage);
+
+      // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
+      const previousCallId = context.metadata?.['previousCallId'];
+      
+      if (previousCallId) {
+        // Utiliser l'API responses pour référencer l'appel précédent
+        console.log('🔍 Utilisation de l\'API responses avec callID:', previousCallId);
+        
+        try {
+          const result = await this.openai.responses.create({
+            model: this.AI_MODEL,
+            input: [
+              {
+                role: "user",
+                content: [{ type: "input_text", text: userMessage }],
+              },
+              {
+                type: "message",
+                role: "assistant",
+                content: [{ 
+                  type: "output_text", 
+                  text: "Réponse précédente",
+                  annotations: []
+                }],
+                id: previousCallId,
+                status: "completed",
+              },
+            ],
+          });
+
+          const resultText = result.output
+            .filter((output) => output.type === "message")
+            .map((output) => (output as any).content?.[0]?.text)[0];
+
+          console.log('🔍 Réponse IA via API responses:', resultText);
+          return resultText || "Je n'ai pas pu générer de réponse. Pouvez-vous reformuler votre question ?";
+        } catch (responseError) {
+          console.warn('⚠️ Erreur avec l\'API responses, fallback vers chat classique:', responseError);
+          // Fallback vers l'API chat classique
+        }
+      }
+
+      // Utiliser l'API chat classique (première réponse ou fallback)
+      console.log('🔍 Utilisation de l\'API chat classique');
+      
+      const systemPrompt = this.buildSystemPrompt(context);
+      const messages = [
+        { role: "system" as const, content: systemPrompt },
+        { role: "user" as const, content: userMessage }
+      ];
 
       const completion = await this.openai.chat.completions.create({
         model: this.AI_MODEL,
@@ -266,9 +316,25 @@ export class ChatBotService {
         temperature: 0.7
       });
 
-      console.log('🔍 Réponse IA:', completion.choices[0]?.message?.content || 'Aucune réponse générée');
+      const response = completion.choices[0]?.message?.content || "Je n'ai pas pu générer de réponse.";
+      
+      // Sauvegarder le callID pour les prochaines réponses
+      if (completion.id) {
+        // Pour l'API responses, on a besoin de l'ID du message, pas de l'ID de la completion
+        // On va créer un identifiant unique pour ce message
+        const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        context.metadata = { ...context.metadata, previousCallId: messageId };
+        
+        // Mettre à jour le contexte dans Redis en ajoutant un message
+        await this.conversationService.addMessage(context.id, {
+          content: response,
+          type: 'bot',
+          metadata: { source: 'ai', model: this.AI_MODEL, callId: completion.id, messageId: messageId }
+        });
+      }
 
-      return completion.choices[0]?.message?.content || "Je n'ai pas pu générer de réponse. Pouvez-vous reformuler votre question ?";
+      console.log('🔍 Réponse IA classique:', response);
+      return response;
     } catch (error) {
       console.error('❌ Erreur lors de la génération de la réponse IA:', error);
       return "Je rencontre des difficultés techniques. Pouvez-vous réessayer dans un moment ?";
