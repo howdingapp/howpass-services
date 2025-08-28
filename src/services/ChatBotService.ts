@@ -507,8 +507,8 @@ export class ChatBotService {
       const activeRules = context.aiRules.filter((rule: AIRule) => rule.isActive);
       
       if (activeRules.length > 0) {
-        // Trier les règles par priorité (priorité élevée en premier)
-        const sortedRules = activeRules.sort((a: AIRule, b: AIRule) => b.priority - a.priority);
+        // Trier les règles par priorité (priorité 1 = plus forte)
+        const sortedRules = activeRules.sort((a: AIRule, b: AIRule) => a.priority - b.priority);
         
         sortedRules.forEach((rule: AIRule, index: number) => {
           basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
