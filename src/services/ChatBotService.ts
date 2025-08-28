@@ -38,7 +38,7 @@ const ActivitySummaryJsonOutputSchema = {
     // Nouveau champ pour décrire la situation idéale
     typicalSituations: {
       type: "string",
-      description: "Description de la situation idéale d'un utilisateur qui serait à même de profiter pleinement de cette pratique. Inclure le profil psychologique, les expériences vécues, les besoins spécifiques, etc."
+      description: "Description de la situation idéale écrite du point de vue de l'utilisateur (en se mettant à sa place). Décrire ce que l'utilisateur ressent, vit, ou expérimente quand il est dans la situation idéale pour cette pratique. Inclure les émotions, sensations, besoins, expériences vécues, etc. du point de vue de l'utilisateur."
     },
 
   },
