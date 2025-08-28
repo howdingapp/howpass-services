@@ -10,35 +10,35 @@ const ActivitySummaryJsonOutputSchema = {
     // Pour ActivityDetailsStep
     shortDescription: {
       type: "string",
-      description: "Description courte et accrocheuse de l'activité, mettant en avant ce qui la rend unique (max 200 caractères). Strictement basé sur les informations fournies par l'utilisateur."
+      description: "Description courte et accrocheuse de l'activité, mettant en avant ce qui la rend unique (max 200 caractères)."
     },
     longDescription: {
       type: "string", 
-      description: "Description détaillée de l'activité expliquant le déroulement, l'approche et ce que vivront les participants (max 500 caractères). Strictement basé sur les informations fournies par l'utilisateur."
+      description: "Description détaillée de l'activité expliquant le déroulement, l'approche et ce que vivront les participants (max 500 caractères)."
     },
     title: {
       type: "string",
-      description: "Titre optimisé et descriptif de l'activité (max 100 caractères). Strictement basé sur les informations fournies par l'utilisateur."
+      description: "Titre optimisé et descriptif de l'activité (max 100 caractères)."
     },
     
     // Pour ActivityKeywordsStep
     selectedKeywords: {
       type: "array",
       items: { type: "string" },
-      description: "Liste des mots-clés les plus pertinents pour cette activité. Strictement basé sur les informations fournies par l'utilisateur."
+      description: "Liste des mots-clés les plus pertinents pour cette activité."
     },
     
     // Pour ActivitySummaryStep (uniquement benefits)
     benefits: {
       type: "array",
       items: { type: "string" },
-      description: "Liste des bénéfices concrets et mesurables que les participants peuvent attendre de cette activité. Strictement basé sur les informations fournies par l'utilisateur."
+      description: "Liste des bénéfices concrets et mesurables que les participants peuvent attendre de cette activité."
     },
     
     // Nouveau champ pour décrire la situation idéale
     typicalSituations: {
       type: "string",
-      description: "Description de la situation idéale d'un utilisateur qui serait à même de profiter pleinement de cette pratique. Inclure le profil psychologique, les expériences vécues, les besoins spécifiques, etc. Strictement basé sur les informations fournies par l'utilisateur."
+      description: "Description de la situation idéale d'un utilisateur qui serait à même de profiter pleinement de cette pratique. Inclure le profil psychologique, les expériences vécues, les besoins spécifiques, etc."
     },
 
   },
