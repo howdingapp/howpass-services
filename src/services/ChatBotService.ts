@@ -38,7 +38,7 @@ const ActivitySummaryJsonOutputSchema = {
     // Nouveau champ pour décrire la situation idéale
     typicalSituations: {
       type: "string",
-      description: "Description de la situation idéale écrite du point de vue de l'utilisateur (en se mettant à sa place). Décrire ce que l'utilisateur ressent, vit, ou expérimente quand il est dans la situation idéale pour cette pratique. Inclure les émotions, sensations, besoins, expériences vécues, etc. du point de vue de l'utilisateur."
+      description: "Description de l'état mental et émotionnel de l'utilisateur AVANT de pratiquer cette activité. Décrire ce que l'utilisateur ressent, vit, ou expérimente quand il est dans une situation qui nécessite cette pratique. Inclure les émotions, sensations, besoins, expériences vécues, etc. du point de vue de l'utilisateur, mais AVANT qu'il commence l'activité recommandée. Exemples: 'Je me sens stressé et surchargé, j'ai besoin de me recentrer et de retrouver mon calme intérieur' ou 'Je ressens une fatigue mentale et un manque d'énergie, j'ai envie de me ressourcer et de me reconnecter à moi-même'. Indiquer seulement si pertinent: faire des connexions avec l'expérience du praticien pour identifier des matchings de personnalité ou de parcours qui pourraient enrichir la description de la situation idéale."
     },
 
   },
@@ -561,18 +561,85 @@ export class ChatBotService {
         - Nom: ${practice.title}
         - Description courte: ${practice.shortDescription || 'Non disponible'}
         - Description détaillée: ${practice.longDescription || 'Non disponible'}`;
+        
+        // Ajouter les informations de catégorie si disponibles
+        if (practice.categoryData) {
+          basePrompt += `\n- Catégorie: ${practice.categoryData.name}
+          - Description de la catégorie: ${practice.categoryData.description || 'Non disponible'}`;
+        }
+        
+        // Ajouter les informations de famille si disponibles
+        if (practice.familyData) {
+          basePrompt += `\n- Famille de pratiques: ${practice.familyData.name}
+          - Description de la famille: ${practice.familyData.description || 'Non disponible'}`;
+        }
       }
       
-      // Ajouter des instructions pour la collecte des informations manquantes
-      basePrompt += `\n\nOBJECTIF DE LA CONVERSATION:
-      Collecter les informations manquantes pour générer un résumé structuré complet.
-      Vérifier et enrichir les informations existantes pour optimiser l'auto-remplissage des formulaires.
+      // Instructions pour utiliser les données de catégorie et famille
+      if (context.activityData.practice?.categoryData || context.activityData.practice?.familyData) {
+        basePrompt += `\n\nUTILISATION DES DONNÉES DE CATÉGORIE ET FAMILLE:
+        Ces informations te permettent de:
+        - Comprendre le contexte plus large de la pratique
+        - Adapter tes questions selon la spécialisation de la catégorie
+        - Utiliser le vocabulaire et les concepts appropriés à la famille de pratiques
+        - Suggérer des améliorations cohérentes avec le référentiel de la pratique
+        - Guider l'utilisateur vers des formulations plus précises et professionnelles`;
+      }
       
-      POINTS D'ATTENTION:
-      - Si des informations sont déjà présentes, demande des précisions ou des améliorations
-      - Si des informations manquent, pose des questions ciblées pour les collecter
-      - Assure-toi que chaque élément du résumé sera suffisamment détaillé et précis
-      - Le format de sortie doit etre un texte adapté à un chat sur mobile`;
+      // Ajouter les informations du praticien si disponibles
+      if (context.metadata?.['practicienData']) {
+        const practicienData = context.metadata['practicienData'];
+        if (practicienData.creatorExperience) {
+          basePrompt += `\n\nPROFIL DU PRATICIEN:
+          - Expérience: ${practicienData.creatorExperience}`;
+        }
+      }
+      
+      // Gérer le cas d'édition (session d'amélioration)
+      const isEditing = context.metadata?.['isEditing'];
+      if (isEditing) {
+        basePrompt += `\n\n🎯 SESSION D'AMÉLIORATION - INFORMATIONS PRÉEXISTANTES:
+        Cette session fait suite à une conversation précédente où tu as aidé à générer des informations.
+        
+        Données déjà collectées et à améliorer:`;
+        
+        if (context.activityData.selectedKeywords && context.activityData.selectedKeywords.length > 0) {
+          basePrompt += `\n- Mots-clés actuels: ${context.activityData.selectedKeywords.join(', ')}`;
+        }
+        if (context.activityData.benefits && context.activityData.benefits.length > 0) {
+          basePrompt += `\n- Bénéfices actuels: ${context.activityData.benefits.join(', ')}`;
+        }
+        if (context.activityData.typicalSituations) {
+          basePrompt += `\n- Situations typiques actuelles: ${context.activityData.typicalSituations}`;
+        }
+        
+        basePrompt += `\n\nOBJECTIF DE LA SESSION D'AMÉLIORATION:
+        - Analyser la qualité des informations existantes
+        - Identifier les points d'amélioration et les lacunes
+        - Enrichir et affiner chaque élément pour optimiser l'impact
+        - Vérifier la cohérence avec la pratique et les données de catégorie/famille
+        - S'assurer que les informations sont suffisamment détaillées et précises
+        
+        APPROCHE:
+        - Commence par évaluer la qualité des informations existantes
+        - Pose des questions ciblées pour améliorer chaque élément
+        - Utilise les données de catégorie et famille pour enrichir le contexte
+        - Vérifie la cohérence avec l'expérience du praticien
+        - Exploite les informations de catégorie et famille pour suggérer des améliorations pertinentes
+        - Adapte tes conseils selon le niveau d'expérience du praticien`;
+      } else {
+        basePrompt += `\n\nOBJECTIF DE LA CONVERSATION:
+        Collecter les informations manquantes pour générer un résumé structuré complet.
+        Vérifier et enrichir les informations existantes pour optimiser l'auto-remplissage des formulaires.
+        
+        POINTS D'ATTENTION:
+        - Si des informations sont déjà présentes, demande des précisions ou des améliorations
+        - Si des informations manquent, pose des questions ciblées pour les collecter
+        - Assure-toi que chaque élément du résumé sera suffisamment détaillé et précis
+        - Le format de sortie doit etre un texte adapté à un chat sur mobile
+        - Utilise les informations de catégorie et famille pour enrichir le contexte et guider tes suggestions
+        - Adapte tes conseils selon l'expérience du praticien`;
+      }
       
     } else if (context.type === 'bilan') {
 
@@ -597,20 +664,43 @@ export class ChatBotService {
     // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
     if (!context.aiRules || !Array.isArray(context.aiRules) || context.aiRules.length === 0) {
       if (context.type === 'activity') {
-        basePrompt += `
+        const isEditing = context.metadata?.['isEditing'];
+        
+        if (isEditing) {
+          basePrompt += `
+    - Tu es en mode AMÉLIORATION : l'utilisateur revient pour affiner des informations déjà générées
+    - Analyse la qualité des données existantes et propose des améliorations ciblées
+    - Utilise les informations de catégorie et famille pour enrichir le contexte
+    - Vérifie la cohérence avec l'expérience du praticien
+    - L'objectif est d'optimiser l'impact et la précision des informations
+    
+    STRATÉGIE D'AMÉLIORATION:
+    - Évalue la pertinence et la précision de chaque élément existant
+    - Propose des enrichissements basés sur les données de catégorie/famille
+    - Vérifie l'alignement avec l'expérience du praticien
+    - Assure-toi que les informations sont suffisamment détaillées pour l'auto-remplissage
+    
+    - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
+    - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
+        } else {
+          basePrompt += `
     - Ton objectif principal est d'aider le praticien à valider la conformité de son activité avec la pratique associée
     - Pose des questions pertinentes pour mieux comprendre l'activité et établir la conformité
     - Identifie le profil d'utilisateur idéal pour cette activité/pratique
     - Suggère des ajustements si nécessaire pour optimiser la synergie
+    - Utilise les informations de catégorie et famille pour enrichir le contexte
+    - Prends en compte l'expérience du praticien dans tes recommandations
     
     COLLECTE POUR LE RÉSUMÉ STRUCTURÉ:
     - Guide la conversation pour collecter les 6 éléments requis du résumé
     - Demande des précisions sur chaque aspect (titre, descriptions, mots-clés, bénéfices, profil cible)
     - Vérifie que les informations sont suffisamment détaillées pour l'auto-remplissage
     - Adapte tes questions selon les informations déjà fournies
+    - Utilise les données de catégorie et famille pour enrichir le contexte
     
     - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
+        }
              } else if (context.type === 'bilan') {
          basePrompt += `
      - Aide l'utilisateur à faire un bilan approfondi de son état du jour et de son mood

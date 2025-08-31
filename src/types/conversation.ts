@@ -16,6 +16,9 @@ export interface ActivityData {
   longDescription?: string;
   type?: string;
   category?: string;
+  selectedKeywords?: string[];
+  benefits?: string[];
+  typicalSituations?: string;
   practice?: {
     id: string;
     title: string;
@@ -23,6 +26,16 @@ export interface ActivityData {
     longDescription?: string;
     categoryId?: string;
     familyId?: string;
+    categoryData?: {
+      id: string;
+      name: string;
+      description?: string;
+    };
+    familyData?: {
+      id: string;
+      name: string;
+      description?: string;
+    };
   };
 }
 
