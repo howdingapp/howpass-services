@@ -420,7 +420,25 @@ export class ChatBotService {
       
       // Personnaliser le prompt selon le type de conversation et les données disponibles
       if (context.type === 'activity' && context.activityData) {
-        userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts.
+        const isEditing = context.metadata?.['isEditing'];
+        
+                 if (isEditing) {
+           userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts.
+        
+        Au lieu de te présenter longuement, dis simplement "Rebonjour sur ce sujet !"
+        
+        Fais un petit état des lieux résumé de ce qui a été déclaré :
+        - Activité : "${context.activityData.title}"
+        ${context.activityData.shortDescription ? `- Description : ${context.activityData.shortDescription}` : ''}
+        
+        Indique que tu es là pour l'aider à améliorer et affiner sa déclaration d'activité existante.
+        
+        OBJECTIF SPÉCIFIQUE: Analyser et améliorer les informations existantes pour optimiser le résumé structuré avec:
+        - Titre optimisé, descriptions (courte et détaillée), mots-clés, bénéfices, et profil utilisateur idéal.
+        
+        Pose une question engageante pour mieux comprendre ce qu'il souhaite modifier ou améliorer dans sa déclaration d'activité existante.`;
+        } else {
+          userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts.
         
         Fais un petit état des lieux résumé de ce qui a été déclaré :
         - Activité : "${context.activityData.title}"
@@ -432,6 +450,7 @@ export class ChatBotService {
         - Titre optimisé, descriptions (courte et détaillée), mots-clés, bénéfices, et profil utilisateur idéal.
         
         Commence par un accueil chaleureux et pose une première question engageante pour mieux comprendre son activité et commencer à établir la conformité avec sa pratique associée.`;
+        }
       } else if (context.type === 'bilan') {
         userPrompt = `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts.
         
