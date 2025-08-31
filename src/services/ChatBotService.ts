@@ -427,9 +427,10 @@ export class ChatBotService {
         
         Au lieu de te présenter longuement, dis simplement "Rebonjour sur ce sujet !"
         
-        Fais un petit état des lieux résumé de ce qui a été déclaré :
+        Fais un très bref état des lieux résumé de ce qui a été déclaré et des informations existantes :
         - Activité : "${context.activityData.title}"
         ${context.activityData.shortDescription ? `- Description : ${context.activityData.shortDescription}` : ''}
+        ${context.activityData.typicalSituations ? `- Situations typiques : ${context.activityData.typicalSituations}` : ''}
         
         Indique que tu es là pour l'aider à améliorer et affiner sa déclaration d'activité existante.
         
