@@ -733,4 +733,108 @@ export class SupabaseService {
       return { data: null, error };
     }
   }
+
+  /**
+   * Recherche vectorielle par similarité sur une table donnée
+   */
+  async searchVectorSimilarity(
+    table: string, 
+    column: string, 
+    query: string, 
+    limit: number = 4
+  ): Promise<any[]> {
+    try {
+      console.log(`🔍 Recherche vectorielle sur ${table}.${column} pour: "${query}"`);
+      
+      // Utiliser l'API de recherche vectorielle de Supabase
+      const { data, error } = await this.supabase
+        .rpc('match_documents', {
+          query_embedding: query, // Ceci devrait être un vecteur, mais pour l'instant on utilise le texte
+          match_threshold: 0.7,
+          match_count: limit,
+          table_name: table,
+          column_name: column
+        });
+
+      if (error) {
+        console.error(`❌ Erreur lors de la recherche vectorielle sur ${table}:`, error);
+        
+        // Fallback vers une recherche textuelle simple
+        console.log(`🔄 Fallback vers recherche textuelle sur ${table}`);
+        const { data: fallbackData, error: fallbackError } = await this.supabase
+          .from(table)
+          .select('*')
+          .ilike(column, `%${query}%`)
+          .limit(limit);
+
+        if (fallbackError) {
+          console.error(`❌ Erreur lors du fallback sur ${table}:`, fallbackError);
+          return [];
+        }
+
+        return fallbackData || [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error(`❌ Erreur inattendue lors de la recherche vectorielle sur ${table}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Recherche d'activités et pratiques avec recherche vectorielle
+   */
+  async searchActivitiesAndPractices(
+    searchTerm: string,
+  ): Promise<{
+    results: any[];
+    searchTerm: string;
+    total: number;
+  }> {
+    try {
+      console.log(`🔍 Recherche d'activités et pratiques pour: "${searchTerm}"`);
+      
+      // Recherche vectorielle sur les activités (4 meilleures)
+      const activitiesResults = await this.searchVectorSimilarity(
+        'activities',
+        'vector_summary',
+        searchTerm,
+        4
+      );
+      
+      // Recherche vectorielle sur les pratiques (4 meilleures)
+      const practicesResults = await this.searchVectorSimilarity(
+        'practice',
+        'vector_summary',
+        searchTerm,
+        4
+      );
+      
+      // Combiner les résultats (4 activités + 4 pratiques = 8 total)
+      let combinedResults = [...activitiesResults, ...practicesResults];
+      
+      // Calculer un score de pertinence basé sur la similarité vectorielle
+      const resultsWithScore = combinedResults.map(result => ({
+        ...result,
+        relevanceScore: result.similarity || 0.8
+      }));
+      
+      // Trier par score de pertinence
+      resultsWithScore.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      
+      return {
+        results: resultsWithScore, // Retourner tous les résultats (max 8)
+        searchTerm,
+        total: resultsWithScore.length
+      };
+    } catch (error) {
+      console.error(`❌ Erreur lors de la recherche d'activités et pratiques:`, error);
+      return {
+        results: [],
+        searchTerm,
+        total: 0
+      };
+    }
+  }
 } 

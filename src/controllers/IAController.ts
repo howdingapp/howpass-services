@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { ChatBotService } from '../services/ChatBotService';
+import { ChatBotServiceFactory } from '../services/ChatBotServiceFactory';
+import { BaseChatBotService } from '../services/BaseChatBotService';
 import { ConversationService } from '../services/ConversationService';
 import { SupabaseService } from '../services/SupabaseService';
 import { ConversationContext } from '../types/conversation';
@@ -15,14 +16,21 @@ interface IATaskRequest {
 }
 
 export class IAController {
-  private chatBotService: ChatBotService;
   private conversationService: ConversationService;
   private supabaseService: SupabaseService;
 
   constructor() {
-    this.chatBotService = new ChatBotService();
     this.conversationService = new ConversationService();
     this.supabaseService = new SupabaseService();
+  }
+
+  /**
+   * Obtenir le service de chatbot approprié selon le type de conversation
+   */
+  private getChatBotService(context: ConversationContext): BaseChatBotService {
+    const service = ChatBotServiceFactory.createService(context);
+    console.log(`🤖 Service de chatbot créé: ${service.constructor.name} pour le type: ${context.type}`);
+    return service;
   }
 
   /**
@@ -76,7 +84,18 @@ export class IAController {
         return;
       }
 
+      // Valider le type de conversation
+      if (!ChatBotServiceFactory.isSupportedType(context.type)) {
+        console.error(`❌ Type de conversation non supporté: ${context.type}`);
+        res.status(400).json({
+          error: 'Type de conversation non supporté',
+          message: `Le type '${context.type}' n'est pas supporté. Types supportés: ${ChatBotServiceFactory.getSupportedTypes().join(', ')}`
+        });
+        return;
+      }
+
       console.log(`🎯 Traitement de la tâche IA: ${taskData.type} pour ${taskData.conversationId}`);
+      console.log(`🏷️ Type de conversation: ${context.type}`);
 
       console.log('🔍 Contexte de la conversation:', context);
 
@@ -127,8 +146,11 @@ export class IAController {
 
     console.log(`🤖 Génération d'une réponse IA pour: ${taskData.conversationId}`);
     
+    // Obtenir le service de chatbot approprié
+    const chatBotService = this.getChatBotService(context);
+    
     // Générer la réponse IA
-    const aiResponse = await this.chatBotService['generateAIResponse'](context, taskData.userMessage);
+    const aiResponse = await chatBotService['generateAIResponse'](context, taskData.userMessage);
     
     // Utiliser le messageId d'OpenAI si disponible, sinon créer un messageId local
     const messageId = aiResponse.messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -140,7 +162,7 @@ export class IAController {
     await this.conversationService.addMessage(taskData.conversationId, {
       content: aiResponse.response,
       type: 'bot',
-      metadata: { source: 'ai', model: this.chatBotService.getAIModel(), messageId: messageId }
+      metadata: { source: 'ai', model: chatBotService.getAIModel(), messageId: messageId }
     }, context);
 
     // Mettre à jour l'entrée ai_response pré-créée
@@ -149,7 +171,7 @@ export class IAController {
         response_text: aiResponse.response,
         metadata: { 
           source: 'ai', 
-          model: this.chatBotService.getAIModel(),
+          model: chatBotService.getAIModel(),
           messageId: messageId,
           status: 'completed'
         }
@@ -173,7 +195,10 @@ export class IAController {
   private async processGenerateSummary(taskData: IATaskRequest, context: ConversationContext): Promise<any> {
     console.log(`📝 Génération d'un résumé IA pour: ${taskData.conversationId}`);
     
-    const summary = await this.chatBotService['generateConversationSummary'](context);
+    // Obtenir le service de chatbot approprié
+    const chatBotService = this.getChatBotService(context);
+    
+    const summary = await chatBotService['generateConversationSummary'](context);
     
     // Sauvegarder le résumé dans la table appropriée selon le contexte
     try {
@@ -216,7 +241,7 @@ export class IAController {
           response_text: JSON.stringify(responseData),
           metadata: { 
             source: 'ai', 
-            model: this.chatBotService.getAIModel(), 
+            model: chatBotService.getAIModel(), 
             type: 'summary',
             status: 'completed'
           }
@@ -244,7 +269,10 @@ export class IAController {
   private async processGenerateFirstResponse(taskData: IATaskRequest, context: ConversationContext): Promise<any> {
     console.log(`👋 Génération d'une première réponse IA pour: ${taskData.conversationId}`);
     
-    const firstResponseResult = await this.chatBotService['generateFirstResponse'](context);
+    // Obtenir le service de chatbot approprié
+    const chatBotService = this.getChatBotService(context);
+    
+    const firstResponseResult = await chatBotService['generateFirstResponse'](context);
     
     context.metadata = { ...context.metadata, previousCallId: firstResponseResult.messageId, previousResponse: firstResponseResult.response };
 
@@ -252,7 +280,7 @@ export class IAController {
     await this.conversationService.addMessage(taskData.conversationId, {
       content: firstResponseResult.response,
       type: 'bot',
-      metadata: { source: 'ai', model: this.chatBotService.getAIModel(), type: 'first_response', messageId: firstResponseResult.messageId }
+      metadata: { source: 'ai', model: chatBotService.getAIModel(), type: 'first_response', messageId: firstResponseResult.messageId }
     }, context);
 
     // Mettre à jour l'entrée ai_response pré-créée
@@ -261,7 +289,7 @@ export class IAController {
         response_text: firstResponseResult.response,
         metadata: { 
           source: 'ai', 
-          model: this.chatBotService.getAIModel(), 
+          model: chatBotService.getAIModel(), 
           type: 'first_response', 
           messageId: firstResponseResult.messageId,
           status: 'completed'

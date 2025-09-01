@@ -1,12 +1,10 @@
 export interface AIRule {
   id: string;
-  type: 'bilan' | 'activity';
   name: string;
   description: string;
+  type: 'activity' | 'recommandation' | 'bilan';
   priority: number;
   isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface ActivityData {
@@ -14,42 +12,51 @@ export interface ActivityData {
   title: string;
   shortDescription?: string;
   longDescription?: string;
-  type?: string;
-  category?: string;
   selectedKeywords?: string[];
   benefits?: string[];
   typicalSituations?: string;
   practice?: {
-    id: string;
     title: string;
     shortDescription?: string;
     longDescription?: string;
-    categoryId?: string;
-    familyId?: string;
     categoryData?: {
-      id: string;
       name: string;
       description?: string;
     };
     familyData?: {
-      id: string;
       name: string;
       description?: string;
     };
   };
 }
 
+export interface BilanData {
+  confortPhysique: number;
+  equilibreEmotionnel: number;
+  qualiteSommeil: number;
+  niveauEnergie: number;
+  douleurs?: string;
+  notesPersonnelles?: string;
+}
+
 export interface ConversationContext {
   id: string;
   userId: string;
-  type: 'bilan' | 'activity';
+  type: 'bilan' | 'activity' | 'recommendation';
   startTime: string;
   lastActivity: string;
-  messages: ChatMessage[];
+  messages: Array<{
+    id: string;
+    content: string;
+    type: 'user' | 'bot';
+    timestamp: string;
+    metadata?: Record<string, any>;
+  }>;
   metadata: Record<string, any>;
-  status: 'active' | 'completed' | 'expired';
+  status: 'active' | 'completed' | 'archived';
   aiRules?: AIRule[];
   activityData?: ActivityData;
+  bilanData?: BilanData;
 }
 
 export interface ChatMessage {
@@ -63,13 +70,9 @@ export interface ChatMessage {
 export interface StartConversationRequest {
   conversationId: string;
   userId: string;
-  type: 'bilan' | 'activity';
-  initialContext?: {
-    aiRules?: AIRule[];
-    activityData?: ActivityData;
-    [key: string]: any;
-  };
-  aiResponseId?: string; // ID de l'entrée ai_response pré-créée
+  type: 'bilan' | 'activity' | 'recommendation';
+  initialContext?: Partial<ConversationContext>;
+  aiResponseId?: string;
 }
 
 export interface StartConversationResponse {
@@ -84,7 +87,7 @@ export interface AddMessageRequest {
   content: string;
   type: 'user' | 'bot';
   metadata?: Record<string, any>;
-  aiResponseId?: string; // ID de l'entrée ai_response pré-créée
+  aiResponseId?: string;
 }
 
 export interface AddMessageResponse {
@@ -132,4 +135,22 @@ export interface ActivitySummaryOutput {
   selectedKeywords: string[];
   benefits: string[];
   typicalSituations: string;
+}
+
+// Interface pour la description des outils OpenAI
+export interface OpenAITool {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: Record<string, any>;
+      required?: string[];
+    };
+  };
+}
+
+export interface OpenAIToolsDescription {
+  tools: OpenAITool[];
 }
