@@ -3,9 +3,132 @@ import { ConversationContext, OpenAIToolsDescription } from '../types/conversati
 
 export class RecommendationChatBotService extends BaseChatBotService {
   
+  private analyzeBilanScores(lastBilan: any): {
+    availableScores: string[];
+    missingScores: string[];
+    lowScores: string[];
+    priorityAreas: string[];
+  } {
+    const availableScores: string[] = [];
+    const missingScores: string[] = [];
+    const lowScores: string[] = [];
+    const priorityAreas: string[] = [];
+
+    // Analyser les scores principaux
+    const principalScores = [
+      { key: 'niveauEnergie', label: 'niveau d\'énergie', score: lastBilan.scores.principaux.niveauEnergie },
+      { key: 'qualiteSommeil', label: 'qualité du sommeil', score: lastBilan.scores.principaux.qualiteSommeil },
+      { key: 'confortPhysique', label: 'confort physique', score: lastBilan.scores.principaux.confortPhysique },
+      { key: 'equilibreEmotionnel', label: 'équilibre émotionnel', score: lastBilan.scores.principaux.equilibreEmotionnel }
+    ];
+
+    principalScores.forEach(({ label, score }) => {
+      if (score === -1) {
+        missingScores.push(label);
+      } else {
+        availableScores.push(label);
+        if (score <= 4) {
+          lowScores.push(label);
+          priorityAreas.push(label);
+        }
+      }
+    });
+
+    // Analyser les scores secondaires
+    const secondaryScores = [
+      { key: 'scorePeau', label: 'score peau', score: lastBilan.scores.secondaires.scorePeau },
+      { key: 'scoreConcentration', label: 'score concentration', score: lastBilan.scores.secondaires.scoreConcentration },
+      { key: 'scoreMemoire', label: 'score mémoire', score: lastBilan.scores.secondaires.scoreMemoire },
+      { key: 'scoreCheveux', label: 'score cheveux', score: lastBilan.scores.secondaires.scoreCheveux },
+      { key: 'scoreOngles', label: 'score ongles', score: lastBilan.scores.secondaires.scoreOngles },
+      { key: 'scoreDigestion', label: 'score digestion', score: lastBilan.scores.secondaires.scoreDigestion }
+    ];
+
+    secondaryScores.forEach(({ label, score }) => {
+      if (score === -1) {
+        missingScores.push(label);
+      } else {
+        availableScores.push(label);
+        if (score <= 4) {
+          lowScores.push(label);
+          priorityAreas.push(label);
+        }
+      }
+    });
+
+    return {
+      availableScores,
+      missingScores,
+      lowScores,
+      priorityAreas
+    };
+  }
+
   protected buildSystemPrompt(context: ConversationContext): string {
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
     Tu es bienveillant et professionnel.`;
+
+    // Ajouter le contexte du dernier bilan si disponible
+    if (context.lastBilan) {
+      basePrompt += `\n\nCONTEXTE DU DERNIER BILAN COMPLET:`;
+      
+      // Fonction helper pour formater les scores
+      const formatScore = (score: number, label: string) => {
+        if (score === -1) {
+          return `- ${label}: Non renseigné`;
+        }
+        return `- ${label}: ${score}/9`;
+      };
+
+      basePrompt += `\n${formatScore(context.lastBilan.scores.principaux.niveauEnergie, 'Niveau d\'énergie')}
+      ${formatScore(context.lastBilan.scores.principaux.qualiteSommeil, 'Qualité du sommeil')}
+      ${formatScore(context.lastBilan.scores.principaux.confortPhysique, 'Confort physique')}
+      ${formatScore(context.lastBilan.scores.principaux.equilibreEmotionnel, 'Équilibre émotionnel')}
+      ${formatScore(context.lastBilan.scores.secondaires.scorePeau, 'Score peau')}
+      ${formatScore(context.lastBilan.scores.secondaires.scoreConcentration, 'Score concentration')}
+      ${formatScore(context.lastBilan.scores.secondaires.scoreMemoire, 'Score mémoire')}
+      ${formatScore(context.lastBilan.scores.secondaires.scoreCheveux, 'Score cheveux')}
+      ${formatScore(context.lastBilan.scores.secondaires.scoreOngles, 'Score ongles')}
+      ${formatScore(context.lastBilan.scores.secondaires.scoreDigestion, 'Score digestion')}`;
+
+      if (context.lastBilan.douleurs) {
+        basePrompt += `\n- Douleurs mentionnées: ${context.lastBilan.douleurs}`;
+      }
+
+      if (context.lastBilan.notesPersonnelles) {
+        basePrompt += `\n- Notes personnelles: ${context.lastBilan.notesPersonnelles}`;
+      }
+
+      if (context.lastBilan.howanaSummary && context.lastBilan.howanaSummary.userProfile) {
+        const profile = context.lastBilan.howanaSummary.userProfile;
+        if (profile.emotionalState) {
+          basePrompt += `\n- État émotionnel précédent: ${profile.emotionalState}`;
+        }
+        if (profile.currentNeeds && profile.currentNeeds.length > 0) {
+          basePrompt += `\n- Besoins précédents: ${profile.currentNeeds.join(', ')}`;
+        }
+        if (profile.preferences && profile.preferences.length > 0) {
+          basePrompt += `\n- Préférences précédentes: ${profile.preferences.join(', ')}`;
+        }
+      }
+
+      // Analyser les scores disponibles et manquants pour guider les recommandations
+      const analysis = this.analyzeBilanScores(context.lastBilan);
+      
+      if (analysis.availableScores.length > 0) {
+        basePrompt += `\n\nScores disponibles: ${analysis.availableScores.join(', ')}. Utilise ces informations pour contextualiser tes recommandations.`;
+      }
+      
+      if (analysis.missingScores.length > 0) {
+        basePrompt += `\n\nInformations manquantes: ${analysis.missingScores.join(', ')}. Pose des questions pour compléter ces informations et mieux comprendre l'utilisateur.`;
+      }
+
+      if (analysis.priorityAreas.length > 0) {
+        basePrompt += `\n\nZones prioritaires d'amélioration: ${analysis.priorityAreas.join(', ')}. Concentre-toi sur ces aspects dans tes recommandations.`;
+      }
+
+      basePrompt += `\n\nUtilise ces informations pour contextualiser tes recommandations et adapter tes suggestions selon l'historique de l'utilisateur.`;
+    }
 
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
@@ -74,21 +197,68 @@ export class RecommendationChatBotService extends BaseChatBotService {
     return basePrompt;
   }
 
-  protected buildFirstUserPrompt(_context: ConversationContext): string {
-    return `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans les recommandations personnalisées.
+  protected buildFirstUserPrompt(context: ConversationContext): string {
+    let prompt = `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans les recommandations personnalisées.
     
-    Indique que tu es là pour l'aider à identifier ses besoins et lui recommander des activités et pratiques adaptées.
-    
-    Commence par un accueil chaleureux et pose une première question engageante pour comprendre ses objectifs et ses besoins.`;
+    Indique que tu es là pour l'aider à identifier ses besoins et lui recommander des activités et pratiques adaptées.`;
+
+    if (context.lastBilan) {
+      const analysis = this.analyzeBilanScores(context.lastBilan);
+      
+      prompt += `\n\nTu as accès à son dernier bilan complet. Utilise ces informations pour:`;
+      
+      if (analysis.availableScores.length > 0) {
+        prompt += `\n- Faire référence à ses scores disponibles (${analysis.availableScores.join(', ')}) de manière bienveillante`;
+        prompt += `\n- Proposer des améliorations ciblées selon ses points faibles`;
+        if (analysis.lowScores.length > 0) {
+          prompt += `\n- Suggérer des activités qui peuvent aider à améliorer ses scores les plus bas (${analysis.lowScores.join(', ')})`;
+        }
+      }
+      
+      if (analysis.missingScores.length > 0) {
+        prompt += `\n- Compléter les informations manquantes (${analysis.missingScores.join(', ')}) en posant des questions ciblées`;
+        prompt += `\n- Aider l'utilisateur à évaluer ces aspects pour un bilan plus complet`;
+      }
+      
+      prompt += `\n- Adapter tes recommandations selon son profil établi`;
+    }
+
+    prompt += `\n\nCommence par un accueil chaleureux et pose une première question engageante pour comprendre ses objectifs et ses besoins actuels.`;
+
+    return prompt;
   }
 
-  protected buildSummarySystemPrompt(_context: ConversationContext): string {
-    return `Tu es un assistant spécialisé dans l'analyse de conversations de recommandation. 
-    Analyse la conversation et génère un résumé structuré qui permettra de comprendre les besoins de l'utilisateur et les recommandations proposées.
-    
-    IMPORTANT: Pour l'état émotionnel et les besoins, analyse-les du point de vue de l'utilisateur en utilisant des formulations comme "Je me sens...", "J'ai besoin de...", "Je ressens...". Cela facilitera le matching sémantique avec les activités et pratiques.
+  protected buildSummarySystemPrompt(context: ConversationContext): string {
+    let prompt = `Tu es un assistant spécialisé dans l'analyse de conversations de recommandation. 
+    Analyse la conversation et génère un résumé structuré qui permettra de comprendre les besoins de l'utilisateur et les recommandations proposées.`;
+
+    if (context.lastBilan) {
+      const analysis = this.analyzeBilanScores(context.lastBilan);
+      
+      prompt += `\n\nCONTEXTE DU BILAN PRÉCÉDENT:
+      Tu as accès au dernier bilan complet de l'utilisateur. Utilise ces informations pour:`;
+      
+      if (analysis.availableScores.length > 0) {
+        prompt += `\n- Comparer l'évolution des besoins et de l'état émotionnel selon les scores disponibles (${analysis.availableScores.join(', ')})`;
+        prompt += `\n- Identifier les améliorations ou détériorations`;
+        if (analysis.lowScores.length > 0) {
+          prompt += `\n- Proposer des activités qui peuvent aider à améliorer ses scores les plus bas (${analysis.lowScores.join(', ')})`;
+        }
+      }
+      
+      if (analysis.missingScores.length > 0) {
+        prompt += `\n- Noter les informations manquantes (${analysis.missingScores.join(', ')}) qui pourraient être utiles pour des recommandations plus précises`;
+        prompt += `\n- Suggérer des questions pour compléter ces informations dans de futures conversations`;
+      }
+      
+      prompt += `\n- Adapter tes recommandations selon l'historique disponible`;
+    }
+
+    prompt += `\n\nIMPORTANT: Pour l'état émotionnel et les besoins, analyse-les du point de vue de l'utilisateur en utilisant des formulations comme "Je me sens...", "J'ai besoin de...", "Je ressens...". Cela facilitera le matching sémantique avec les activités et pratiques.
     
     Note: Les suggestions de réponses courtes (quickReplies) sont optionnelles et servent à faciliter l'interaction utilisateur.`;
+
+    return prompt;
   }
 
   protected getSummaryOutputSchema(_context: ConversationContext): any {

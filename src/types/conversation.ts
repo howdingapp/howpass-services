@@ -1,3 +1,5 @@
+import { BilanComplet } from './bilan';
+
 export interface AIRule {
   id: string;
   name: string;
@@ -57,6 +59,7 @@ export interface ConversationContext {
   aiRules?: AIRule[];
   activityData?: ActivityData;
   bilanData?: BilanData;
+  lastBilan?: BilanComplet;
 }
 
 export interface ChatMessage {

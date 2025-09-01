@@ -66,4 +66,5 @@ export interface VideoInfo {
 }
 
 // Export des types de conversation
+export * from './bilan';
 export * from './conversation'; 
