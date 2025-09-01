@@ -22,6 +22,7 @@ export interface TextQuickReply extends BaseQuickReply {
 export interface PracticeQuickReply extends BaseQuickReply {
   type: 'practice';
   practiceId: string;
+  activityId?: string; // Identifiant de l'activité associée si pertinent
 }
 
 /**
@@ -36,3 +37,24 @@ export interface RecommendationResponseWithTypedQuickReplies {
   response: string;
   quickReplies: QuickReply[];
 }
+
+/**
+ * Exemples d'utilisation des quick replies typées
+ */
+export const QuickReplyExamples = {
+  text: {
+    type: 'text' as const,
+    text: 'Plus de détails'
+  },
+  practice: {
+    type: 'practice' as const,
+    text: 'Découvrir la méditation',
+    practiceId: 'meditation-123'
+  },
+  practiceWithActivity: {
+    type: 'practice' as const,
+    text: 'Participer à la session yoga',
+    practiceId: 'yoga-456',
+    activityId: 'yoga-session-789'
+  }
+};
