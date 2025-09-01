@@ -1,6 +1,5 @@
 import { BaseChatBotService } from './BaseChatBotService';
 import { ConversationContext } from '../types/conversation';
-import { ChatBotOutputSchema } from '../types/chatbot-output';
 
 export class ActivityChatBotService extends BaseChatBotService {
   
