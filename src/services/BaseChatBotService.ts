@@ -258,84 +258,99 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       });
       const messageId = result.id;
 
-      // Récupérer le messageId du nouveau résultat de type "message"
+      // Vérifier si l'IA demande l'exécution d'un outil
+      const toolCalls = result.output.filter(output => output.type === "function_call");
+      
+      if (toolCalls.length > 0) {
+        console.log('🔧 Outils demandés par l\'IA:', toolCalls);
+        
+        // Exécuter chaque outil demandé
+        const toolResults = [];
+        for (const toolCall of toolCalls) {
+          if (toolCall.type === "function_call") {
+            try {
+              // Extraire les arguments de l'appel d'outil
+              let toolArgs = {};
+              if (toolCall.arguments && typeof toolCall.arguments === 'string') {
+                try {
+                  toolArgs = JSON.parse(toolCall.arguments);
+                } catch (parseError) {
+                  console.warn(`⚠️ Erreur de parsing des arguments de l'outil ${toolCall.name}:`, parseError);
+                  toolArgs = {};
+                }
+              }
+              
+              const toolResult = await this.callTool(toolCall.name, toolArgs, context);
+              toolResults.push({
+                tool_call_id: toolCall.id || `tool_${Date.now()}_${Math.random()}`,
+                output: toolResult
+              });
+            } catch (toolError) {
+              console.error(`❌ Erreur lors de l'exécution de l'outil ${toolCall.name}:`, toolError);
+              toolResults.push({
+                tool_call_id: toolCall.id || `tool_${Date.now()}_${Math.random()}`,
+                output: `Erreur lors de l'exécution de l'outil: ${toolError instanceof Error ? toolError.message : 'Erreur inconnue'}`
+              });
+            }
+          }
+        }
+
+        // Si des outils ont été exécutés, faire un nouvel appel à l'IA avec les résultats
+        if (toolResults.length > 0) {
+          console.log('🔧 Résultats des outils:', toolResults);
+          
+          // Filtrer les résultats avec des IDs valides et les typer correctement
+          const validToolResults = toolResults
+            .filter(result => result.tool_call_id)
+            .map(result => ({ tool_call_id: result.tool_call_id!, output: result.output }));
+          
+          if (validToolResults.length > 0) {
+            // Générer une nouvelle réponse IA avec les résultats des outils
+            const finalResponse = await this.generateIAResponseAfterTools(messageId, validToolResults, context);
+            
+            console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
+            console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
+
+            return finalResponse as T;
+          }
+        }
+      }
+
+      // Si aucun outil n'a été exécuté, traiter la réponse normale
       const messageOutput = result.output.find(output => output.type === "message");
+      
+      if (!messageOutput) {
+        throw new Error('Aucun message de réponse trouvé dans la sortie de l\'API');
+      }
 
-                    // Vérifier si l'IA demande l'exécution d'un outil
-       const toolCalls = result.output.filter(output => output.type === "function_call");
-       
-       if (toolCalls.length > 0) {
-         console.log('🔧 Outils demandés par l\'IA:', toolCalls);
-         
-         // Exécuter chaque outil demandé
-         const toolResults = [];
-         for (const toolCall of toolCalls) {
-           if (toolCall.type === "function_call") {
-             try {
-               const toolResult = await this.callTool(toolCall.name, toolCall.arguments, context);
-               toolResults.push({
-                 tool_call_id: toolCall.id,
-                 output: toolResult
-               });
-             } catch (toolError) {
-               console.error(`❌ Erreur lors de l'exécution de l'outil ${toolCall.name}:`, toolError);
-               toolResults.push({
-                 tool_call_id: toolCall.id,
-                 output: `Erreur lors de l'exécution de l'outil: ${toolError instanceof Error ? toolError.message : 'Erreur inconnue'}`
-               });
-             }
-           }
-         }
-
-         // Si des outils ont été exécutés, faire un nouvel appel à l'IA avec les résultats
-         if (toolResults.length > 0) {
-           console.log('🔧 Résultats des outils:', toolResults);
-           
-           // Filtrer les résultats avec des IDs valides et les typer correctement
-           const validToolResults = toolResults
-             .filter(result => result.tool_call_id)
-             .map(result => ({ tool_call_id: result.tool_call_id!, output: result.output }));
-           
-           if (validToolResults.length > 0) {
-             // Générer une nouvelle réponse IA avec les résultats des outils
-             const finalResponse = await this.generateIAResponseAfterTools(messageId, validToolResults, context);
-             
-             console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
-             console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
-
-             return finalResponse as T;
-           }
-         }
-     }
-
-        // Extraire le texte de la réponse seulement s'il n'y a pas eu d'outils à exécuter
-        let resultText = "Je n'ai pas pu générer de réponse.";
-        if (messageOutput?.content?.[0]) {
-          const content = messageOutput.content[0];
-          if ('text' in content) {
-            resultText = content.text;
-          }
+      // Extraire le texte de la réponse
+      let resultText = "Je n'ai pas pu générer de réponse.";
+      if (messageOutput?.content?.[0]) {
+        const content = messageOutput.content[0];
+        if ('text' in content) {
+          resultText = content.text;
         }
+      }
 
-        if (!resultText || resultText === "Je n'ai pas pu générer de réponse.") {
-          throw new Error('Aucune réponse générée par l\'API responses');
-        }
+      if (!resultText || resultText === "Je n'ai pas pu générer de réponse.") {
+        throw new Error('Aucune réponse générée par l\'API responses');
+      }
 
-        // Parser le JSON de la réponse (contient forcément le champ response)
-        let parsedResponse: any;
-        try {
-          parsedResponse = JSON.parse(resultText);
-          if (!parsedResponse.response) {
-            throw new Error('La réponse JSON ne contient pas le champ "response" requis');
-          }
-        } catch (parseError) {
-          throw new Error(`Erreur de parsing JSON de la réponse IA: ${parseError instanceof Error ? parseError.message : 'Format JSON invalide'}`);
+      // Parser le JSON de la réponse (contient forcément le champ response)
+      let parsedResponse: any;
+      try {
+        parsedResponse = JSON.parse(resultText);
+        if (!parsedResponse.response) {
+          throw new Error('La réponse JSON ne contient pas le champ "response" requis');
         }
+      } catch (parseError) {
+        throw new Error(`Erreur de parsing JSON de la réponse IA: ${parseError instanceof Error ? parseError.message : 'Format JSON invalide'}`);
+      }
 
       console.log('🔍 Réponse IA via API responses:', parsedResponse);
       console.log('🔍 OutputID OpenAI:', messageId);
 
-       // Retourner la réponse parsée avec le messageId
+      // Retourner la réponse parsée avec le messageId
       return {
         ...parsedResponse,
         messageId
