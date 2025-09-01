@@ -1,5 +1,7 @@
 import { BaseChatBotService } from './BaseChatBotService';
 import { ConversationContext, OpenAIToolsDescription } from '../types/conversation';
+import { SupabaseService } from '../services/SupabaseService';
+import { QuickReply, TextQuickReply, PracticeQuickReply } from '../types/quick-replies';
 import { 
   ChatBotOutputSchema, 
   OpenAIJsonSchema,
@@ -367,9 +369,46 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             quickReplies: {
               type: "array",
               items: {
-                type: "string"
+                oneOf: [
+                  {
+                    type: "object",
+                    properties: {
+                      type: {
+                        type: "string",
+                        enum: ["text"],
+                        description: "Type de quick reply"
+                      },
+                      text: {
+                        type: "string",
+                        description: "Texte de la suggestion (max 5 mots)"
+                      }
+                    },
+                    required: ["type", "text"],
+                    additionalProperties: false
+                  },
+                  {
+                    type: "object",
+                    properties: {
+                      type: {
+                        type: "string",
+                        enum: ["practice"],
+                        description: "Type de quick reply"
+                      },
+                      text: {
+                        type: "string",
+                        description: "Texte de la suggestion (max 5 mots)"
+                      },
+                      practiceId: {
+                        type: "string",
+                        description: "Identifiant de la pratique recommandée"
+                      }
+                    },
+                    required: ["type", "text", "practiceId"],
+                    additionalProperties: false
+                  }
+                ]
               },
-              description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur",
+              description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice' avec redirection vers une pratique.",
               maxItems: 4,
               minItems: 1
             }
@@ -483,5 +522,73 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         error: 'Erreur lors de la recherche'
       };
     }
+  }
+
+  /**
+   * Méthode utilitaire pour créer des quick replies typées
+   */
+  private createQuickReplies(
+    textReplies: string[] = [],
+    practiceReplies: Array<{ text: string; practiceId: string }> = []
+  ): QuickReply[] {
+    const quickReplies: QuickReply[] = [];
+    
+    // Ajouter les quick replies de type texte
+    textReplies.forEach(text => {
+      if (text.length <= 25) { // Max 5 mots environ
+        quickReplies.push({
+          type: 'text',
+          text: text
+        });
+      }
+    });
+    
+    // Ajouter les quick replies de type pratique
+    practiceReplies.forEach(({ text, practiceId }) => {
+      if (text.length <= 25) { // Max 5 mots environ
+        quickReplies.push({
+          type: 'practice',
+          text: text,
+          practiceId: practiceId
+        });
+      }
+    });
+    
+    // Limiter à 4 quick replies maximum
+    return quickReplies.slice(0, 4);
+  }
+
+  /**
+   * Exemple d'utilisation dans le contexte d'une recherche d'activités
+   */
+  private async generateQuickRepliesFromSearchResults(
+    searchResults: any,
+    baseTextReplies: string[] = []
+  ): Promise<QuickReply[]> {
+    const practiceReplies: Array<{ text: string; practiceId: string }> = [];
+    
+    // Si des pratiques ont été trouvées, créer des quick replies de redirection
+    if (searchResults.results && searchResults.results.length > 0) {
+      searchResults.results.slice(0, 2).forEach((result: any) => {
+        if (result.id && result.title) {
+          practiceReplies.push({
+            text: `Découvrir ${result.title}`,
+            practiceId: result.id
+          });
+        }
+      });
+    }
+    
+    // Ajouter des quick replies de texte par défaut
+    const defaultTextReplies = [
+      'Plus de détails',
+      'Autres suggestions',
+      'Retour au menu'
+    ];
+    
+    return this.createQuickReplies(
+      [...baseTextReplies, ...defaultTextReplies],
+      practiceReplies
+    );
   }
 }
