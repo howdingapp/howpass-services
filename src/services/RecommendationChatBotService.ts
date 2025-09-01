@@ -367,48 +367,28 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             quickReplies: {
               type: "array",
               items: {
-                oneOf: [
-                  {
-                    type: "object",
-                    properties: {
-                      type: {
-                        type: "string",
-                        enum: ["text"],
-                        description: "Type de quick reply"
-                      },
-                      text: {
-                        type: "string",
-                        description: "Texte de la suggestion (max 5 mots)"
-                      }
-                    },
-                    required: ["type", "text"],
-                    additionalProperties: false
+                type: "object",
+                properties: {
+                  type: {
+                    type: "string",
+                    enum: ["text", "practice"],
+                    description: "Type de quick reply: 'text' pour une réponse simple, 'practice' pour une redirection vers une pratique"
                   },
-                  {
-                    type: "object",
-                    properties: {
-                      type: {
-                        type: "string",
-                        enum: ["practice"],
-                        description: "Type de quick reply"
-                      },
-                      text: {
-                        type: "string",
-                        description: "Texte de la suggestion (max 5 mots)"
-                      },
-                      practiceId: {
-                        type: "string",
-                        description: "Identifiant de la pratique recommandée"
-                      },
-                      activityId: {
-                        type: "string",
-                        description: "Identifiant de l'activité associée si pertinent (optionnel)"
-                      }
-                    },
-                    required: ["type", "text", "practiceId"],
-                    additionalProperties: false
+                  text: {
+                    type: "string",
+                    description: "Texte de la suggestion (max 5 mots)"
+                  },
+                  practiceId: {
+                    type: "string",
+                    description: "Identifiant de la pratique recommandée (optionnel, utilisé si type='practice')"
+                  },
+                  activityId: {
+                    type: "string",
+                    description: "Identifiant de l'activité associée si pertinent (optionnel)"
                   }
-                ]
+                },
+                required: ["type", "text"],
+                additionalProperties: false
               },
               description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice' avec redirection vers une pratique.",
               maxItems: 4,
