@@ -49,7 +49,7 @@ export class ConversationController {
         return;
       }
 
-      if (!['bilan', 'activity'].includes(request.type)) {
+      if (!['bilan', 'activity', 'recommandation'].includes(request.type)) {
         console.log('❌ [START_CONVERSATION] Type invalide:', { type: request.type });
         res.status(400).json({
           success: false,
