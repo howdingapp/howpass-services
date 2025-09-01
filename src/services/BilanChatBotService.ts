@@ -63,10 +63,10 @@ export class BilanChatBotService extends RecommendationChatBotService {
     // Ajouter les informations du bilan si disponibles
     if (context.bilanData) {
       basePrompt += `\n\nINFORMATIONS DU BILAN DISPONIBLES:
-      - Confort physique: ${context.bilanData.confortPhysique}/9
-      - Équilibre émotionnel: ${context.bilanData.equilibreEmotionnel}/9
-      - Qualité du sommeil: ${context.bilanData.qualiteSommeil}/9
-      - Niveau d'énergie: ${context.bilanData.niveauEnergie}/9
+      - Confort physique: ${context.bilanData.scores.principaux.confortPhysique}/9
+      - Équilibre émotionnel: ${context.bilanData.scores.principaux.equilibreEmotionnel}/9
+      - Qualité du sommeil: ${context.bilanData.scores.principaux.qualiteSommeil}/9
+      - Niveau d'énergie: ${context.bilanData.scores.principaux.niveauEnergie}/9
       ${context.bilanData.douleurs ? `- Douleurs: ${context.bilanData.douleurs}` : ''}
       ${context.bilanData.notesPersonnelles ? `- Notes personnelles: ${context.bilanData.notesPersonnelles}` : ''}
       

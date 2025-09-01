@@ -41,8 +41,14 @@ export class ConversationService {
       messages: [],
       metadata: request.initialContext || {},
       status: 'active',
+      // Ajouter toutes les propriétés du contexte initial si elles existent
       ...(request.initialContext?.aiRules && { aiRules: request.initialContext.aiRules }),
-      ...(request.initialContext?.activityData && { activityData: request.initialContext.activityData })
+      ...(request.initialContext?.activityData && { activityData: request.initialContext.activityData }),
+      ...(request.initialContext?.bilanData && { bilanData: request.initialContext.bilanData }),
+      ...(request.initialContext?.lastBilan && { lastBilan: request.initialContext.lastBilan }),
+      ...(request.initialContext?.practicienData && { practicienData: request.initialContext.practicienData }),
+      ...(request.initialContext?.isEditing !== undefined && { isEditing: request.initialContext.isEditing }),
+      ...(request.initialContext?.userData && { userData: request.initialContext.userData })
     };
 
     console.log('🔍 Conversation context:', context);

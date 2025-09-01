@@ -18,14 +18,17 @@ export interface ActivityData {
   benefits?: string[];
   typicalSituations?: string;
   practice?: {
+    id: string;
     title: string;
     shortDescription?: string;
     longDescription?: string;
     categoryData?: {
+      id: string;
       name: string;
       description?: string;
     };
     familyData?: {
+      id: string;
       name: string;
       description?: string;
     };
@@ -33,12 +36,28 @@ export interface ActivityData {
 }
 
 export interface BilanData {
-  confortPhysique: number;
-  equilibreEmotionnel: number;
-  qualiteSommeil: number;
-  niveauEnergie: number;
+  id: string;
+  scores: {
+    principaux: {
+      confortPhysique: number;
+      equilibreEmotionnel: number;
+      qualiteSommeil: number;
+      niveauEnergie: number;
+    };
+    secondaires: {
+      scorePeau: number;
+      scoreConcentration: number;
+      scoreMemoire: number;
+      scoreCheveux: number;
+      scoreOngles: number;
+      scoreDigestion: number;
+    };
+  };
   douleurs?: string;
   notesPersonnelles?: string;
+  resumeIa?: string;
+  step: number;
+  status: string;
 }
 
 export interface ConversationContext {
@@ -60,6 +79,17 @@ export interface ConversationContext {
   activityData?: ActivityData;
   bilanData?: BilanData;
   lastBilan?: BilanComplet;
+  // Propriétés ajoutées pour harmoniser avec la webapp
+  practicienData?: {
+    creatorExperience?: string;
+  };
+  isEditing?: boolean;
+  userData?: {
+    firstName?: string;
+    lastName?: string;
+    age?: number;
+    experience?: string;
+  };
 }
 
 export interface ChatMessage {

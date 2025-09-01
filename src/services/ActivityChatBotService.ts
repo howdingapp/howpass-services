@@ -91,8 +91,8 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
       }
       
       // Ajouter les informations du praticien si disponibles
-      if (context.metadata?.['practicienData']) {
-        const practicienData = context.metadata['practicienData'];
+      if (context.practicienData) {
+        const practicienData = context.practicienData;
         if (practicienData.creatorExperience) {
           basePrompt += `\n\nPROFIL DU PRATICIEN:
           - Expérience: ${practicienData.creatorExperience}`;
@@ -100,7 +100,7 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
       }
       
       // Gérer le cas d'édition (session d'amélioration)
-      const isEditing = context.metadata?.['isEditing'];
+      const isEditing = context.isEditing;
       if (isEditing) {
         basePrompt += `\n\n🎯 SESSION D'AMÉLIORATION - INFORMATIONS PRÉEXISTANTES:
         Cette session fait suite à une conversation précédente où tu as aidé à générer des informations.
@@ -157,7 +157,7 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     
     // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
     if (!context.aiRules || !Array.isArray(context.aiRules) || context.aiRules.length === 0) {
-      const isEditing = context.metadata?.['isEditing'];
+      const isEditing = context.isEditing;
       
       if (isEditing) {
         basePrompt += `
@@ -201,7 +201,7 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
 
   protected buildFirstUserPrompt(context: ConversationContext): string {
     if (context.activityData) {
-      const isEditing = context.metadata?.['isEditing'];
+      const isEditing = context.isEditing;
       
       if (isEditing) {
         return `Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts.
