@@ -1,5 +1,9 @@
 import { BaseChatBotService } from './BaseChatBotService';
 import { ConversationContext, OpenAIToolsDescription } from '../types/conversation';
+import { 
+  ChatBotOutputSchema, 
+  OpenAIJsonSchema,
+} from '../types/chatbot-output';
 
 export class RecommendationChatBotService extends BaseChatBotService {
   
@@ -261,7 +265,7 @@ export class RecommendationChatBotService extends BaseChatBotService {
     return prompt;
   }
 
-  protected getSummaryOutputSchema(_context: ConversationContext): any {
+  protected getSummaryOutputSchema(_context: ConversationContext): OpenAIJsonSchema {
     return {
       format: { 
         type: "json_schema",
@@ -338,13 +342,13 @@ export class RecommendationChatBotService extends BaseChatBotService {
     };
   }
 
-  protected getStartConversationOutputSchema(_context: ConversationContext): any | null {
+  protected getStartConversationOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
     // Pas de schéma de sortie spécifique pour startConversation
     // L'IA répond librement selon le prompt
     return null;
   }
 
-  protected getAddMessageOutputSchema(_context: ConversationContext): any | null {
+  protected override getAddMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
     return {
       format: { 
         type: "json_schema",
@@ -378,37 +382,35 @@ export class RecommendationChatBotService extends BaseChatBotService {
       tools: [
         {
           type: 'function',
-          function: {
-            name: 'faq',
-            description: 'Rechercher des informations dans la FAQ pour répondre aux questions de l\'utilisateur',
-            parameters: {
-              type: 'object',
-              properties: {
-                query: {
-                  type: 'string',
-                  description: 'La question ou le sujet à rechercher dans la FAQ'
-                }
-              },
-              required: ['query']
-            }
-          }
+          name: 'faq',
+          description: 'Rechercher des informations dans la FAQ pour répondre aux questions de l\'utilisateur',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'La question ou le sujet à rechercher dans la FAQ'
+              }
+            },
+            required: ['query']
+          },
+          strict: false
         },
         {
           type: 'function',
-          function: {
-            name: 'activities_and_practices',
-            description: 'Rechercher des activités et pratiques pertinentes pour l\'utilisateur',
-            parameters: {
-              type: 'object',
-              properties: {
-                searchTerm: {
-                  type: 'string',
-                  description: 'Description de l\'état émotionnel et des besoins de l\'utilisateur, formulée de son point de vue avec des expressions comme "Je me sens...", "J\'ai besoin de...", "Je voudrais...". Ce format facilite la recherche vectorielle en alignant la formulation des besoins avec celle des descriptions d\'activités.'
-                },
+          name: 'activities_and_practices',
+          description: 'Rechercher des activités et pratiques pertinentes pour l\'utilisateur',
+          parameters: {
+            type: 'object',
+            properties: {
+              searchTerm: {
+                type: 'string',
+                description: 'Description de l\'état émotionnel et des besoins de l\'utilisateur, formulée de son point de vue avec des expressions comme "Je me sens...", "J\'ai besoin de...", "Je voudrais...". Ce format facilite la recherche vectorielle en alignant la formulation des besoins avec celle des descriptions d\'activités.'
               },
-              required: ['searchTerm']
-            }
-          }
+            },
+            required: ['searchTerm']
+          },
+          strict: false
         }
       ]
     };

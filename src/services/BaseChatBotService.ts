@@ -1,6 +1,7 @@
 import { ConversationService } from './ConversationService';
 import { SupabaseService } from './SupabaseService';
 import { ConversationContext, StartConversationRequest, AddMessageRequest, OpenAIToolsDescription } from '../types/conversation';
+import { ChatBotOutputSchema } from '../types/chatbot-output';
 import OpenAI from 'openai';
 
 export abstract class BaseChatBotService {
@@ -253,7 +254,7 @@ export abstract class BaseChatBotService {
           },
         ],
         ...(outputSchema && { text: outputSchema }),
-        ...(toolsDescription && { tools: toolsDescription })
+        ...(toolsDescription && { tools: toolsDescription.tools })
       });
       const messageId = result.id;
 
@@ -479,6 +480,7 @@ export abstract class BaseChatBotService {
           .map(msg => `${msg.type === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`)
           .join('\n');
 
+        const summarySchema = this.getSummaryOutputSchema(context);
         const result = await this.openai.responses.create({
           model: this.AI_MODEL_QUALITY,
           input: [
@@ -496,7 +498,7 @@ export abstract class BaseChatBotService {
               status: "completed",
             },
           ],
-          text: this.getSummaryOutputSchema(context)
+          ...(summarySchema && { text: summarySchema })
         });
 
         const resultText = result.output
@@ -534,17 +536,35 @@ export abstract class BaseChatBotService {
   protected abstract buildSystemPrompt(context: ConversationContext): string;
   protected abstract buildFirstUserPrompt(context: ConversationContext): string;
   protected abstract buildSummarySystemPrompt(context: ConversationContext): string;
-  protected abstract getSummaryOutputSchema(context: ConversationContext): any;
+  protected abstract getSummaryOutputSchema(context: ConversationContext): ChatBotOutputSchema;
   
   /**
    * Schéma de sortie pour startConversation (null si pas de schéma spécifique)
    */
-  protected abstract getStartConversationOutputSchema(context: ConversationContext): any | null;
+  protected abstract getStartConversationOutputSchema(context: ConversationContext): ChatBotOutputSchema;
   
   /**
-   * Schéma de sortie pour addMessage (null si pas de schéma spécifique)
+   * Schéma de sortie pour addMessage (par défaut avec un champ response obligatoire)
    */
-  protected abstract getAddMessageOutputSchema(context: ConversationContext): any | null;
+  protected getAddMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+    return {
+      format: { 
+        type: "json_schema",
+        name: "BaseChatBotResponse",
+        schema: {
+          type: "object",
+          properties: {
+            response: {
+              type: "string",
+              description: "Réponse principale de l'assistant"
+            }
+          },
+          required: ["response"]
+        },
+        strict: true
+      }
+    };
+  }
 
   /**
    * Description des outils disponibles pour l'IA (null si pas d'outils)

@@ -143,15 +143,14 @@ export interface ActivitySummaryOutput {
 // Interface pour la description des outils OpenAI
 export interface OpenAITool {
   type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: {
-      type: 'object';
-      properties: Record<string, any>;
-      required?: string[];
-    };
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, any>;
+    required?: string[];
   };
+  strict: boolean;
 }
 
 export interface OpenAIToolsDescription {

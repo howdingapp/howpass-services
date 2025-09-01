@@ -67,4 +67,5 @@ export interface VideoInfo {
 
 // Export des types de conversation
 export * from './bilan';
-export * from './conversation'; 
+export * from './conversation';
+export * from './chatbot-output'; 
