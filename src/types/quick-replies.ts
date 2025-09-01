@@ -7,6 +7,8 @@
  */
 export interface BaseQuickReply {
   text: string;
+  practiceId: string | null; // Toujours présent mais peut être null
+  activityId: string | null; // Toujours présent mais peut être null
 }
 
 /**
@@ -14,6 +16,8 @@ export interface BaseQuickReply {
  */
 export interface TextQuickReply extends BaseQuickReply {
   type: 'text';
+  practiceId: null; // Doit être null pour les quick replies de type texte
+  activityId: null; // Doit être null pour les quick replies de type texte
 }
 
 /**
@@ -21,8 +25,8 @@ export interface TextQuickReply extends BaseQuickReply {
  */
 export interface PracticeQuickReply extends BaseQuickReply {
   type: 'practice';
-  practiceId: string;
-  activityId?: string; // Identifiant de l'activité associée si pertinent
+  practiceId: string; // Doit être une string pour les quick replies de type pratique
+  activityId: string | null; // Peut être une string ou null
 }
 
 /**
@@ -44,12 +48,15 @@ export interface RecommendationResponseWithTypedQuickReplies {
 export const QuickReplyExamples = {
   text: {
     type: 'text' as const,
-    text: 'Plus de détails'
+    text: 'Plus de détails',
+    practiceId: null,
+    activityId: null
   },
   practice: {
     type: 'practice' as const,
     text: 'Découvrir la méditation',
-    practiceId: 'meditation-123'
+    practiceId: 'meditation-123',
+    activityId: null
   },
   practiceWithActivity: {
     type: 'practice' as const,
