@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import fs from 'fs-extra';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { EmbeddingService } from './EmbeddingService';
 
 export const VIDEO_BUCKET= "videos";
 export const IMAGE_BUCKET= "images";
@@ -24,6 +25,7 @@ export interface AIResponse {
 
 export class SupabaseService {
   private supabase;
+  private embeddingService: EmbeddingService;
 
   constructor() {
     const url = process.env['SUPABASE_URL'];
@@ -34,6 +36,7 @@ export class SupabaseService {
     }
 
     this.supabase = createClient(url, serviceKey);
+    this.embeddingService = new EmbeddingService();
   }
 
   async download(bucketName: string, bucketPath: string, localPath: string): Promise<void> {
@@ -658,14 +661,17 @@ export class SupabaseService {
     try {
       console.log(`🔍 Recherche vectorielle sur ${table}.${column} pour: "${query}"`);
       
+      // Générer l'embedding pour la requête
+      const queryEmbedding = await this.embeddingService.generateEmbedding(query);
+      
       // Utiliser l'API de recherche vectorielle de Supabase
       const { data, error } = await this.supabase
         .rpc('match_documents', {
-          query_embedding: query, // Ceci devrait être un vecteur, mais pour l'instant on utilise le texte
-          match_threshold: 0.7,
-          match_count: limit,
+          query_embedding: queryEmbedding, // Vecteur d'embedding généré
           table_name: table,
-          column_name: column
+          column_name: column,
+          match_threshold: 0.7,
+          match_count: limit
         });
 
       if (error) {
@@ -690,7 +696,26 @@ export class SupabaseService {
       return data || [];
     } catch (error) {
       console.error(`❌ Erreur inattendue lors de la recherche vectorielle sur ${table}:`, error);
-      return [];
+      
+      // Fallback vers une recherche textuelle en cas d'erreur d'embedding
+      console.log(`🔄 Fallback vers recherche textuelle sur ${table} (erreur d'embedding)`);
+      try {
+        const { data: fallbackData, error: fallbackError } = await this.supabase
+          .from(table)
+          .select('*')
+          .ilike(column, `%${query}%`)
+          .limit(limit);
+
+        if (fallbackError) {
+          console.error(`❌ Erreur lors du fallback sur ${table}:`, fallbackError);
+          return [];
+        }
+
+        return fallbackData || [];
+      } catch (fallbackError) {
+        console.error(`❌ Erreur lors du fallback final sur ${table}:`, fallbackError);
+        return [];
+      }
     }
   }
 
