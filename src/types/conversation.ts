@@ -63,7 +63,7 @@ export interface BilanData {
 export interface ConversationContext {
   id: string;
   userId: string;
-  type: 'bilan' | 'activity' | 'recommendation';
+  type: 'bilan' | 'activity' | 'recommandation';
   startTime: string;
   lastActivity: string;
   messages: Array<{
@@ -103,7 +103,7 @@ export interface ChatMessage {
 export interface StartConversationRequest {
   conversationId: string;
   userId: string;
-  type: 'bilan' | 'activity' | 'recommendation';
+  type: 'bilan' | 'activity' | 'recommandation';
   initialContext?: Partial<ConversationContext>;
   aiResponseId?: string;
 }

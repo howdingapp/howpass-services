@@ -17,7 +17,7 @@ export class ChatBotServiceFactory {
       case 'bilan':
         return new BilanChatBotService();
       
-      case 'recommendation':
+      case 'recommandation':
         return new RecommendationChatBotService();
       
       default:
@@ -28,7 +28,7 @@ export class ChatBotServiceFactory {
   /**
    * Crée une instance du service de chatbot approprié selon le type spécifié
    */
-  static createServiceByType(type: 'activity' | 'bilan' | 'recommendation'): BaseChatBotService {
+  static createServiceByType(type: 'activity' | 'bilan' | 'recommandation'): BaseChatBotService {
     switch (type) {
       case 'activity':
         return new ActivityChatBotService();
@@ -36,7 +36,7 @@ export class ChatBotServiceFactory {
       case 'bilan':
         return new BilanChatBotService();
       
-      case 'recommendation':
+      case 'recommandation':
         return new RecommendationChatBotService();
       
       default:
@@ -48,13 +48,13 @@ export class ChatBotServiceFactory {
    * Vérifie si un type de service est supporté
    */
   static isSupportedType(type: string): boolean {
-    return ['activity', 'bilan', 'recommendation'].includes(type);
+    return ['activity', 'bilan', 'recommandation'].includes(type);
   }
 
   /**
    * Liste tous les types de services supportés
    */
   static getSupportedTypes(): string[] {
-    return ['activity', 'bilan', 'recommendation'];
+    return ['activity', 'bilan', 'recommandation'];
   }
 }
