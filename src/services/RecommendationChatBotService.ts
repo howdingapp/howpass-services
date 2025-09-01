@@ -297,7 +297,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                   description: "Contraintes identifiées, formulées du point de vue de l'utilisateur (ex: 'Je n'ai que 30 minutes', 'Je ne peux pas sortir')"
                 }
               },
-              required: ["emotionalState", "currentNeeds", "preferences", "constraints"]
+              required: ["emotionalState", "currentNeeds", "preferences", "constraints"],
+              additionalProperties: false
             },
             recommendations: {
               type: "array",
@@ -326,7 +327,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     description: "Bénéfices attendus"
                   }
                 },
-                required: ["recommandedCategories", "recommandedActivities", "relevanceScore", "reasoning", "benefits"]
+                required: ["recommandedCategories", "recommandedActivities", "relevanceScore", "reasoning", "benefits"],
+                additionalProperties: false
               }
             },
             nextSteps: {
@@ -336,6 +338,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             }
           },
           required: ["userProfile", "recommendations", "nextSteps"],
+          additionalProperties: false,
           description: "Résumé structuré des recommandations généré automatiquement"
         },
         strict: true
@@ -371,7 +374,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               minItems: 1
             }
           },
-          required: ["response", "quickReplies"]
+          required: ["response", "quickReplies"],
+          additionalProperties: false
         },
         strict: true
       }
