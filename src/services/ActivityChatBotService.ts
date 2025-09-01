@@ -1,5 +1,6 @@
 import { BaseChatBotService } from './BaseChatBotService';
 import { ConversationContext } from '../types/conversation';
+import { ChatBotOutputSchema } from '../types/chatbot-output';
 
 export class ActivityChatBotService extends BaseChatBotService {
   
@@ -289,9 +290,6 @@ export class ActivityChatBotService extends BaseChatBotService {
     return null;
   }
 
-  protected getAddMessageOutputSchema(_context: ConversationContext): any | null {
-    return null;
-  }
 
   protected getToolsDescription(_context: ConversationContext): any | null {
     return null;
