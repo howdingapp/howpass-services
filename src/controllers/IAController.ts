@@ -168,7 +168,7 @@ export class IAController {
     // Mettre à jour l'entrée ai_response pré-créée
     if (taskData.aiResponseId) {
       await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
-        response_text: aiResponse.response,
+        response_text: JSON.stringify(aiResponse),
         metadata: { 
           source: 'ai', 
           model: chatBotService.getAIModel(),
@@ -286,7 +286,7 @@ export class IAController {
     // Mettre à jour l'entrée ai_response pré-créée
     if (taskData.aiResponseId) {
       await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
-        response_text: firstResponseResult.response,
+        response_text: JSON.stringify(firstResponseResult),
         metadata: { 
           source: 'ai', 
           model: chatBotService.getAIModel(), 
