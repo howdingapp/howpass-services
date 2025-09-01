@@ -604,7 +604,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
               description: "Réponse principale de l'assistant"
             }
           },
-          required: ["response"]
+          required: ["response"],
+          additionalProperties: false
         },
         strict: true
       }
