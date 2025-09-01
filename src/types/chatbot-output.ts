@@ -74,3 +74,20 @@ export type OpenAIJsonSchema = {
  * Type pour les schémas de sortie optionnels
  */
 export type ChatBotOutputSchema = OpenAIJsonSchema | null;
+
+/**
+ * Type de base pour toutes les réponses IA avec les champs communs
+ */
+export interface IAMessageResponse {
+  messageId: string;
+  response: string;
+}
+
+/**
+ * Type spécifique pour les réponses de RecommendationChatBot
+ */
+export interface RecommendationMessageResponse extends IAMessageResponse {
+  quickReplies: string[];
+}
+
+

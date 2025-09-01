@@ -3,9 +3,10 @@ import { ConversationContext, OpenAIToolsDescription } from '../types/conversati
 import { 
   ChatBotOutputSchema, 
   OpenAIJsonSchema,
+  RecommendationMessageResponse,
 } from '../types/chatbot-output';
 
-export class RecommendationChatBotService extends BaseChatBotService {
+export class RecommendationChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
   
   private analyzeBilanScores(lastBilan: any): {
     availableScores: string[];

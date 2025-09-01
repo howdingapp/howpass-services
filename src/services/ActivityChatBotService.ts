@@ -1,7 +1,8 @@
 import { BaseChatBotService } from './BaseChatBotService';
 import { ConversationContext } from '../types/conversation';
+import { IAMessageResponse } from '../types/chatbot-output';
 
-export class ActivityChatBotService extends BaseChatBotService {
+export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse> {
   
   protected buildSystemPrompt(context: ConversationContext): string {
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 

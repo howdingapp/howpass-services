@@ -160,7 +160,7 @@ export class IAController {
     
     // Ajouter la réponse à la conversation (cela met à jour automatiquement le contexte dans Redis)
     await this.conversationService.addMessage(taskData.conversationId, {
-      content: aiResponse.response,
+      content: JSON.stringify(aiResponse.response),
       type: 'bot',
       metadata: { source: 'ai', model: chatBotService.getAIModel(), messageId: messageId }
     }, context);

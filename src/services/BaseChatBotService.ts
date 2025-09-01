@@ -1,10 +1,10 @@
 import { ConversationService } from './ConversationService';
 import { SupabaseService } from './SupabaseService';
 import { ConversationContext, StartConversationRequest, AddMessageRequest, OpenAIToolsDescription } from '../types/conversation';
-import { ChatBotOutputSchema } from '../types/chatbot-output';
+import { ChatBotOutputSchema, IAMessageResponse } from '../types/chatbot-output';
 import OpenAI from 'openai';
 
-export abstract class BaseChatBotService {
+export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessageResponse> {
   protected conversationService: ConversationService;
   protected supabaseService: SupabaseService;
   protected openai: OpenAI;
@@ -226,7 +226,7 @@ export abstract class BaseChatBotService {
   /**
    * Générer une réponse IA basée sur le contexte de la conversation
    */
-  protected async generateAIResponse(context: ConversationContext, userMessage: string): Promise<{ response: string; messageId: string | undefined }> {
+  protected async generateAIResponse(context: ConversationContext, userMessage: string): Promise<T> {
     try {
       console.log('🔍 Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
       console.log('Dernier message de l\'utilisateur:', userMessage);
@@ -261,73 +261,85 @@ export abstract class BaseChatBotService {
       // Récupérer le messageId du nouveau résultat de type "message"
       const messageOutput = result.output.find(output => output.type === "message");
 
-      // Extraire le texte de la réponse en gérant les types
-      let resultText = "Je n'ai pas pu générer de réponse.";
-      if (messageOutput?.content?.[0]) {
-        const content = messageOutput.content[0];
-        if ('text' in content) {
-          resultText = content.text;
-        }
-      }
+                    // Vérifier si l'IA demande l'exécution d'un outil
+       const toolCalls = result.output.filter(output => output.type === "function_call");
+       
+       if (toolCalls.length > 0) {
+         console.log('🔧 Outils demandés par l\'IA:', toolCalls);
+         
+         // Exécuter chaque outil demandé
+         const toolResults = [];
+         for (const toolCall of toolCalls) {
+           if (toolCall.type === "function_call") {
+             try {
+               const toolResult = await this.callTool(toolCall.name, toolCall.arguments, context);
+               toolResults.push({
+                 tool_call_id: toolCall.id,
+                 output: toolResult
+               });
+             } catch (toolError) {
+               console.error(`❌ Erreur lors de l'exécution de l'outil ${toolCall.name}:`, toolError);
+               toolResults.push({
+                 tool_call_id: toolCall.id,
+                 output: `Erreur lors de l'exécution de l'outil: ${toolError instanceof Error ? toolError.message : 'Erreur inconnue'}`
+               });
+             }
+           }
+         }
 
-      if (!resultText || resultText === "Je n'ai pas pu générer de réponse.") {
-        throw new Error('Aucune réponse générée par l\'API responses');
-      }
+         // Si des outils ont été exécutés, faire un nouvel appel à l'IA avec les résultats
+         if (toolResults.length > 0) {
+           console.log('🔧 Résultats des outils:', toolResults);
+           
+           // Filtrer les résultats avec des IDs valides et les typer correctement
+           const validToolResults = toolResults
+             .filter(result => result.tool_call_id)
+             .map(result => ({ tool_call_id: result.tool_call_id!, output: result.output }));
+           
+           if (validToolResults.length > 0) {
+             // Générer une nouvelle réponse IA avec les résultats des outils
+             const finalResponse = await this.generateIAResponseAfterTools(messageId, validToolResults, context);
+             
+             console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
+             console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
 
-      // Vérifier si l'IA demande l'exécution d'un outil
-      const toolCalls = result.output.filter(output => output.type === "function_call");
-      
-      if (toolCalls.length > 0) {
-        console.log('🔧 Outils demandés par l\'IA:', toolCalls);
-        
-        // Exécuter chaque outil demandé
-        const toolResults = [];
-        for (const toolCall of toolCalls) {
-          if (toolCall.type === "function_call") {
-            try {
-              const toolResult = await this.callTool(toolCall.name, toolCall.arguments, context);
-              toolResults.push({
-                tool_call_id: toolCall.id,
-                output: toolResult
-              });
-            } catch (toolError) {
-              console.error(`❌ Erreur lors de l'exécution de l'outil ${toolCall.name}:`, toolError);
-              toolResults.push({
-                tool_call_id: toolCall.id,
-                output: `Erreur lors de l'exécution de l'outil: ${toolError instanceof Error ? toolError.message : 'Erreur inconnue'}`
-              });
-            }
+             return finalResponse as T;
+           }
+         }
+     }
+
+        // Extraire le texte de la réponse seulement s'il n'y a pas eu d'outils à exécuter
+        let resultText = "Je n'ai pas pu générer de réponse.";
+        if (messageOutput?.content?.[0]) {
+          const content = messageOutput.content[0];
+          if ('text' in content) {
+            resultText = content.text;
           }
         }
 
-        // Si des outils ont été exécutés, faire un nouvel appel à l'IA avec les résultats
-        if (toolResults.length > 0) {
-          console.log('🔧 Résultats des outils:', toolResults);
-          
-          // Filtrer les résultats avec des IDs valides et les typer correctement
-          const validToolResults = toolResults
-            .filter(result => result.tool_call_id)
-            .map(result => ({ tool_call_id: result.tool_call_id!, output: result.output }));
-          
-          if (validToolResults.length > 0) {
-            // Générer une nouvelle réponse IA avec les résultats des outils
-            const finalResponse = await this.generateIAResponseAfterTools(messageId, validToolResults, context);
-            
-            console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
-            console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
-
-            return finalResponse;
-          }
+        if (!resultText || resultText === "Je n'ai pas pu générer de réponse.") {
+          throw new Error('Aucune réponse générée par l\'API responses');
         }
-      }
 
-      console.log('🔍 Réponse IA via API responses:', resultText);
+        // Parser le JSON de la réponse (contient forcément le champ response)
+        let parsedResponse: any;
+        try {
+          parsedResponse = JSON.parse(resultText);
+          if (!parsedResponse.response) {
+            throw new Error('La réponse JSON ne contient pas le champ "response" requis');
+          }
+        } catch (parseError) {
+          throw new Error(`Erreur de parsing JSON de la réponse IA: ${parseError instanceof Error ? parseError.message : 'Format JSON invalide'}`);
+        }
+
+      console.log('🔍 Réponse IA via API responses:', parsedResponse);
       console.log('🔍 OutputID OpenAI:', messageId);
 
-      return { 
-        response: resultText, 
-        messageId 
-      };
+       // Retourner la réponse parsée avec le messageId
+      return {
+        ...parsedResponse,
+        messageId
+      } as T;
 
     } catch (error) {
       console.error('❌ Erreur lors de la génération de la réponse IA:', error);
@@ -338,7 +350,7 @@ export abstract class BaseChatBotService {
   /**
    * Générer une première réponse IA basée sur le contexte de la conversation
    */
-  protected async generateFirstResponse(context: ConversationContext): Promise<{ response: string; messageId: string | undefined }> {
+  protected async generateFirstResponse(context: ConversationContext): Promise<T> {
     try {
       console.log('🔍 Génération de la première réponse IA pour la conversation:', context.id);
 
@@ -348,8 +360,8 @@ export abstract class BaseChatBotService {
       console.log('🔍 System prompt:', systemPrompt);
       console.log('🔍 Génération de la première réponse IA:', userPrompt);
 
-      // Utiliser l'API responses pour la première réponse
-      const outputSchema = this.getStartConversationOutputSchema(context);
+             // Utiliser l'API responses pour la première réponse avec le même schéma que les messages suivants
+       const outputSchema = this.getAddMessageOutputSchema(context);
       
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
@@ -375,28 +387,49 @@ export abstract class BaseChatBotService {
       const messageOutput = result.output.find(output => output.type === "message");
       const messageId = result.id;
       
-      // Extraire le texte de la réponse en gérant les types
-      let response = "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
-      if (messageOutput?.content?.[0]) {
-        const content = messageOutput.content[0];
-        if ('text' in content) {
-          response = content.text;
-        }
-      }
+             // Extraire le texte de la réponse
+       let resultText = "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
+       if (messageOutput?.content?.[0]) {
+         const content = messageOutput.content[0];
+         if ('text' in content) {
+           resultText = content.text;
+         }
+       }
 
-      console.log('🔍 Première réponse IA via API responses:', response);
-      console.log('🔍 MessageID OpenAI:', messageId);
+       // Si un schéma de sortie est défini, parser le JSON
+       if (outputSchema) {
+         try {
+           const parsedResponse = JSON.parse(resultText);
+           if (!parsedResponse.response) {
+             throw new Error('La réponse JSON ne contient pas le champ "response" requis');
+           }
+           
+           console.log('🔍 Première réponse IA via API responses (JSON):', parsedResponse);
+           console.log('🔍 MessageID OpenAI:', messageId);
+           
+           return {
+             ...parsedResponse,
+             messageId
+           } as T;
+         } catch (parseError) {
+           console.warn('⚠️ Erreur de parsing JSON, fallback vers réponse simple:', parseError);
+         }
+       }
 
-      return { 
-        response, 
-        messageId 
-      };
-    } catch (error) {
-      console.error('❌ Erreur lors de la génération de la première réponse:', error);
-      return { 
-        response: "Bonjour ! Je suis Howana, votre assistant personnel. Comment puis-je vous aider aujourd'hui ?",
-        messageId: undefined
-      };
+       // Fallback : réponse simple sans JSON
+       console.log('🔍 Première réponse IA via API responses (simple):', resultText);
+       console.log('🔍 MessageID OpenAI:', messageId);
+
+       return { 
+         response: resultText, 
+         messageId 
+       } as T;
+         } catch (error) {
+       console.error('❌ Erreur lors de la génération de la première réponse:', error);
+       return { 
+         response: "Bonjour ! Je suis Howana, votre assistant personnel. Comment puis-je vous aider aujourd'hui ?",
+         messageId: "error"
+       } as T;
     }
   }
 
@@ -406,8 +439,8 @@ export abstract class BaseChatBotService {
   protected async generateIAResponseAfterTools(
     previousResponseId: string, 
     toolResults: Array<{ tool_call_id: string; output: any }>, 
-    _context: ConversationContext
-  ): Promise<{ response: string; messageId: string | undefined }> {
+    context: ConversationContext
+  ): Promise<T> {
     try {
       console.log('🔧 Génération d\'une réponse IA avec les résultats des outils');
       
@@ -418,7 +451,8 @@ export abstract class BaseChatBotService {
       
       const userMessage = `Voici les résultats des outils que tu as demandés. Utilise ces informations pour répondre à l'utilisateur:\n\n${toolResultsText}`;
       
-      // Faire un nouvel appel à l'IA sans outils
+      // Faire un nouvel appel à l'IA avec le schéma de sortie mais sans outils
+      const outputSchema = this.getAddMessageOutputSchema(context);
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
         previous_response_id: previousResponseId,
@@ -428,30 +462,41 @@ export abstract class BaseChatBotService {
             content: [{ type: "input_text", text: userMessage }],
           },
         ],
-        // Pas de schéma de sortie ni d'outils pour ce second appel
+        ...(outputSchema && { text: outputSchema })
       });
 
       const messageId = result.id;
       const messageOutput = result.output.find(output => output.type === "message");
       
       // Extraire le texte de la réponse
-      let response = "Je n'ai pas pu générer de réponse finale.";
+      let resultText = "Je n'ai pas pu générer de réponse finale.";
       if (messageOutput?.content?.[0]) {
         const content = messageOutput.content[0];
         if ('text' in content) {
-          response = content.text;
+          resultText = content.text;
         }
       }
 
-      if (!response || response === "Je n'ai pas pu générer de réponse finale.") {
+      if (!resultText || resultText === "Je n'ai pas pu générer de réponse finale.") {
         throw new Error('Aucune réponse finale générée par l\'API responses');
       }
 
-      console.log('🔍 Réponse finale IA générée avec succès');
+      // Parser le JSON de la réponse finale (contient forcément le champ response)
+      let parsedResponse: any;
+      try {
+        parsedResponse = JSON.parse(resultText);
+        if (!parsedResponse.response) {
+          throw new Error('La réponse JSON finale ne contient pas le champ "response" requis');
+        }
+      } catch (parseError) {
+        throw new Error(`Erreur de parsing JSON de la réponse finale IA: ${parseError instanceof Error ? parseError.message : 'Format JSON invalide'}`);
+      }
+
+      console.log('🔍 Réponse finale IA générée avec succès:', parsedResponse);
       return { 
-        response, 
-        messageId 
-      };
+        ...parsedResponse,
+        messageId
+      } as T;
 
     } catch (error) {
       console.error('❌ Erreur lors de la génération de la réponse finale IA:', error);
