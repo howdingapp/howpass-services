@@ -65,6 +65,7 @@ export type OpenAIJsonSchema = {
       properties: Record<string, any>;
       required: string[];
       description?: string;
+      additionalProperties: boolean;
     };
     strict: boolean;
   };
