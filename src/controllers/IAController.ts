@@ -200,32 +200,6 @@ export class IAController {
     
     const summary = await chatBotService['generateConversationSummary'](context);
     
-    // Sauvegarder le résumé dans la table appropriée selon le contexte
-    try {
-      if (context.type === 'bilan') {
-        // Extraire l'ID du bilan depuis les métadonnées
-        const bilanId = context.metadata?.['bilanId'] || context.metadata?.['bilan_id'];
-        if (bilanId) {
-          await this.supabaseService.updateBilanAISummary(bilanId, summary);
-          console.log(`✅ Résumé IA sauvegardé dans le bilan: ${bilanId}`);
-        } else {
-          console.warn(`⚠️ ID du bilan non trouvé dans les métadonnées pour la conversation: ${taskData.conversationId}`);
-        }
-      } else if (context.type === 'activity') {
-        // Extraire l'ID de l'activité depuis les métadonnées
-        const activityId = context.metadata?.['activityId'] || context.metadata?.['activity_id'];
-        if (activityId) {
-          await this.supabaseService.updateActivityAISummary(activityId, summary);
-          console.log(`✅ Résumé IA sauvegardé dans l'activité: ${activityId}`);
-        } else {
-          console.warn(`⚠️ ID de l'activité non trouvé dans les métadonnées pour la conversation: ${taskData.conversationId}`);
-        }
-      }
-    } catch (error) {
-      console.error(`❌ Erreur lors de la sauvegarde du résumé IA:`, error);
-      // Continuer malgré l'erreur de sauvegarde
-    }
-    
     // Mettre à jour l'entrée ai_response pré-créée pour notifier le frontend
     if (taskData.aiResponseId) {
       try {
