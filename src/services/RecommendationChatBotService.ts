@@ -387,7 +387,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     description: "Identifiant de l'activité associée si pertinent (optionnel, peut être null)"
                   }
                 },
-                required: ["type", "text", "practiceId"],
+                required: ["type", "text", "practiceId", "activityId"],
                 additionalProperties: false
               },
               description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice' avec redirection vers une pratique.",
