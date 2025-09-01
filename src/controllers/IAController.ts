@@ -278,7 +278,7 @@ export class IAController {
 
     // Ajouter la réponse à la conversation
     await this.conversationService.addMessage(taskData.conversationId, {
-      content: firstResponseResult.response,
+      content: JSON.stringify(firstResponseResult),
       type: 'bot',
       metadata: { source: 'ai', model: chatBotService.getAIModel(), type: 'first_response', messageId: firstResponseResult.messageId }
     }, context);
