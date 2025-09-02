@@ -643,7 +643,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       const faqResults = await this.supabaseService.searchFAQ(query, 2)
       
       return faqResults;
-      
+
     } catch (error) {
       console.error('❌ Erreur lors de la recherche FAQ:', error);
       return {
@@ -698,15 +698,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         if (result.id && result.title) {
           // Distinguer les activités des pratiques grâce au champ 'type' ajouté
           if (result.type === 'activity') {
-            activities.push({
-              id: result.id,
-              title: result.title
-            });
+            activities.push(result);
           } else if (result.type === 'practice') {
-            practices.push({
-              id: result.id,
-              title: result.title
-            });
+            practices.push(result);
           }
         }
       });

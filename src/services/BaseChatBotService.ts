@@ -269,6 +269,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
         const toolResults = [];
         for (const toolCall of toolCalls) {
           if (toolCall.type === "function_call") {
+            console.log("Find tool to call: ", toolCall.id, toolCall.call_id, toolCall.name);
+
             try {
               // Extraire les arguments de l'appel d'outil
               let toolArgs = {};
@@ -282,23 +284,19 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
               }
               
               const toolResult = await this.callTool(toolCall.name, toolArgs, context);
-              // Conserver l'ID original du function_call renvoyé par OpenAI
-              const originalToolCallId = toolCall.call_id;
-              
               // Extraire les activités et pratiques du résultat de l'outil
-              extractedData = this.extractFromToolResult(originalToolCallId || `gen_${Date.now()}`, toolCall.name, toolResult);
+              extractedData = this.extractFromToolResult(toolCall.call_id, toolCall.name, toolResult);
               
               // Stocker les données extraites dans le résultat pour utilisation ultérieure
               toolResults.push({
-                tool_call_id: originalToolCallId,
+                tool_call_id: toolCall.call_id,
                 tool_name: toolCall.name, // Stocker le nom de l'outil pour faciliter l'accès
                 output: toolResult
               });
             } catch (toolError) {
               console.error(`❌ Erreur lors de l'exécution de l'outil ${toolCall.name}:`, toolError);
-              const originalToolCallId = (toolCall as any).id || (toolCall as any).tool_call_id || '';
               toolResults.push({
-                tool_call_id: originalToolCallId,
+                tool_call_id: toolCall.call_id,
                 tool_name: toolCall.name,
                 output: `Erreur lors de l'exécution de l'outil: ${toolError instanceof Error ? toolError.message : 'Erreur inconnue'}`
               });
@@ -314,7 +312,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           const validToolResults = toolResults
             .filter(result => result.tool_call_id)
             .map(result => ({ 
-              tool_call_id: result.tool_call_id!, 
+              tool_call_id: result.tool_call_id, 
               tool_name: result.tool_name,
               output: result.output 
             }));
