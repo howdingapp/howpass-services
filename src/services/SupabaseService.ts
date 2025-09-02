@@ -666,13 +666,13 @@ export class SupabaseService {
       
       // Utiliser l'API de recherche vectorielle de Supabase
       const { data, error } = await this.supabase
-        .rpc('match_documents', {
-          query_embedding: queryEmbedding, // Vecteur d'embedding généré
-          table_name: table,
-          column_name: column,
-          match_threshold: 0.7,
-          match_count: limit
-        });
+        .rpc('match_documents', [
+          queryEmbedding, // Vecteur d'embedding généré
+          table,
+          column,
+          0.7,
+          limit
+        ]);
 
       if (error) {
         console.error(`❌ Erreur lors de la recherche vectorielle sur ${table}:`, error);
