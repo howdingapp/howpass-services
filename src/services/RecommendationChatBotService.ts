@@ -509,7 +509,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               properties: {
                 response: {
                   type: "string",
-                  description: "Réponse principale de l'assistant Howana avec recommandations d'activités/pratiques"
+                  description: "Réponse principale de l'assistant Howana avec recommandations d'activités/pratiques, pas trop de detail si on propose des activités dans les quick answer (teasing)"
                 },
                 quickReplies: {
                   type: "array",
@@ -527,7 +527,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                       },
                       textRedirection: {
                         type: "string",
-                        description: "Texte d'invitation à découvrir une pratique/activité spécifique. Exemples: 'Voir une pratique', 'Découvrir une activité', 'Essayer une pratique', 'Explorer une activité'. Ce texte s'affiche quand l'IA propose une pratique/activité avec un ID valide."
+                        description: "Texte d'invitation à découvrir une pratique/activité spécifique. Exemples: 'Voir une pratique', 'Essayer <activite titre>' 'Découvrir une activté <style d'activité ex: sympas, reposant, ...>', 'Essayer la pratique <nom pratique>', 'Explorer une activité'. Ce texte s'affiche quand l'IA propose une pratique/activité avec un ID valide."
                       },
                       practiceId: {
                         type: ["string", "null"],
