@@ -663,7 +663,14 @@ export class SupabaseService {
       
       // Générer l'embedding pour la requête
       const queryEmbedding = await this.embeddingService.generateEmbedding(query);
-      
+      console.log('Query params for vector search', {
+        query_embedding: queryEmbedding?.slice(0, 10),
+        table_name: table,
+        column_name: column,
+        match_threshold: 0.7,
+        match_count: limit
+      })
+
       // Utiliser l'API de recherche vectorielle de Supabase
       const { data, error } = await this.supabase
         .rpc('match_documents', {
