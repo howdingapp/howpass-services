@@ -319,6 +319,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
               output: result.output 
             }));
           
+            console.log("validToolResults", JSON.stringify(validToolResults))
+
           if (validToolResults.length > 0) {
             // Générer une nouvelle réponse IA avec les résultats des outils
             const finalResponse = await this.generateIAResponseAfterTools(messageId, validToolResults, context);
