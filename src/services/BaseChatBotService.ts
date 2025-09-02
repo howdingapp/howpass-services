@@ -282,23 +282,23 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
               }
               
               const toolResult = await this.callTool(toolCall.name, toolArgs, context);
-              // Créer un ID qui inclut le nom de l'outil pour faciliter l'extraction
-              const toolCallId = `${toolCall.name}_${toolCall.id || Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              // Conserver l'ID original du function_call renvoyé par OpenAI
+              const originalToolCallId = (toolCall as any).id || (toolCall as any).tool_call_id || '';
               
               // Extraire les activités et pratiques du résultat de l'outil
-              extractedData = this.extractFromToolResult(toolCallId, toolCall.name, toolResult);
+              extractedData = this.extractFromToolResult(originalToolCallId || `gen_${Date.now()}`, toolCall.name, toolResult);
               
               // Stocker les données extraites dans le résultat pour utilisation ultérieure
               toolResults.push({
-                tool_call_id: toolCallId,
+                tool_call_id: originalToolCallId,
                 tool_name: toolCall.name, // Stocker le nom de l'outil pour faciliter l'accès
                 output: toolResult
               });
             } catch (toolError) {
               console.error(`❌ Erreur lors de l'exécution de l'outil ${toolCall.name}:`, toolError);
-              const toolCallId = `${toolCall.name}_${toolCall.id || Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              const originalToolCallId = (toolCall as any).id || (toolCall as any).tool_call_id || '';
               toolResults.push({
-                tool_call_id: toolCallId,
+                tool_call_id: originalToolCallId,
                 tool_name: toolCall.name,
                 output: `Erreur lors de l'exécution de l'outil: ${toolError instanceof Error ? toolError.message : 'Erreur inconnue'}`
               });
@@ -476,34 +476,42 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   ): Promise<T> {
     try {
       console.log('🔧 Génération d\'une réponse IA avec les résultats des outils');
-      
-      // Construire le message utilisateur avec les résultats des outils
-      const toolResultsText = toolResults
-        .map(result => `Outil ${result.tool_call_id}: ${JSON.stringify(result.output)}`)
-        .join('\n');
-      
-      const userMessage = `Voici les résultats des outils que tu as demandés. Utilise ces informations pour répondre à l'utilisateur:\n\n${toolResultsText}`;
-      
+
       // Déterminer le schéma de sortie approprié selon l'outil utilisé
-      // Utiliser le nom de l'outil stocké ou extraire depuis l'ID
       const firstToolName = toolResults.length > 0 ? 
         (toolResults[0]?.tool_name || this.extractToolNameFromCallId(toolResults[0]?.tool_call_id || '')) : 
         null;
       const outputSchema = firstToolName ? this.getSchemaByUsedTool(firstToolName, context) : this.getAddMessageOutputSchema(context);
-      
-      console.log(`🔧 Utilisation du schéma pour l'outil: ${firstToolName || 'défaut'}`);
-      
+
+      console.log(`🔧 Soumission des tool_outputs pour: ${firstToolName || 'inconnu'}`);
+
+      // Préparer les tool_outputs dans le format attendu par l'API Responses
+      const toolOutputsPayload = toolResults
+        .filter(r => !!r.tool_call_id)
+        .map(r => ({
+          tool_call_id: r.tool_call_id,
+          output: typeof r.output === 'string' ? r.output : JSON.stringify(r.output)
+        }));
+
+      if (!toolOutputsPayload.length) {
+        throw new Error('Aucun tool_output valide à soumettre');
+      }
+
+      // Construire la liste d'inputs avec les sorties des outils
+      const inputList = toolResults
+        .filter(r => !!r.tool_call_id)
+        .map(r => ({
+          type: "function_call_output",
+          call_id: r.tool_call_id,
+          output: typeof r.output === 'string' ? r.output : JSON.stringify(r.output)
+        }));
+
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
         previous_response_id: previousResponseId,
-        input: [
-          {
-            role: "user",
-            content: [{ type: "input_text", text: userMessage }],
-          },
-        ],
+        input: inputList,
         ...(outputSchema && { text: outputSchema })
-      });
+      } as any);
 
       const messageId = result.id;
       const messageOutput = result.output.find(output => output.type === "message");
