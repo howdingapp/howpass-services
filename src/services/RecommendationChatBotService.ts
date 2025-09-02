@@ -531,11 +531,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                       },
                       practiceId: {
                         type: ["string", "null"],
-                        description: "Identifiant de la pratique recommandée (requis si type='practice', doit être un ID valide d'une pratique retournée par l'outil, peut être null si type='text')"
+                        description: "Identifiant de la pratique recommandée (requis si type='practice', doit être un ID valide d'une pratique retournée par l'outil, peut être null si type!='practice')"
                       },
                       activityId: {
                         type: ["string", "null"],
-                        description: "Identifiant de l'activité recommandée (requis si type='activity', doit être un ID valide d'une acitivté retournée par l'outil, peut être null si type='text')"
+                        description: "Identifiant de l'activité recommandée (requis si type='activity', doit être un ID valide d'une acitivté retournée par l'outil, peut être null si type='activity')"
                       }
                     },
                     required: ["type", "text", "textRedirection","practiceId", "activityId"],
