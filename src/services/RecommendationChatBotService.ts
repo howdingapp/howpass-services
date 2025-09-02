@@ -378,6 +378,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     type: "string",
                     description: "Texte de la suggestion (max 5 mots)"
                   },
+                  textRedirection: {
+                    type: "string",
+                    description: "Texte d'invitation à découvrir une pratique/activité spécifique. Exemples: 'Voir cette pratique', 'Découvrir cette activité', 'Essayer cette pratique', 'Explorer cette activité'. Ce texte s'affiche quand l'IA propose une pratique/activité avec un ID valide."
+                  },
                   practiceId: {
                     type: ["string", "null"],
                     description: "Identifiant de la pratique recommandée (requis si type='practice', peut être null si type='text')"
@@ -387,10 +391,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     description: "Identifiant de l'activité associée si pertinent (optionnel, peut être null)"
                   }
                 },
-                required: ["type", "text", "practiceId", "activityId"],
+                required: ["type", "text", "textRedirection", "practiceId", "activityId"],
                 additionalProperties: false
               },
-              description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice' avec redirection vers une pratique.",
+              description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice' avec redirection vers une pratique. Le champ textRedirection contient le texte d'invitation à découvrir une pratique/activité spécifique.",
               maxItems: 4,
               minItems: 1
             }
@@ -401,6 +405,125 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         strict: true
       }
     };
+  }
+
+  /**
+   * Détermine le schéma de sortie approprié selon l'outil utilisé
+   */
+  protected override getSchemaByUsedTool(toolName: string, context: ConversationContext): ChatBotOutputSchema {
+    switch (toolName) {
+      case 'faq':
+        // Schéma pour les réponses après utilisation de l'outil FAQ
+        // Pas de quickReplies avec des identifiants de pratiques car l'outil FAQ ne retourne pas d'activités/pratiques
+        return {
+          format: { 
+            type: "json_schema",
+            name: "FAQResponse",
+            schema: {
+              type: "object",
+              properties: {
+                response: {
+                  type: "string",
+                  description: "Réponse principale de l'assistant Howana basée sur la FAQ et tes connaissances de spécialisée en recommandations"
+                },
+                quickReplies: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: {
+                        type: "string",
+                        enum: ["text"],
+                        description: "Type de quick reply: uniquement 'text' pour les réponses FAQ"
+                      },
+                      text: {
+                        type: "string",
+                        description: "Texte de la suggestion (max 5 mots)"
+                      },
+                      practiceId: {
+                        type: "null",
+                        description: "Toujours null pour les réponses FAQ"
+                      },
+                      activityId: {
+                        type: "null",
+                        description: "Toujours null pour les réponses FAQ"
+                      }
+                    },
+                    required: ["type", "text", "textRedirection", "practiceId", "activityId"],
+                    additionalProperties: false
+                  },
+                  description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur.",
+                  maxItems: 4,
+                  minItems: 1
+                }
+              },
+              required: ["response", "quickReplies"],
+              additionalProperties: false
+            },
+            strict: true
+          }
+        };
+
+      case 'activities_and_practices':
+        // Schéma pour les réponses après utilisation de l'outil activities_and_practices
+        // Peut inclure des quickReplies avec des identifiants de pratiques valides
+        return {
+          format: { 
+            type: "json_schema",
+            name: "ActivitiesResponse",
+            schema: {
+              type: "object",
+              properties: {
+                response: {
+                  type: "string",
+                  description: "Réponse principale de l'assistant Howana avec recommandations d'activités/pratiques"
+                },
+                quickReplies: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: {
+                        type: "string",
+                        enum: ["text", "practice"],
+                        description: "Type de quick reply: 'text' pour une réponse simple, 'practice' pour une redirection vers une pratique"
+                      },
+                      text: {
+                        type: "string",
+                        description: "Texte de la suggestion (max 5 mots)"
+                      },
+                      textRedirection: {
+                        type: "string",
+                        description: "Texte d'invitation à découvrir une pratique/activité spécifique. Exemples: 'Voir une pratique', 'Découvrir une activité', 'Essayer une pratique', 'Explorer une activité'. Ce texte s'affiche quand l'IA propose une pratique/activité avec un ID valide."
+                      },
+                      practiceId: {
+                        type: ["string", "null"],
+                        description: "Identifiant de la pratique recommandée (requis si type='practice', doit être un ID valide d'une pratique retournée par l'outil, peut être null si type='text')"
+                      },
+                      activityId: {
+                        type: ["string", "null"],
+                        description: "Identifiant de l'activité associée si pertinent (optionnel, doit être un ID valide d'une activité retournée par l'outil, peut être null)"
+                      }
+                    },
+                    required: ["type", "text", "textRedirection","practiceId", "activityId"],
+                    additionalProperties: false
+                  },
+                  description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice' avec redirection vers une pratique. IMPORTANT: Les practiceId et activityId doivent être des identifiants valides retournés par l'outil activities_and_practices. Le champ textRedirection contient le texte d'invitation à découvrir une pratique/activité spécifique.",
+                  maxItems: 4,
+                  minItems: 1
+                }
+              },
+              required: ["response", "quickReplies"],
+              additionalProperties: false
+            },
+            strict: true
+          }
+        };
+
+      default:
+        // Schéma par défaut pour les autres outils ou cas non spécifiés
+        return this.getAddMessageOutputSchema(context);
+    }
   }
 
   protected getToolsDescription(_context: ConversationContext): OpenAIToolsDescription | null {

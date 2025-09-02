@@ -281,14 +281,19 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
               }
               
               const toolResult = await this.callTool(toolCall.name, toolArgs, context);
+              // Créer un ID qui inclut le nom de l'outil pour faciliter l'extraction
+              const toolCallId = `${toolCall.name}_${toolCall.id || Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
               toolResults.push({
-                tool_call_id: toolCall.id || `tool_${Date.now()}_${Math.random()}`,
+                tool_call_id: toolCallId,
+                tool_name: toolCall.name, // Stocker le nom de l'outil pour faciliter l'accès
                 output: toolResult
               });
             } catch (toolError) {
               console.error(`❌ Erreur lors de l'exécution de l'outil ${toolCall.name}:`, toolError);
+              const toolCallId = `${toolCall.name}_${toolCall.id || Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
               toolResults.push({
-                tool_call_id: toolCall.id || `tool_${Date.now()}_${Math.random()}`,
+                tool_call_id: toolCallId,
+                tool_name: toolCall.name,
                 output: `Erreur lors de l'exécution de l'outil: ${toolError instanceof Error ? toolError.message : 'Erreur inconnue'}`
               });
             }
@@ -302,7 +307,11 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           // Filtrer les résultats avec des IDs valides et les typer correctement
           const validToolResults = toolResults
             .filter(result => result.tool_call_id)
-            .map(result => ({ tool_call_id: result.tool_call_id!, output: result.output }));
+            .map(result => ({ 
+              tool_call_id: result.tool_call_id!, 
+              tool_name: result.tool_name,
+              output: result.output 
+            }));
           
           if (validToolResults.length > 0) {
             // Générer une nouvelle réponse IA avec les résultats des outils
@@ -453,7 +462,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    */
   protected async generateIAResponseAfterTools(
     previousResponseId: string, 
-    toolResults: Array<{ tool_call_id: string; output: any }>, 
+    toolResults: Array<{ tool_call_id: string; tool_name?: string; output: any }>, 
     context: ConversationContext
   ): Promise<T> {
     try {
@@ -466,8 +475,15 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       
       const userMessage = `Voici les résultats des outils que tu as demandés. Utilise ces informations pour répondre à l'utilisateur:\n\n${toolResultsText}`;
       
-      // Faire un nouvel appel à l'IA avec le schéma de sortie mais sans outils
-      const outputSchema = this.getAddMessageOutputSchema(context);
+      // Déterminer le schéma de sortie approprié selon l'outil utilisé
+      // Utiliser le nom de l'outil stocké ou extraire depuis l'ID
+      const firstToolName = toolResults.length > 0 ? 
+        (toolResults[0]?.tool_name || this.extractToolNameFromCallId(toolResults[0]?.tool_call_id || '')) : 
+        null;
+      const outputSchema = firstToolName ? this.getSchemaByUsedTool(firstToolName, context) : this.getAddMessageOutputSchema(context);
+      
+      console.log(`🔧 Utilisation du schéma pour l'outil: ${firstToolName || 'défaut'}`);
+      
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
         previous_response_id: previousResponseId,
@@ -628,6 +644,16 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   }
 
   /**
+   * Détermine le schéma de sortie approprié selon l'outil utilisé
+   */
+  protected getSchemaByUsedTool(_toolName: string, context: ConversationContext): ChatBotOutputSchema {
+    // Par défaut, utiliser le schéma de base
+    return this.getAddMessageOutputSchema(context);
+  }
+
+
+
+  /**
    * Description des outils disponibles pour l'IA (null si pas d'outils)
    */
   protected abstract getToolsDescription(context: ConversationContext): OpenAIToolsDescription | null;
@@ -650,5 +676,31 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    */
   getAIModel(): string {
     return this.AI_MODEL;
+  }
+
+  /**
+   * Extrait le nom de l'outil depuis un tool_call_id
+   * Cette méthode peut être surchargée dans les classes enfants si nécessaire
+   */
+  protected extractToolNameFromCallId(toolCallId: string): string | null {
+    try {
+      // L'ID est formaté comme: "toolName_originalId_randomString"
+      // On extrait la première partie avant le premier underscore
+      const parts = toolCallId.split('_');
+      if (parts.length >= 2) {
+        const toolName = parts[0];
+        if (toolName) {
+          console.log(`🔧 Nom de l'outil extrait depuis l'ID: ${toolName}`);
+          return toolName;
+        }
+      }
+      
+      // Si le format n'est pas reconnu, retourner null
+      console.warn('⚠️ Format d\'ID d\'outil non reconnu:', toolCallId);
+      return null;
+    } catch (error) {
+      console.warn('⚠️ Impossible d\'extraire le nom de l\'outil depuis l\'ID:', toolCallId, error);
+      return null;
+    }
   }
 }

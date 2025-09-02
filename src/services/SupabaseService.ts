@@ -693,6 +693,8 @@ export class SupabaseService {
         return fallbackData || [];
       }
 
+      console.log('🔍 Résultats de la recherche vectorielle:', data);
+
       return data || [];
     } catch (error) {
       console.error(`❌ Erreur inattendue lors de la recherche vectorielle sur ${table}:`, error);
