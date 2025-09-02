@@ -666,17 +666,35 @@ export class SupabaseService {
       console.log('Query params for vector search', {
         query_embedding: queryEmbedding?.slice(0, 10),
         table_name: table,
-        column_name: column,
         match_threshold: 0.7,
         match_count: limit
       })
 
-      // Utiliser l'API de recherche vectorielle de Supabase
+      // Utiliser la fonction spécifique selon la table
+      let functionName: string;
+      switch (table) {
+        case 'practices':
+          functionName = 'match_practices';
+          break;
+        case 'faq':
+          functionName = 'match_faq';
+          break;
+        case 'user_data':
+          functionName = 'match_user_data';
+          break;
+        case 'activities':
+          functionName = 'match_activities';
+          break;
+        case 'categories':
+          functionName = 'match_categories';
+          break;
+        default:
+          throw new Error(`Table ${table} non supportée pour la recherche vectorielle`);
+      }
+
       const { data, error } = await this.supabase
-        .rpc('match_documents', {
-          query_embedding: queryEmbedding, // Vecteur d'embedding généré
-          table_name: table,
-          column_name: column,
+        .rpc(functionName, {
+          query_embedding: queryEmbedding,
           match_threshold: 0.7,
           match_count: limit
         });
