@@ -666,7 +666,7 @@ export class SupabaseService {
       console.log('Query params for vector search', {
         query_embedding: queryEmbedding?.slice(0, 10),
         table_name: table,
-        match_threshold: 0.7,
+        match_threshold: 0,
         match_count: limit
       })
 
@@ -695,7 +695,7 @@ export class SupabaseService {
       const { data, error } = await this.supabase
         .rpc(functionName, {
           query_embedding: queryEmbedding,
-          match_threshold: 0.7,
+          match_threshold: 0.15,
           match_count: limit
         });
 
@@ -743,6 +743,43 @@ export class SupabaseService {
         console.error(`❌ Erreur lors du fallback final sur ${table}:`, fallbackError);
         return [];
       }
+    }
+  }
+
+  /**
+   * Diagnostiquer les données vectorielles
+   */
+  async diagnoseVectorData(): Promise<{
+    success: boolean;
+    data?: any[];
+    error?: string;
+  }> {
+    try {
+      console.log('🔍 Diagnostic des données vectorielles');
+
+      const { data, error } = await this.supabase
+        .rpc('diagnose_vector_data');
+
+      if (error) {
+        console.error('❌ Erreur lors du diagnostic des données vectorielles:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log('✅ Diagnostic des données vectorielles terminé:', data);
+      return {
+        success: true,
+        data: data || []
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors du diagnostic des données vectorielles:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
     }
   }
 
