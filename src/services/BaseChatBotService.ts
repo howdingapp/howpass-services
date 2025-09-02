@@ -392,7 +392,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       console.log('🔍 Génération de la première réponse IA:', userPrompt);
 
              // Utiliser l'API responses pour la première réponse avec le même schéma que les messages suivants
-       const outputSchema = this.getAddMessageOutputSchema(context);
+       const outputSchema = this.getFirstMessageOutputSchema(context);
       
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
@@ -668,6 +668,30 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    */
   protected abstract getStartConversationOutputSchema(context: ConversationContext): ChatBotOutputSchema;
   
+  /**
+   * Schéma de sortie pour addMessage (par défaut avec un champ response obligatoire)
+   */
+  protected getFirstMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+    return {
+      format: { 
+        type: "json_schema",
+        name: "BaseChatBotResponse",
+        schema: {
+          type: "object",
+          properties: {
+            response: {
+              type: "string",
+              description: "Réponse principale de l'assistant"
+            }
+          },
+          required: ["response"],
+          additionalProperties: false
+        },
+        strict: true
+      }
+    };
+  }
+
   /**
    * Schéma de sortie pour addMessage (par défaut avec un champ response obligatoire)
    */
