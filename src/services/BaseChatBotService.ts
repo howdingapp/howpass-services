@@ -391,8 +391,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       console.log('🔍 System prompt:', systemPrompt);
       console.log('🔍 Génération de la première réponse IA:', userPrompt);
 
-             // Utiliser l'API responses pour la première réponse avec le même schéma que les messages suivants
-       const outputSchema = this.getFirstMessageOutputSchema(context);
+      // Utiliser l'API responses pour la première réponse avec le même schéma que les messages suivants
+      const outputSchema = this.getAddMessageOutputSchema(context);
       
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
