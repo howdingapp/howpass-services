@@ -751,7 +751,7 @@ export class SupabaseService {
       
       // Recherche vectorielle sur les pratiques (4 meilleures)
       const practicesResults = await this.searchVectorSimilarity(
-        'practice',
+        'practices',
         'vector_summary',
         searchTerm,
         4
