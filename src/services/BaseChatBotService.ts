@@ -283,7 +283,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
               
               const toolResult = await this.callTool(toolCall.name, toolArgs, context);
               // Conserver l'ID original du function_call renvoyé par OpenAI
-              const originalToolCallId = (toolCall as any).id || (toolCall as any).tool_call_id || '';
+              const originalToolCallId = toolCall.call_id;
               
               // Extraire les activités et pratiques du résultat de l'outil
               extractedData = this.extractFromToolResult(originalToolCallId || `gen_${Date.now()}`, toolCall.name, toolResult);
