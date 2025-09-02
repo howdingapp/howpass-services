@@ -200,6 +200,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
     }
 
+    // Politique d'utilisation des outils (FAQ limitée à un périmètre précis)
+    basePrompt += `\n\nUtilisation des outils:\n- Utilise l'outil 'faq' UNIQUEMENT pour des questions informationnelles relevant des thèmes suivants: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, débutants (pratiques/activités), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques).\n- Pour toute autre question (y compris compte/connexion, abonnement/prix, sécurité/données, support/bugs), ne pas utiliser 'faq'.\n- Si la question concerne des recommandations personnalisées d'activités/pratiques, utilise 'activities_and_practices'.`;
+
     return basePrompt;
   }
 
@@ -351,6 +354,98 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     // Pas de schéma de sortie spécifique pour startConversation
     // L'IA répond librement selon le prompt
     return null;
+  }
+
+  protected override getWelcomeMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+    return {
+      format: { 
+        type: "json_schema",
+        name: "RecommendationResponse",
+        schema: {
+          type: "object",
+          properties: {
+            response: {
+              type: "string",
+              description: "Réponse principale de l'assistant Howana"
+            },
+            recommendations: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  type: {
+                    type: "string",
+                    enum: ["activity", "practice"],
+                    description: "Type de recommandation: 'activity' ou 'practice'"
+                  },
+                  id: {
+                    type: "string",
+                    description: "Identifiant de l'activité ou pratique recommandée"
+                  },
+                  title: {
+                    type: "string",
+                    description: "Titre de l'activité ou pratique"
+                  },
+                  relevanceScore: {
+                    type: "number",
+                    description: "Score de pertinence (0-1)"
+                  },
+                  reasoning: {
+                    type: "string",
+                    description: "Raisonnement derrière la recommandation"
+                  }
+                },
+                required: ["type", "id", "title", "relevanceScore", "reasoning"],
+                additionalProperties: false
+              },
+              description: "Liste des recommandations d'activités et pratiques générées par l'IA. Vide si aucune recommandation spécifique n'a été faite."
+            },
+            quickReplies: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  icon: {
+                    type: "string",
+                    enum: ["alert-triangle", "zap", "smile", "heart", "explore"],
+                    description: "The icon that is the best to prefixe the quick reply"
+                  },
+                  type: {
+                    type: "string",
+                    enum: ["text", "practice"],
+                    description: "Type de quick reply: 'text' pour une réponse simple, 'practice' pour une redirection vers une pratique"
+                  },
+                  text: {
+                    type: "string",
+                    description: "Texte de la suggestion (max 5 mots)"
+                  },
+                  textRedirection: {
+                    type: "string",
+                    description: "Texte d'invitation à découvrir une pratique/activité spécifique. Exemples: 'Voir cette pratique', 'Découvrir cette activité', 'Essayer cette pratique', 'Explorer cette activité'. Ce texte s'affiche quand l'IA propose une pratique/activité avec un ID valide."
+                  },
+                  practiceId: {
+                    type: ["string", "null"],
+                    description: "Identifiant de la pratique recommandée (requis si type='practice', peut être null si type='text')"
+                  },
+                  activityId: {
+                    type: ["string", "null"],
+                    description: "Identifiant de l'activité associée si pertinent (optionnel, peut être null)"
+                  }
+                },
+                required: ["type", "text", "textRedirection", "practiceId", "activityId"],
+                additionalProperties: false
+              },
+              description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice' avec redirection vers une pratique. Le champ textRedirection contient le texte d'invitation à découvrir une pratique/activité spécifique.",
+              maxItems: 4,
+              minItems: 1
+            }
+          },
+          required: ["response", "recommendations", "quickReplies"],
+          additionalProperties: false
+        },
+        strict: true
+      }
+    };
   }
 
   protected override getAddMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
@@ -587,7 +682,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         {
           type: 'function',
           name: 'faq',
-          description: 'Rechercher des informations dans la FAQ pour répondre aux questions de l\'utilisateur',
+          description: 'FAQ limitée à: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, sujets débutants, parrainage, ambassadeur Howana, Aper\'How bien-être (définition/participation/organisation/pratiques). N\'utilise PAS cet outil pour compte/connexion, prix, sécurité, support.',
           parameters: {
             type: 'object',
             properties: {
@@ -618,6 +713,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         }
       ]
     };
+  }
+
+  protected override buildToolUseSystemPrompt(_context: ConversationContext): string {
+    return `POLITIQUE D'UTILISATION DES OUTILS (obligatoire):\n- Utilise 'faq' UNIQUEMENT pour des questions informationnelles sur: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, sujets débutants (activités/pratiques), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques).\n- Exemples de requêtes 'faq': "comment gérer le stress au travail", "bienfaits de la méditation", "améliorer mon sommeil", "pratiques pour la concentration", "qu'est-ce qu'un Aper'How bien-être", "comment participer à un Aper'How", "quels types de pratiques aux Aper'How", "avantages du parrainage", "devenir ambassadeur Howana".\n- N'utilise PAS 'faq' pour des sujets de compte/connexion, abonnement/prix, sécurité/données, support/bugs, navigation/app: réponds sans outil ou utilise 'activities_and_practices' si c'est une demande de recommandations.\n- Pour des recommandations personnalisées (trouver activités/pratiques adaptées), appelle 'activities_and_practices'.`;
   }
 
   protected async callTool(toolName: string, toolArgs: any, _context: ConversationContext): Promise<any> {

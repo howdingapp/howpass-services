@@ -243,6 +243,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       
       const outputSchema = this.getAddMessageOutputSchema(context);
       const toolsDescription = this.getToolsDescription(context);
+      const toolUseGuidance = this.buildToolUseSystemPrompt(context);
       
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
@@ -252,6 +253,14 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             role: "user",
             content: [{ type: "input_text", text: userMessage }],
           },
+          ...(toolUseGuidance
+            ? [{
+                type: "message",
+                role: "system",
+                content: [{ type: "input_text", text: toolUseGuidance }],
+                status: "completed",
+              } as any]
+            : []),
         ],
         ...(outputSchema && { text: outputSchema }),
         ...(toolsDescription && { tools: toolsDescription.tools })
@@ -392,7 +401,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       console.log('🔍 Génération de la première réponse IA:', userPrompt);
 
       // Utiliser l'API responses pour la première réponse avec le même schéma que les messages suivants
-      const outputSchema = this.getAddMessageOutputSchema(context);
+      const outputSchema = this.getWelcomeMessageOutputSchema(context);
       
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
@@ -692,6 +701,27 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     };
   }
 
+  protected getWelcomeMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+    return {
+      format: { 
+        type: "json_schema",
+        name: "BaseChatBotResponse",
+        schema: {
+          type: "object",
+          properties: {
+            response: {
+              type: "string",
+              description: "Réponse principale de l'assistant"
+            }
+          },
+          required: ["response"],
+          additionalProperties: false
+        },
+        strict: true
+      }
+    };
+  }
+
   /**
    * Schéma de sortie pour addMessage (par défaut avec un champ response obligatoire)
    */
@@ -783,6 +813,14 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   protected recommendationRequiredForSummary(_context: ConversationContext): boolean {
     // Par défaut, pas de recommandations requises
     return false;
+  }
+
+  /**
+   * Lignes directrices (system) sur l'utilisation des outils lors des réponses suivantes
+   * Par défaut, aucune consigne. Les classes enfants peuvent surcharger pour orienter l'appel d'outils.
+   */
+  protected buildToolUseSystemPrompt(_context: ConversationContext): string {
+    return '';
   }
 
   /**
