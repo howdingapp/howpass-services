@@ -509,7 +509,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               properties: {
                 response: {
                   type: "string",
-                  description: "Réponse principale de l'assistant Howana avec recommandations d'activités/pratiques, pas trop de detail si on propose des activités dans les quick answer (teasing)"
+                  description: "Réponse principale de l'assistant Howana avec recommandations d'activités/pratiques, pas trop de detail si on propose des activités dans les quicks answers (teasing)"
                 },
                 quickReplies: {
                   type: "array",
