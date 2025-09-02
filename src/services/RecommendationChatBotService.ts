@@ -686,7 +686,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
   /**
    * Implémentation de l'extraction des activités et pratiques pour RecommendationChatBotService
-   * L'argument response respecte le schéma JSON avec quickReplies
+   * L'argument response provient du résultat de l'appel à l'outil de recherche vectorielle
    */
   protected extractRecommandationsFromToolResponse(toolId: string, response: any): ExtractedRecommandations {
     console.log(`🔧 Extraction pour l'outil: ${toolId}`);
@@ -700,20 +700,22 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       return { activities, practices };
     }
 
-    // Pour l'outil activities_and_practices, extraire depuis quickReplies
-    if (toolId === 'activities_and_practices' && response?.quickReplies && Array.isArray(response.quickReplies)) {
-      response.quickReplies.forEach((quickReply: any) => {
-        if (quickReply?.practiceId) {
-          practices.push({
-            id: quickReply.practiceId,
-            title: quickReply.text || 'Pratique recommandée'
-          });
-        }
-        if (quickReply?.activityId) {
-          activities.push({
-            id: quickReply.activityId,
-            title: quickReply.text || 'Activité recommandée'
-          });
+    // Pour l'outil activities_and_practices, extraire depuis les résultats de la recherche vectorielle
+    if (toolId === 'activities_and_practices' && response?.results && Array.isArray(response.results)) {
+      response.results.forEach((result: any) => {
+        if (result.id && result.title) {
+          // Distinguer les activités des pratiques grâce au champ 'type' ajouté
+          if (result.type === 'activity') {
+            activities.push({
+              id: result.id,
+              title: result.title
+            });
+          } else if (result.type === 'practice') {
+            practices.push({
+              id: result.id,
+              title: result.title
+            });
+          }
         }
       });
     }

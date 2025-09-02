@@ -750,22 +750,29 @@ export class SupabaseService {
         4
       );
       
-      // Combiner les résultats (4 activités + 4 pratiques = 8 total)
-      let combinedResults = [...activitiesResults, ...practicesResults];
-      
-      // Calculer un score de pertinence basé sur la similarité vectorielle
-      const resultsWithScore = combinedResults.map(result => ({
+      // Marquer les résultats avec leur type et calculer le score de pertinence
+      const activitiesWithType = activitiesResults.map(result => ({
         ...result,
+        type: 'activity',
         relevanceScore: result.similarity || 0.8
       }));
       
+      const practicesWithType = practicesResults.map(result => ({
+        ...result,
+        type: 'practice',
+        relevanceScore: result.similarity || 0.8
+      }));
+      
+      // Combiner les résultats (4 activités + 4 pratiques = 8 total)
+      let combinedResults = [...activitiesWithType, ...practicesWithType];
+      
       // Trier par score de pertinence
-      resultsWithScore.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      combinedResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
       
       return {
-        results: resultsWithScore, // Retourner tous les résultats (max 8)
+        results: combinedResults, // Retourner tous les résultats (max 8)
         searchTerm,
-        total: resultsWithScore.length
+        total: combinedResults.length
       };
     } catch (error) {
       console.error(`❌ Erreur lors de la recherche d'activités et pratiques:`, error);
