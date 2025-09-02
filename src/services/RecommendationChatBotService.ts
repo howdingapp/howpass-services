@@ -640,18 +640,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       console.log(`🔍 Recherche FAQ pour: ${query}`);
       
       // Utiliser SupabaseService pour la recherche vectorielle sur la table faq
-      const faqResults = await this.supabaseService.searchVectorSimilarity(
-        'faq',
-        'vector_summary',
-        query,
-        4
-      );
+      const faqResults = await this.supabaseService.searchFAQ(query, 2)
       
-      return {
-        results: faqResults,
-        query: query,
-        total: faqResults.length
-      };
+      return faqResults;
+      
     } catch (error) {
       console.error('❌ Erreur lors de la recherche FAQ:', error);
       return {

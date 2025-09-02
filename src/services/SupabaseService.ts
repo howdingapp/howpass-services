@@ -812,18 +812,43 @@ export class SupabaseService {
         4
       );
       
-      // Marquer les résultats avec leur type et calculer le score de pertinence
-      const activitiesWithType = activitiesResults.map(result => ({
-        ...result,
-        type: 'activity',
-        relevanceScore: result.similarity || 0.8
-      }));
-      
-      const practicesWithType = practicesResults.map(result => ({
-        ...result,
-        type: 'practice',
-        relevanceScore: result.similarity || 0.8
-      }));
+      // Mapper les résultats pour ne retourner que les champs utiles à l'IA
+      const mapActivity = (r: any) => {
+        const relevanceScore = r?.similarity ?? 0.8;
+        return {
+          type: 'activity',
+          id: r?.id,
+          title: r?.title,
+          shortDescription: r?.short_description,
+          longDescription: r?.long_description,
+          durationMinutes: r?.duration_minutes,
+          participants: r?.participants,
+          rating: r?.rating,
+          price: r?.price,
+          benefits: r?.benefits,
+          typicalSituations: r?.typical_situations,
+          locationType: r?.location_type,
+          address: r?.address,
+          selectedKeywords: r?.selected_keywords,
+          relevanceScore
+        };
+      };
+
+      const mapPractice = (r: any) => {
+        const relevanceScore = r?.similarity ?? 0.8;
+        return {
+          type: 'practice',
+          id: r?.id,
+          title: r?.title,
+          shortDescription: r?.short_description,
+          longDescription: r?.long_description,
+          benefits: r?.benefits,
+          relevanceScore
+        };
+      };
+
+      const activitiesWithType = (activitiesResults || []).map(mapActivity);
+      const practicesWithType = (practicesResults || []).map(mapPractice);
       
       // Combiner les résultats (4 activités + 4 pratiques = 8 total)
       let combinedResults = [...activitiesWithType, ...practicesWithType];
@@ -838,6 +863,57 @@ export class SupabaseService {
       };
     } catch (error) {
       console.error(`❌ Erreur lors de la recherche d'activités et pratiques:`, error);
+      return {
+        results: [],
+        searchTerm,
+        total: 0
+      };
+    }
+  }
+
+  /**
+   * Recherche vectorielle FAQ (sur la colonne vector_summary)
+   */
+  async searchFAQ(
+    searchTerm: string,
+    limit: number = 5
+  ): Promise<{
+    results: any[];
+    searchTerm: string;
+    total: number;
+  }> {
+    try {
+      console.log(`🔍 Recherche FAQ pour: "${searchTerm}"`);
+
+      const faqResults = await this.searchVectorSimilarity(
+        'faq',
+        'vector_summary',
+        searchTerm,
+        limit
+      );
+
+      const mapped = (faqResults || []).map((r: any) => ({
+        type: 'faq',
+        id: r?.id,
+        question: r?.question,
+        answer: r?.reponse,
+        keywords: r?.keywords,
+        typicalSituation: r?.typical_situation,
+        faqType: r?.type,
+        active: r?.active,
+        relevanceScore: r?.similarity ?? 0.8
+      }));
+
+      // Tri décroissant selon pertinence
+      mapped.sort((a: any, b: any) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0));
+
+      return {
+        results: mapped,
+        searchTerm,
+        total: mapped.length
+      };
+    } catch (error) {
+      console.error(`❌ Erreur lors de la recherche FAQ:`, error);
       return {
         results: [],
         searchTerm,
