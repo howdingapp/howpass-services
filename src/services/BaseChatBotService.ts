@@ -545,11 +545,12 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer un résumé structuré de la conversation
    */
-  async generateConversationSummary(context: ConversationContext): Promise<any> {
+  async generateConversationSummary(context: ConversationContext): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined}> {
     try {
       // Vérifier si des recommandations sont requises pour le résumé
       const needsRecommendations = this.recommendationRequiredForSummary(context);
       let recommendationResponse:T|undefined = undefined;
+      let extractedData:ExtractedRecommandations|undefined = undefined;
 
       console.log(`📋 Génération du résumé - Recommandations requises: ${needsRecommendations}`);
       
@@ -564,7 +565,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
         try {
           // Appeler generateIAResponse avec la demande explicite
           recommendationResponse = await this.generateAIResponse(context, explicitRequest);
-          
+          extractedData = recommendationResponse?.extractedData;
           console.log('🔧 Réponse IA avec recommandations générée:', recommendationResponse);
           
           // Les recommandations seront automatiquement extraites et stockées via generateIAResponse
@@ -620,7 +621,10 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           try {
             const parsedSummary = JSON.parse(resultText);
             console.log('🔍 Résumé structuré généré:', parsedSummary);
-            return parsedSummary;
+            return {
+              summary: parsedSummary,
+              extractedData,
+            };
           } catch (parseError) {
             console.warn('⚠️ Erreur de parsing JSON, fallback vers résumé simple:', parseError);
           }
@@ -630,13 +634,15 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       }
 
       return {
-        summary: "Résumé de la conversation généré automatiquement."
+        summary: "Résumé de la conversation généré automatiquement.",
+        extractedData,
       };
       
     } catch (error) {
       console.error('❌ Erreur lors de la génération du résumé:', error);
       return {
-        summary: "Résumé de la conversation généré automatiquement."
+        summary: "Résumé de la conversation généré automatiquement.",
+        extractedData: { activities: [], practices: [] }
       };
     }
   }

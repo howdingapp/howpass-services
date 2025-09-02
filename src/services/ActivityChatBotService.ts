@@ -1,6 +1,6 @@
 import { BaseChatBotService } from './BaseChatBotService';
 import { ConversationContext } from '../types/conversation';
-import { IAMessageResponse } from '../types/chatbot-output';
+import { IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
 
 export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse> {
   
@@ -297,5 +297,10 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
 
   protected async callTool(toolName: string, _toolArgs: any, _context: ConversationContext): Promise<any> {
     throw new Error(`Tool ${toolName} not implemented in ActivityChatBotService`);
+  }
+
+  protected extractRecommandationsFromToolResponse(_toolId: string, _response: any): ExtractedRecommandations {
+    // ActivityChatBotService n'utilise pas d'outils, donc rien à extraire
+    return { activities: [], practices: [] };
   }
 }

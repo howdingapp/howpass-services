@@ -214,6 +214,15 @@ export class IAController {
     
     const summary = await chatBotService['generateConversationSummary'](context);
     
+    // Récupérer les extractedData depuis la réponse du résumé si disponible
+    const extractedData = summary.extractedData;
+    
+    // Construire les recommandations à partir des extractedData
+    const recommendations = extractedData ? {
+      activities: extractedData.activities || [],
+      practices: extractedData.practices || []
+    } : (context.metadata?.['recommendations'] || { activities: [], practices: [] });
+
     // Mettre à jour l'entrée ai_response pré-créée pour notifier le frontend
     if (taskData.aiResponseId) {
       try {
@@ -223,8 +232,8 @@ export class IAController {
           target_table: context.type === 'bilan' ? 'bilans' : context.type === 'activity' ? 'activities' : 'ai_responses',
           target_id: context.metadata?.['bilanId'] || context.metadata?.['activityId'] || null,
           summary_type: 'conversation_summary',
-          recommendations: context.metadata?.['recommendations'] || { activities: [], practices: [] },
-          hasRecommendations: context.metadata?.['hasRecommendations'] || false
+          recommendations: recommendations,
+          hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0)
         };
 
         await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
