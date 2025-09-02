@@ -1,7 +1,7 @@
 import { ConversationService } from './ConversationService';
 import { SupabaseService } from './SupabaseService';
 import { ConversationContext, StartConversationRequest, AddMessageRequest, OpenAIToolsDescription } from '../types/conversation';
-import { ChatBotOutputSchema, IAMessageResponse } from '../types/chatbot-output';
+import { ChatBotOutputSchema, IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
 import OpenAI from 'openai';
 
 export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessageResponse> {
@@ -260,7 +260,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
       // Vérifier si l'IA demande l'exécution d'un outil
       const toolCalls = result.output.filter(output => output.type === "function_call");
-      
+      let extractedData:ExtractedRecommandations|undefined = undefined;
+
       if (toolCalls.length > 0) {
         console.log('🔧 Outils demandés par l\'IA:', toolCalls);
         
@@ -283,6 +284,11 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
               const toolResult = await this.callTool(toolCall.name, toolArgs, context);
               // Créer un ID qui inclut le nom de l'outil pour faciliter l'extraction
               const toolCallId = `${toolCall.name}_${toolCall.id || Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              
+              // Extraire les activités et pratiques du résultat de l'outil
+              extractedData = this.extractFromToolResult(toolCallId, toolCall.name, toolResult);
+              
+              // Stocker les données extraites dans le résultat pour utilisation ultérieure
               toolResults.push({
                 tool_call_id: toolCallId,
                 tool_name: toolCall.name, // Stocker le nom de l'outil pour faciliter l'accès
@@ -320,7 +326,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
             console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
 
-            return finalResponse as T;
+            return { ...finalResponse, extractedData } as T;
           }
         }
       }
@@ -362,6 +368,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       // Retourner la réponse parsée avec le messageId
       return {
         ...parsedResponse,
+        extractedData,
         messageId
       } as T;
 
@@ -540,8 +547,36 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    */
   async generateConversationSummary(context: ConversationContext): Promise<any> {
     try {
+      // Vérifier si des recommandations sont requises pour le résumé
+      const needsRecommendations = this.recommendationRequiredForSummary(context);
+      let recommendationResponse:T|undefined = undefined;
+
+      console.log(`📋 Génération du résumé - Recommandations requises: ${needsRecommendations}`);
+      
+      // Si des recommandations sont requises et qu'elles n'existent pas encore,
+      // forcer un appel à generateIAResponse avec une demande explicite
+      if (needsRecommendations) {
+        console.log('🔧 Forçage d\'un appel à generateIAResponse pour générer des recommandations');
+        
+        // Forcer une demande explicite pour des activités ou pratiques
+        const explicitRequest = "Peux-tu me recommander des activités et des pratiques adaptées à mes besoins ?";
+
+        try {
+          // Appeler generateIAResponse avec la demande explicite
+          recommendationResponse = await this.generateAIResponse(context, explicitRequest);
+          
+          console.log('🔧 Réponse IA avec recommandations générée:', recommendationResponse);
+          
+          // Les recommandations seront automatiquement extraites et stockées via generateIAResponse
+          // Le callId sera lié aux pratiques comme souhaité
+          
+        } catch (error) {
+          console.error('❌ Erreur lors de la génération des recommandations:', error);
+        }
+      }
+
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
-      const previousCallId = context.metadata?.['previousCallId'];
+      const previousCallId = recommendationResponse?.messageId || context.metadata?.['previousCallId'];
       
       if (!previousCallId) {
         throw new Error('No previous call ID found');
@@ -662,6 +697,55 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    * Exécuter un outil spécifique
    */
   protected abstract callTool(toolName: string, toolArgs: any, context: ConversationContext): Promise<any>;
+
+  /**
+   * Fonction abstraite pour extraire les activités et pratiques des réponses d'outils
+   * Chaque classe fille doit implémenter cette méthode selon le schéma de sortie de ses outils
+   * 
+   * @example
+   * // Dans RecommendationChatBotService, l'outil activities_and_practices retourne:
+   * // {
+   * //   results: [
+   * //     { table_name: 'activities', id: 'act1', title: 'Yoga', relevanceScore: 0.9 },
+   * //     { table_name: 'practices', id: 'prac1', title: 'Méditation', relevanceScore: 0.8 }
+   * //   ]
+   * // }
+   * // Cette fonction extrait et sépare les activités des pratiques
+   * 
+   * @param toolId - L'identifiant de l'outil (ex: 'activities_and_practices', 'faq')
+   * @param response - La réponse brute de l'outil
+   * @returns Structure standardisée avec activités et pratiques séparées
+   */
+  protected abstract extractRecommandationsFromToolResponse(toolId: string, response: any): ExtractedRecommandations;
+
+  /**
+   * Méthode utilitaire pour extraire les activités et pratiques d'un résultat d'outil
+   * Utilise la fonction abstraite implémentée par la classe fille
+   */
+  protected extractFromToolResult(toolCallId: string, toolName: string, toolResult: any): ExtractedRecommandations {
+    console.log(`🔧 Extraction des activités et pratiques depuis l'outil: ${toolName} (ID: ${toolCallId})`);
+    
+    try {
+      const extracted = this.extractRecommandationsFromToolResponse(toolName, toolResult);
+      
+      console.log(`✅ Extraction réussie: ${extracted.activities.length} activités, ${extracted.practices.length} pratiques`);
+      
+      return extracted;
+    } catch (error) {
+      console.error(`❌ Erreur lors de l'extraction des activités et pratiques:`, error);
+      return { activities: [], practices: [] };
+    }
+  }
+
+  /**
+   * Détermine si des recommandations sont requises pour le résumé de ce type de conversation
+   * Par défaut, retourne false. Peut être surchargé dans les classes enfants.
+   * Cette fonction peut utiliser le contexte pour vérifier si des recommandations ont déjà été générées.
+   */
+  protected recommendationRequiredForSummary(_context: ConversationContext): boolean {
+    // Par défaut, pas de recommandations requises
+    return false;
+  }
 
   /**
    * Changer le modèle IA utilisé (pour la configuration dynamique)

@@ -10,6 +10,5 @@ export { RecommendationChatBotService } from './RecommendationChatBotService';
 export { ChatBotServiceFactory } from './ChatBotServiceFactory';
 
 // Services existants (pour compatibilité)
-export { ChatBotService } from './ChatBotService';
 export { ConversationService } from './ConversationService';
 export { SupabaseService } from './SupabaseService';

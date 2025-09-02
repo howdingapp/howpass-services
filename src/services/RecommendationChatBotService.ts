@@ -4,6 +4,7 @@ import {
   ChatBotOutputSchema, 
   OpenAIJsonSchema,
   RecommendationMessageResponse,
+  ExtractedRecommandations,
 } from '../types/chatbot-output';
 
 export class RecommendationChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
@@ -364,6 +365,38 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               type: "string",
               description: "Réponse principale de l'assistant Howana"
             },
+            recommendations: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  type: {
+                    type: "string",
+                    enum: ["activity", "practice"],
+                    description: "Type de recommandation: 'activity' ou 'practice'"
+                  },
+                  id: {
+                    type: "string",
+                    description: "Identifiant de l'activité ou pratique recommandée"
+                  },
+                  title: {
+                    type: "string",
+                    description: "Titre de l'activité ou pratique"
+                  },
+                  relevanceScore: {
+                    type: "number",
+                    description: "Score de pertinence (0-1)"
+                  },
+                  reasoning: {
+                    type: "string",
+                    description: "Raisonnement derrière la recommandation"
+                  }
+                },
+                required: ["type", "id", "title", "relevanceScore", "reasoning"],
+                additionalProperties: false
+              },
+              description: "Liste des recommandations d'activités et pratiques générées par l'IA. Vide si aucune recommandation spécifique n'a été faite."
+            },
             quickReplies: {
               type: "array",
               items: {
@@ -399,7 +432,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               minItems: 1
             }
           },
-          required: ["response", "quickReplies"],
+          required: ["response", "recommendations", "quickReplies"],
           additionalProperties: false
         },
         strict: true
@@ -526,6 +559,28 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     }
   }
 
+  /**
+   * Pour les conversations de recommandation, des recommandations sont requises dans le résumé
+   * si elles n'ont pas encore été générées. Si des recommandations existent déjà dans le contexte,
+   * on peut générer le résumé directement. Sinon, il faut forcer un appel aux outils.
+   */
+  protected override recommendationRequiredForSummary(context: ConversationContext): boolean {
+    const hasRecommendations = context.metadata?.['hasRecommendations'] || false;
+    const recommendations = context.metadata?.['recommendations'] || { activities: [], practices: [] };
+    
+    console.log(`📋 Vérification des recommandations pour le résumé:`, {
+      hasRecommendations,
+      activitiesCount: recommendations.activities?.length || 0,
+      practicesCount: recommendations.practices?.length || 0,
+      totalCount: (recommendations.activities?.length || 0) + (recommendations.practices?.length || 0),
+      needToolsCall: !hasRecommendations
+    });
+    
+    // Si des recommandations existent déjà, pas besoin de forcer un appel aux outils
+    // Sinon, il faut forcer un appel aux outils pour générer des recommandations
+    return !hasRecommendations;
+  }
+
   protected getToolsDescription(_context: ConversationContext): OpenAIToolsDescription | null {
     return {
       tools: [
@@ -627,6 +682,44 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         error: 'Erreur lors de la recherche'
       };
     }
+  }
+
+  /**
+   * Implémentation de l'extraction des activités et pratiques pour RecommendationChatBotService
+   * L'argument response respecte le schéma JSON avec quickReplies
+   */
+  protected extractRecommandationsFromToolResponse(toolId: string, response: any): ExtractedRecommandations {
+    console.log(`🔧 Extraction pour l'outil: ${toolId}`);
+    
+    const activities: ExtractedRecommandations['activities'] = [];
+    const practices: ExtractedRecommandations['practices'] = [];
+
+    // Pour l'outil FAQ, rien à extraire
+    if (toolId === 'faq') {
+      console.log('📋 Outil FAQ - Aucune extraction nécessaire');
+      return { activities, practices };
+    }
+
+    // Pour l'outil activities_and_practices, extraire depuis quickReplies
+    if (toolId === 'activities_and_practices' && response?.quickReplies && Array.isArray(response.quickReplies)) {
+      response.quickReplies.forEach((quickReply: any) => {
+        if (quickReply?.practiceId) {
+          practices.push({
+            id: quickReply.practiceId,
+            title: quickReply.text || 'Pratique recommandée'
+          });
+        }
+        if (quickReply?.activityId) {
+          activities.push({
+            id: quickReply.activityId,
+            title: quickReply.text || 'Activité recommandée'
+          });
+        }
+      });
+    }
+
+    console.log(`🔧 Extraction terminée: ${activities.length} activités, ${practices.length} pratiques`);
+    return { activities, practices };
   }
 
 }

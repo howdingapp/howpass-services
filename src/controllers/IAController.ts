@@ -167,16 +167,30 @@ export class IAController {
 
     // Mettre à jour l'entrée ai_response pré-créée
     if (taskData.aiResponseId) {
+      // Récupérer les extractedData depuis la réponse IA
+      const extractedData = aiResponse.extractedData;
+      
+      // Construire les recommandations à partir des extractedData
+      const recommendations = extractedData ? {
+        activities: extractedData.activities || [],
+        practices: extractedData.practices || []
+      } : (context.metadata?.['recommendations'] || { activities: [], practices: [] });
+
       await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
         response_text: JSON.stringify(aiResponse),
         metadata: { 
           source: 'ai', 
           model: chatBotService.getAIModel(),
           messageId: messageId,
-          status: 'completed'
+          status: 'completed',
+          recommendations: recommendations,
+          hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0),
+          recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](context)
         }
       });
       console.log(`✅ aiResponse mise à jour pour la réponse: ${taskData.aiResponseId}`);
+      console.log(`📋 Recommandations extraites: ${recommendations.activities.length} activités, ${recommendations.practices.length} pratiques`);
+      console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
     } else {
       console.warn(`⚠️ Aucun aiResponseId fourni pour la réponse de la conversation: ${taskData.conversationId}`);
     }
@@ -208,7 +222,9 @@ export class IAController {
           response: { summary },
           target_table: context.type === 'bilan' ? 'bilans' : context.type === 'activity' ? 'activities' : 'ai_responses',
           target_id: context.metadata?.['bilanId'] || context.metadata?.['activityId'] || null,
-          summary_type: 'conversation_summary'
+          summary_type: 'conversation_summary',
+          recommendations: context.metadata?.['recommendations'] || { activities: [], practices: [] },
+          hasRecommendations: context.metadata?.['hasRecommendations'] || false
         };
 
         await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
@@ -266,10 +282,14 @@ export class IAController {
           model: chatBotService.getAIModel(), 
           type: 'first_response', 
           messageId: firstResponseResult.messageId,
-          status: 'completed'
+          status: 'completed',
+          recommendations: context.metadata?.['recommendations'] || { activities: [], practices: [] },
+          hasRecommendations: context.metadata?.['hasRecommendations'] || false,
+          recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](context)
         }
       });
       console.log(`✅ aiResponse mise à jour pour la première réponse: ${taskData.aiResponseId}`);
+      console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
     } else {
       console.warn(`⚠️ Aucun aiResponseId fourni pour la première réponse de la conversation: ${taskData.conversationId}`);
     }

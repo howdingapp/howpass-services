@@ -84,6 +84,7 @@ export type ChatBotOutputSchema = OpenAIJsonSchema | null;
 export interface IAMessageResponse {
   messageId: string;
   response: string;
+  extractedData?: ExtractedRecommandations;
 }
 
 /**
@@ -91,6 +92,24 @@ export interface IAMessageResponse {
  */
 export interface RecommendationMessageResponse extends IAMessageResponse {
   quickReplies: QuickReply[];
+}
+
+/**
+ * Interface pour les éléments extraits des réponses d'outils
+ */
+export interface ExtractedItem {
+  id: string;
+  title: string;
+  relevanceScore?: number;
+  reasoning?: string;
+}
+
+/**
+ * Interface pour le résultat de l'extraction des activités et pratiques
+ */
+export interface ExtractedRecommandations {
+  activities: ExtractedItem[];
+  practices: ExtractedItem[];
 }
 
 
