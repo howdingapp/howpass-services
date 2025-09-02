@@ -518,7 +518,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     properties: {
                       type: {
                         type: "string",
-                        enum: ["text", "practice"],
+                        enum: ["text", "practice", "activity"],
                         description: "Type de quick reply: 'text' pour une réponse simple, 'practice' pour une redirection vers une pratique"
                       },
                       text: {
@@ -535,7 +535,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                       },
                       activityId: {
                         type: ["string", "null"],
-                        description: "Identifiant de l'activité associée si pertinent (optionnel, doit être un ID valide d'une activité retournée par l'outil, peut être null)"
+                        description: "Identifiant de l'activité recommandée (requis si type='activity', doit être un ID valide d'une acitivté retournée par l'outil, peut être null si type='text')"
                       }
                     },
                     required: ["type", "text", "textRedirection","practiceId", "activityId"],
