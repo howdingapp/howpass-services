@@ -128,6 +128,10 @@ jobs:
             --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
             --set-env-vars=GCP_LOCATION=europe-west1 \
             --set-env-vars=GCP_JOB_NAME=video-processing-job
+            --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }}
+            --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }}
+            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
         else
           echo "🆕 Création d'un nouveau job..."
           gcloud run jobs create video-processing-job \
@@ -152,6 +156,10 @@ jobs:
             --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
             --set-env-vars=GCP_LOCATION=europe-west1 \
             --set-env-vars=GCP_JOB_NAME=video-processing-job
+            --set-env-vars=REDIS_HOST=${{ secrets.REDIS_HOST }}
+            --set-env-vars=REDIS_PORT=${{ secrets.REDIS_PORT }}
+            --set-env-vars=REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
         fi
         
         echo "✅ Cloud Run Job configuré avec succès (traitement vidéo uniquement)"
