@@ -55,6 +55,9 @@ export class VideoController {
       const qrCodeVideoStatus = record?.qr_code_presentation_video_public_url;
       const qrCodeLessVideoStatus = record?.qr_code_less_presentation_video_public_url;
       
+      console.log("qrCodeVideoStatus => ", qrCodeVideoStatus);
+      console.log("qrCodeLessVideoStatus => ", qrCodeLessVideoStatus);
+
       // Si aucun champ n'est en 'to_compute', faire un retour immédiat
       if (qrCodeVideoStatus !== 'to_compute' && qrCodeLessVideoStatus !== 'to_compute') {
         console.log('⏭️ Aucun champ en attente de calcul, webhook ignoré:', {
