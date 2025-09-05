@@ -566,7 +566,7 @@ export class VideoService {
 
       // Extraire le chemin du fichier depuis l'URL publique
       const urlParts = request.postfixVideoUrl.split('/');
-      const filePath = urlParts.slice(-2).join('/'); // Prend les 2 derniers segments
+      const filePath = urlParts.slice(-3).join('/'); // Prend les 3 derniers segments
       
       await this.supabaseService.download(VIDEO_BUCKET, filePath, postfixPath);
       job.progress = 40;
