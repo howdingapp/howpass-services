@@ -208,7 +208,7 @@ export class VideoService {
         const table = options.metadata?.table || 'practices';
         const recordId = options.metadata?.recordId || jobId;
         const midTimestamp = Date.now();
-        const midDestinationPath = `${table}/${recordId}_mid_${midTimestamp}.mp4`;
+        const midDestinationPath = `${table}/${recordId}/qr_code_less_presentation_video_${midTimestamp}.mp4`;
         
         console.log('📤 Upload de la vidéo intermédiaire vers Supabase:', { midDestinationPath });
         const midVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, intermediatePath, midDestinationPath);
@@ -224,7 +224,7 @@ export class VideoService {
         // Upload de la vidéo finale vers Supabase
         console.log('📤 Upload de la vidéo finale...');
         const finalTimestamp = Date.now();
-        const destinationPath = `${table}/${recordId}_merged_${finalTimestamp}.mp4`;
+        const destinationPath = `${table}/${recordId}/qr_code_presentation_video_${finalTimestamp}.mp4`;
         const mergedVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, options.outputPath, destinationPath);
 
         // Mettre à jour le champ qr_code_presentation_video_public_url dans la base de données
