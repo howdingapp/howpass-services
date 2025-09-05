@@ -44,13 +44,27 @@ export class SupabaseService {
  
       console.log(`📥 Téléchargement de ${bucketName}/${bucketPath} vers ${localPath}`);
 
+      // Vérifier d'abord si le fichier existe
+      const fileName = bucketPath.split('/').pop();
+      const { data: listData, error: listError } = await this.supabase.storage
+        .from(bucketName)
+        .list(bucketPath.split('/').slice(0, -1).join('/') || '', {
+          search: fileName || ''
+        });
+
+      if (listError) {
+        console.warn('⚠️ Impossible de lister les fichiers:', listError);
+      } else {
+        console.log('📋 Fichiers trouvés:', listData?.map(f => f.name));
+      }
+
       const { data, error } = await this.supabase.storage
         .from(bucketName)
         .download(bucketPath);
 
       if (error) {
-        throw new Error(`Erreur lors du téléchargement: ${error.message}`);
-        console.log(error)
+        console.error('❌ Erreur de téléchargement Supabase:', error);
+        throw new Error(`Erreur lors du téléchargement: ${error.message || JSON.stringify(error)}`);
       }
 
       if (!data) {
