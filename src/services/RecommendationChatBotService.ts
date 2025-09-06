@@ -731,22 +731,36 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
             required: ['searchTerm', 'faqSearchTerm']
           },
           strict: false
+        },
+        {
+          type: 'function',
+          name: 'last_activity',
+          description: 'Récupérer les 5 dernières activités de l\'utilisateur pour comprendre son historique et ses préférences',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: []
+          },
+          strict: false
         }
       ]
     };
   }
 
   protected override buildToolUseSystemPrompt(_context: ConversationContext): string {
-    return `POLITIQUE D'UTILISATION DES OUTILS (obligatoire):\n- Utilise 'activities_and_practices_and_faq' pour toutes les recherches : activités/pratiques ET informations FAQ.\n- Pour les questions informationnelles sur: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, sujets débutants (activités/pratiques), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques), remplis le champ 'faqSearchTerm'.\n- Pour les recommandations personnalisées d'activités/pratiques, remplis le champ 'searchTerm'.\n- Tu peux remplir les deux champs si l'utilisateur a besoin à la fois d'informations et de recommandations.\n- Exemples de requêtes FAQ: "comment gérer le stress au travail", "bienfaits de la méditation", "améliorer mon sommeil", "pratiques pour la concentration", "qu'est-ce qu'un Aper'How bien-être", "comment participer à un Aper'How", "quels types de pratiques aux Aper'How", "avantages du parrainage", "devenir ambassadeur Howana".\n- N'utilise PAS cet outil pour des sujets de compte/connexion, abonnement/prix, sécurité/données, support/bugs, navigation/app: réponds sans outil.`;
+    return `POLITIQUE D'UTILISATION DES OUTILS (obligatoire):\n- Utilise 'activities_and_practices_and_faq' pour toutes les recherches : activités/pratiques ET informations FAQ.\n- Pour les questions informationnelles sur: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, sujets débutants (activités/pratiques), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques), remplis le champ 'faqSearchTerm'.\n- Pour les recommandations personnalisées d'activités/pratiques, remplis le champ 'searchTerm'.\n- Tu peux remplir les deux champs si l'utilisateur a besoin à la fois d'informations et de recommandations.\n- Utilise 'last_activity' pour récupérer l'historique des activités de l'utilisateur et mieux comprendre ses préférences et habitudes.\n- Exemples de requêtes FAQ: "comment gérer le stress au travail", "bienfaits de la méditation", "améliorer mon sommeil", "pratiques pour la concentration", "qu'est-ce qu'un Aper'How bien-être", "comment participer à un Aper'How", "quels types de pratiques aux Aper'How", "avantages du parrainage", "devenir ambassadeur Howana".\n- N'utilise PAS ces outils pour des sujets de compte/connexion, abonnement/prix, sécurité/données, support/bugs, navigation/app: réponds sans outil.`;
   }
 
-  protected async callTool(toolName: string, toolArgs: any, _context: ConversationContext): Promise<any> {
+  protected async callTool(toolName: string, toolArgs: any, context: ConversationContext): Promise<any> {
     switch (toolName) {
       case 'activities_and_practices_and_faq':
         return await this.searchActivitiesAndPracticesAndFAQ(
           toolArgs.searchTerm,
           toolArgs.faqSearchTerm
         );
+      
+      case 'last_activity':
+        return await this.getLastUserActivities(context.userId);
       
       default:
         throw new Error(`Outil non supporté: ${toolName}`);
@@ -795,6 +809,35 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
         practices: [],
         faq: [],
         error: 'Erreur lors de la recherche'
+      };
+    }
+  }
+
+  private async getLastUserActivities(userId: string): Promise<any> {
+    try {
+      console.log(`🔍 Récupération des dernières activités pour l'utilisateur: ${userId}`);
+      
+      const result = await this.supabaseService.getLastUserActivities(userId, 5);
+      
+      if (!result.success) {
+        console.error('❌ Erreur lors de la récupération des dernières activités:', result.error);
+        return {
+          activities: [],
+          error: result.error
+        };
+      }
+
+      console.log(`✅ ${result.data?.length || 0} dernières activités récupérées`);
+      
+      return {
+        activities: result.data || [],
+        total: result.data?.length || 0
+      };
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des dernières activités:', error);
+      return {
+        activities: [],
+        error: 'Erreur lors de la récupération des dernières activités'
       };
     }
   }

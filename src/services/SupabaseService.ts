@@ -935,4 +935,128 @@ export class SupabaseService {
       };
     }
   }
+
+  /**
+   * Récupérer les 5 dernières activités de l'utilisateur
+   */
+  async getLastUserActivities(
+    userId: string,
+    limit: number = 5
+  ): Promise<{
+    success: boolean;
+    data?: Array<{
+      id: string;
+      title: string;
+      shortDescription?: string;
+      longDescription?: string;
+      durationMinutes?: number;
+      participants?: number;
+      rating?: number;
+      price?: number;
+      benefits?: any;
+      typicalSituations?: string;
+      locationType?: string;
+      address?: any;
+      selectedKeywords?: any;
+      presentationImagePublicUrl?: string;
+      presentationVideoPublicUrl?: string;
+      status: string;
+      date: string;
+      hour: number;
+      minute: number;
+      createdAt: string;
+    }>;
+    error?: string;
+  }> {
+    try {
+      console.log(`🔍 Récupération des ${limit} dernières activités pour l'utilisateur: ${userId}`);
+
+      const { data, error } = await this.supabase
+        .from('user_rendezvous')
+        .select(`
+          status,
+          created_at,
+          rendezvous!inner(
+            id,
+            date,
+            hour,
+            minute,
+            activity_id,
+            activities!inner(
+              id,
+              title,
+              short_description,
+              long_description,
+              duration_minutes,
+              participants,
+              rating,
+              price,
+              benefits,
+              typical_situations,
+              location_type,
+              address,
+              selected_keywords,
+              presentation_image_public_url,
+              presentation_video_public_url,
+              created_at
+            )
+          )
+        `)
+        .eq('user_id', userId)
+        .in('status', ['accepted', 'paid', 'done'])
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des dernières activités:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      // Mapper les données pour un format plus simple
+      const mappedData = (data || []).map((item: any) => {
+        const rendezvous = item.rendezvous;
+        const activity = rendezvous?.activities;
+        
+        return {
+          id: activity?.id,
+          title: activity?.title,
+          shortDescription: activity?.short_description,
+          longDescription: activity?.long_description,
+          durationMinutes: activity?.duration_minutes,
+          participants: activity?.participants,
+          rating: activity?.rating,
+          price: activity?.price,
+          benefits: activity?.benefits,
+          typicalSituations: activity?.typical_situations,
+          locationType: activity?.location_type,
+          address: activity?.address,
+          selectedKeywords: activity?.selected_keywords,
+          presentationImagePublicUrl: activity?.presentation_image_public_url,
+          presentationVideoPublicUrl: activity?.presentation_video_public_url,
+          status: item.status,
+          date: rendezvous?.date,
+          hour: rendezvous?.hour,
+          minute: rendezvous?.minute,
+          createdAt: item.created_at
+        };
+      }).filter(item => item.id); // Filtrer les éléments sans ID d'activité
+
+      console.log(`✅ ${mappedData.length} dernières activités récupérées pour l'utilisateur ${userId}`);
+      
+      return {
+        success: true,
+        data: mappedData
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération des dernières activités:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
 } 
