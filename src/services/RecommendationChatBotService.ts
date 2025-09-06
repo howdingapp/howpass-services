@@ -316,17 +316,17 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                       properties: {
                         id: {
                           type: "string",
-                          description: "Identifiant de la pratique recommandée"
+                          description: "Identifiant de la pratique recommandée trouvée par les outils"
                         },
                         name: {
                           type: "string",
-                          description: "Nom de la pratique recommandée"
+                          description: "Nom de la pratique recommandée trouvée par les outils, qui semble recouvrir le besoin de l'utilisateur"
                         }
                       },
                       required: ["id", "name"],
                       additionalProperties: false
                     },
-                    description: "Pratiques recommandées avec identifiant et nom"
+                    description: "Pratiques recommandées avec identifiant et nom trouvés par les outils, qui semble recouvrir le besoin de l'utilisateur"
                   },
                   recommandedActivities: {
                     type: "array",
@@ -335,11 +335,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                       properties: {
                         id: {
                           type: "string",
-                          description: "Identifiant de l'activité recommandée"
+                          description: "Identifiant d'une activité recommandée trouvée par les outils, qui semble recouvrir le besoin de l'utilisateur"
                         },
                         name: {
                           type: "string",
-                          description: "Nom de l'activité recommandée"
+                          description: "Nom de l'activité recommandée trouvée par les outils, qui semble recouvrir le besoin de l'utilisateur"
                         }
                       },
                       required: ["id", "name"],
