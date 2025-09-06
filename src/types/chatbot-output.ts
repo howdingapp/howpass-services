@@ -112,6 +112,46 @@ export interface ExtractedRecommandations {
   practices: ExtractedItem[];
 }
 
+/**
+ * Type pour contraindre les IDs basés sur les métadonnées de recommandations
+ */
+export type ConstrainedRecommendationId<T extends ExtractedRecommandations> = 
+  T['activities'][number]['id'] | T['practices'][number]['id'];
+
+/**
+ * Interface pour les recommandations avec IDs contraints
+ */
+export interface ConstrainedRecommendation<T extends ExtractedRecommandations> {
+  recommandedCategories: {
+    id: ConstrainedRecommendationId<T>;
+    name: string;
+  }[];
+  recommandedActivities: {
+    id: ConstrainedRecommendationId<T>;
+    name: string;
+  }[];
+  activitiesReasons: string;
+  practicesReasons: string;
+  relevanceScore: number;
+  reasoning: string;
+  benefits: string[];
+}
+
+/**
+ * Interface pour les résumés de recommandation avec IDs contraints
+ */
+export interface ConstrainedRecommendationSummary<T extends ExtractedRecommandations> {
+  userProfile: {
+    supposedEmotionalState: string;
+    supposedCurrentNeeds: string[];
+    supposedPreferences: string[];
+    supposedConstraints: string[];
+  };
+  recommendations: ConstrainedRecommendation<T>[];
+  nextSteps: string[];
+  importanteKnowledge: string[];
+}
+
 
 
 

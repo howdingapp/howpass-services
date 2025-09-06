@@ -94,7 +94,7 @@ export interface ConversationContext {
       id: string;
       name: string;
     }>;
-    activitiesReason?: string;
+    activitiesReasons?: string;
     practicesReasons?: string;
     relevanceScore?: number;
     reasoning?: string;

@@ -82,7 +82,31 @@ export class BilanChatBotService extends RecommendationChatBotService {
     return basePrompt;
   }
 
-  protected override getSummaryOutputSchema(_context: ConversationContext): any {
+  protected override getSummaryOutputSchema(context: ConversationContext): any {
+    // Récupérer les recommandations des métadonnées pour contraindre les enums
+    const recommendations = context.metadata?.['recommendations'] || { activities: [], practices: [] };
+    
+    // Extraire les IDs et noms disponibles pour créer les enums
+    const availableActivities = recommendations.activities?.map((item: any) => ({
+      id: item.id,
+      name: item.title || item.name || 'Activité sans nom'
+    })) || [];
+    const availablePractices = recommendations.practices?.map((item: any) => ({
+      id: item.id,
+      name: item.title || item.name || 'Pratique sans nom'
+    })) || [];
+    
+    const availableActivityIds = availableActivities.map((item: any) => item.id);
+    const availablePracticeIds = availablePractices.map((item: any) => item.id);
+    const availableActivityNames = availableActivities.map((item: any) => item.name);
+    const availablePracticeNames = availablePractices.map((item: any) => item.name);
+    const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
+    
+    console.log(`📋 Schéma de sortie Bilan contraint avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
+      activities: availableActivities,
+      practices: availablePractices
+    });
+
     return {
       format: { 
         type: "json_schema",
@@ -115,7 +139,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
               properties: {
                 scoresAnalysis: {
                   type: "string",
-                  description: "Analyse des scores du bilan et identification des points d'amélioration"
+                  description: "Message destiné à l'utilisateur analysant vos scores de bilan et identifiant vos points d'amélioration (formulé en vous parlant directement l'un a l'autre)"
                 },
                 customCategories: {
                   type: "array",
@@ -132,12 +156,12 @@ export class BilanChatBotService extends RecommendationChatBotService {
                       },
                       description: {
                         type: "string",
-                        description: "Description de cette catégorie et pourquoi elle est importante"
+                        description: "Message destiné à l'utilisateur décrivant cette catégorie et pourquoi elle est importante pour vous (formulé en vous parlant directement l'un a l'autre)"
                       }
                     },
                     required: ["categoryName", "score", "description"]
                   },
-                  description: "Catégories personnalisées identifiées lors de la conversation avec leurs scores"
+                  description: "Catégories personnalisées identifiées lors de votre conversation avec leurs scores"
                 }
               },
               required: ["scoresAnalysis", "customCategories"]
@@ -157,7 +181,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
                   },
                   reasoning: {
                     type: "string",
-                    description: "Raisonnement derrière cette recommandation"
+                    description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation vous correspond (formulé en vous parlant directement l'un a l'autre)"
                   },
                   // Champs hérités de RecommendationChatBotService
                   recommandedCategories: {
@@ -167,17 +191,19 @@ export class BilanChatBotService extends RecommendationChatBotService {
                       properties: {
                         id: {
                           type: "string",
-                          description: "Identifiant de la pratique recommandée"
+                          enum: availablePracticeIds,
+                          description: "Identifiant unique de la pratique de bien-être recommandée"
                         },
                         name: {
                           type: "string",
-                          description: "Nom de la pratique recommandée"
+                          enum: availablePracticeNames,
+                          description: "Titre de la pratique de bien-être recommandée"
                         }
                       },
                       required: ["id", "name"],
                       additionalProperties: false
                     },
-                    description: "Pratiques recommandées avec identifiant et nom"
+                    description: "Pratiques de bien-être recommandées basées sur l'analyse de votre bilan"
                   },
                   recommandedActivities: {
                     type: "array",
@@ -186,47 +212,49 @@ export class BilanChatBotService extends RecommendationChatBotService {
                       properties: {
                         id: {
                           type: "string",
-                          description: "Identifiant de l'activité recommandée"
+                          enum: availableActivityIds,
+                          description: "Identifiant unique de l'activité de bien-être recommandée"
                         },
                         name: {
                           type: "string",
-                          description: "Nom de l'activité recommandée"
+                          enum: availableActivityNames,
+                          description: "Titre de l'activité de bien-être recommandée"
                         }
                       },
                       required: ["id", "name"],
                       additionalProperties: false
                     },
-                    description: "Activités recommandées avec identifiant et nom"
+                    description: "Activités de bien-être recommandées basées sur l'analyse de votre bilan"
                   },
-                  activitiesReason: {
+                  activitiesReasons: {
                     type: "string",
-                    description: "Raisonnement derrière les activités recommandées"
+                    description: "Message destiné à l'utilisateur expliquant pourquoi ces activités vous correspondent (formulé en vous parlant directement l'un a l'autre)"
                   },
                   practicesReasons: {
                     type: "string",
-                    description: "Raisonnement derrière les pratiques recommandées"
+                    description: "Message destiné à l'utilisateur expliquant pourquoi ces pratiques vous correspondent (formulé en vous parlant directement l'un a l'autre)"
                   },
                   relevanceScore: {
                     type: "number",
-                    description: "Score de pertinence (0-1)"
+                    description: "Score de pertinence de la recommandation (0 = non pertinent, 1 = très pertinent)"
                   },
                   benefits: {
                     type: "array",
                     items: { type: "string" },
-                    description: "Bénéfices attendus"
+                    description: "Messages destinés à l'utilisateur listant les bénéfices concrets que vous pourrez retirer (formulés en vous parlant directement)"
                   }
                 },
-                required: ["category", "priority", "reasoning", "recommandedCategories", "recommandedActivities", "activitiesReason", "practicesReasons", "relevanceScore", "benefits"]
+                required: ["category", "priority", "reasoning", "recommandedCategories", "recommandedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "benefits"]
               }
             },
             importanteKnowledge: {
               type: "array",
               items: { type: "string" },
-              description: "Connaissances importantes à retenir"
+              description: "Messages destinés à l'utilisateur contenant les points clés à retenir pour optimiser votre parcours de bien-être (formulés en vous parlant directement)"
             }
           },
           required: ["userProfile", "bilanAnalysis", "recommendations", "importanteKnowledge"],
-          description: "Résumé structuré du bilan et des recommandations généré automatiquement"
+          description: `Résumé personnalisé de votre bilan de bien-être avec recommandations adaptées. Les recommandations sont contraintes aux ${allAvailableIds.length} éléments disponibles dans le contexte.`
         },
         strict: true
       }

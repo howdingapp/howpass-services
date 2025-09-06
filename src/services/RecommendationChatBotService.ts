@@ -270,7 +270,31 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     return prompt;
   }
 
-  protected getSummaryOutputSchema(_context: ConversationContext): OpenAIJsonSchema {
+  protected getSummaryOutputSchema(context: ConversationContext): OpenAIJsonSchema {
+    // Récupérer les recommandations des métadonnées pour contraindre les enums
+    const recommendations = context.metadata?.['recommendations'] || { activities: [], practices: [] };
+    
+    // Extraire les IDs et noms disponibles pour créer les enums
+    const availableActivities = recommendations.activities?.map((item: any) => ({
+      id: item.id,
+      name: item.title || item.name || 'Activité sans nom'
+    })) || [];
+    const availablePractices = recommendations.practices?.map((item: any) => ({
+      id: item.id,
+      name: item.title || item.name || 'Pratique sans nom'
+    })) || [];
+    
+    const availableActivityIds = availableActivities.map((item: any) => item.id);
+    const availablePracticeIds = availablePractices.map((item: any) => item.id);
+    const availableActivityNames = availableActivities.map((item: any) => item.name);
+    const availablePracticeNames = availablePractices.map((item: any) => item.name);
+    const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
+    
+    console.log(`📋 Schéma de sortie contraint avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
+      activities: availableActivities,
+      practices: availablePractices
+    });
+
     return {
       format: { 
         type: "json_schema",
@@ -316,17 +340,19 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                       properties: {
                         id: {
                           type: "string",
-                          description: "Identifiant de la pratique recommandée trouvée par les outils"
+                          enum: availablePracticeIds,
+                          description: "Identifiant unique de la pratique de bien-être recommandée"
                         },
                         name: {
                           type: "string",
-                          description: "Nom de la pratique recommandée trouvée par les outils, qui semble recouvrir le besoin de l'utilisateur"
+                          enum: availablePracticeNames,
+                          description: "Titre de la pratique de bien-être recommandée"
                         }
                       },
                       required: ["id", "name"],
                       additionalProperties: false
                     },
-                    description: "Pratiques recommandées avec identifiant et nom trouvés par les outils, qui semble recouvrir le besoin de l'utilisateur"
+                    description: "Pratiques de bien-être recommandées basées sur l'analyse des besoins de l'utilisateur"
                   },
                   recommandedActivities: {
                     type: "array",
@@ -335,58 +361,60 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                       properties: {
                         id: {
                           type: "string",
-                          description: "Identifiant d'une activité recommandée trouvée par les outils, qui semble recouvrir le besoin de l'utilisateur"
+                          enum: availableActivityIds,
+                          description: "Identifiant unique de l'activité de bien-être recommandée"
                         },
                         name: {
                           type: "string",
-                          description: "Nom de l'activité recommandée trouvée par les outils, qui semble recouvrir le besoin de l'utilisateur"
+                          enum: availableActivityNames,
+                          description: "Titre de l'activité de bien-être recommandée"
                         }
                       },
                       required: ["id", "name"],
                       additionalProperties: false
                     },
-                    description: "Activités recommandées avec identifiant et nom"
+                    description: "Activités de bien-être recommandées basées sur l'analyse des besoins de l'utilisateur"
                   },
-                  activitiesReason: {
+                  activitiesReasons: {
                     type: "string",
-                    description: "Raisonnement pour les activités recommandées"
+                    description: "Message destiné à l'utilisateur expliquant pourquoi ces activités vous correspondent (formulé en vous parlant directement l'un à l'autre)"
                   },
                   practicesReasons: {
                     type: "string",
-                    description: "Raisonnement pour les pratiques recommandées"
+                    description: "Message destiné à l'utilisateur expliquant pourquoi ces pratiques vous correspondent (formulé en vous parlant directement l'un à l'autre)"
                   },
                   relevanceScore: {
                     type: "number",
-                    description: "Score de pertinence (0-1)"
+                    description: "Score de pertinence de la recommandation (0 = non pertinent, 1 = très pertinent)"
                   },
                   reasoning: {
                     type: "string",
-                    description: "Raisonnement derrière la recommandation"
+                    description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation vous correspond (formulé en vous parlant directement l'un à l'autre)"
                   },
                   benefits: {
                     type: "array",
                     items: { type: "string" },
-                    description: "Bénéfices attendus"
+                    description: "Messages destinés à l'utilisateur listant les bénéfices concrets que vous pourrez retirer (formulés en vous parlant directement)"
                   }
                 },
-                required: ["recommandedCategories", "recommandedActivities", "activitiesReason", "practicesReasons", "relevanceScore", "reasoning", "benefits"],
+                required: ["recommandedCategories", "recommandedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "reasoning", "benefits"],
                 additionalProperties: false
               }
             },
             nextSteps: {
               type: "array",
               items: { type: "string" },
-              description: "Prochaines étapes recommandées"
+              description: "Messages destinés à l'utilisateur décrivant les actions concrètes à entreprendre pour progresser dans votre bien-être (formulés en vous parlant directement)"
             },
             importanteKnowledge: {
               type: "array",
               items: { type: "string" },
-              description: "Connaissances importantes à retenir"
+              description: "Messages destinés à l'utilisateur contenant les points clés à retenir pour optimiser votre parcours de bien-être (formulés en vous parlant directement)"
             }
           },
           required: ["userProfile", "recommendations", "nextSteps", "importanteKnowledge"],
           additionalProperties: false,
-          description: "Résumé structuré des recommandations généré automatiquement"
+          description: `Résumé personnalisé des recommandations de bien-être basé sur l'analyse des besoins de l'utilisateur. Les recommandations sont contraintes aux ${allAvailableIds.length} éléments disponibles dans le contexte.`
         },
         strict: true
       }
