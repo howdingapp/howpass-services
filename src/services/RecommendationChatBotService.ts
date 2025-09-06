@@ -72,7 +72,14 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
   protected buildSystemPrompt(context: ConversationContext): string {
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
-    Tu es bienveillant et professionnel.`;
+    Tu es bienveillant et professionnel.
+
+IMPORTANT - STRATÉGIE DE CONVERSATION:
+- Ne propose JAMAIS d'activités ou pratiques directement sans avoir d'abord creusé les besoins de l'utilisateur
+- Pose des questions ciblées pour comprendre son état émotionnel, ses contraintes, ses préférences
+- Écoute attentivement ses réponses avant de suggérer quoi que ce soit
+- L'objectif est de créer une vraie conversation, pas de donner des réponses toutes faites
+- Propose des activités/pratiques seulement après avoir bien compris ses besoins spécifiques`;
 
     // Ajouter le contexte du dernier bilan si disponible
     if (context.lastBilan) {
@@ -136,6 +143,51 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       basePrompt += `\n\nUtilise ces informations pour contextualiser tes recommandations et adapter tes suggestions selon l'historique de l'utilisateur.`;
     }
 
+    // Ajouter le contexte de la dernière recommandation Howana si disponible
+    if (context.lastHowanaRecommandation) {
+      basePrompt += `\n\nCONTEXTE DE LA DERNIÈRE RECOMMANDATION HOWANA:`;
+      
+      if (context.lastHowanaRecommandation.userProfile) {
+        const profile = context.lastHowanaRecommandation.userProfile;
+        if (profile.supposedEmotionalState) {
+          basePrompt += `\n- État émotionnel précédent: ${profile.supposedEmotionalState}`;
+        }
+        if (profile.supposedCurrentNeeds && profile.supposedCurrentNeeds.length > 0) {
+          basePrompt += `\n- Besoins précédents: ${profile.supposedCurrentNeeds.join(', ')}`;
+        }
+        if (profile.supposedPreferences && profile.supposedPreferences.length > 0) {
+          basePrompt += `\n- Préférences précédentes: ${profile.supposedPreferences.join(', ')}`;
+        }
+        if (profile.supposedConstraints && profile.supposedConstraints.length > 0) {
+          basePrompt += `\n- Contraintes précédentes: ${profile.supposedConstraints.join(', ')}`;
+        }
+      }
+
+      if (context.lastHowanaRecommandation.recommendedCategories && context.lastHowanaRecommandation.recommendedCategories.length > 0) {
+        const categories = context.lastHowanaRecommandation.recommendedCategories.map(cat => cat.name).join(', ');
+        basePrompt += `\n- Pratiques recommandées précédemment: ${categories}`;
+      }
+
+      if (context.lastHowanaRecommandation.recommendedActivities && context.lastHowanaRecommandation.recommendedActivities.length > 0) {
+        const activities = context.lastHowanaRecommandation.recommendedActivities.map(act => act.name).join(', ');
+        basePrompt += `\n- Activités recommandées précédemment: ${activities}`;
+      }
+
+      if (context.lastHowanaRecommandation.activitiesReasons) {
+        basePrompt += `\n- Raisons des activités précédentes: ${context.lastHowanaRecommandation.activitiesReasons}`;
+      }
+
+      if (context.lastHowanaRecommandation.practicesReasons) {
+        basePrompt += `\n- Raisons des pratiques précédentes: ${context.lastHowanaRecommandation.practicesReasons}`;
+      }
+
+      if (context.lastHowanaRecommandation.importanteKnowledge && context.lastHowanaRecommandation.importanteKnowledge.length > 0) {
+        basePrompt += `\n- Connaissances importantes précédentes: ${context.lastHowanaRecommandation.importanteKnowledge.join(', ')}`;
+      }
+
+      basePrompt += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions et recommandations. Évite de répéter exactement les mêmes suggestions.`;
+    }
+
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
@@ -186,7 +238,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     - Si tu ne sais pas quelque chose, dis-le honnêtement
     - L'échange doit contenir environ 10 questions maximum
     - Chaque réponse doit TOUJOURS contenir une question pertinente
-    - Fournis 1 à 4 suggestions de réponses courtes (maximum 5 mots chacune) pour faciliter l'interaction`;
+    - Fournis 1 à 4 suggestions de réponses courtes (maximum 5 mots chacune) pour faciliter l'interaction
+    - CRUCIAL: Ne propose des activités/pratiques qu'après avoir posé au moins 3-4 questions pour comprendre les vrais besoins
+    - Privilégie la qualité de la conversation à la rapidité des recommandations`;
     
     // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
     if (!context.aiRules || !Array.isArray(context.aiRules) || context.aiRules.length === 0) {
@@ -197,7 +251,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     - Explique le raisonnement derrière chaque recommandation
     - Adapte tes suggestions selon son profil et son expérience
     - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
-    - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
+    - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement
+    - STRATÉGIE: Commence par des questions ouvertes sur son état actuel, ses défis, ses envies
+    - Ne propose des activités/pratiques qu'après avoir bien cerné ses besoins spécifiques`;
     }
 
     // Politique d'utilisation des outils (FAQ limitée à un périmètre précis)

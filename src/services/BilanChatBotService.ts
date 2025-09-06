@@ -46,6 +46,51 @@ export class BilanChatBotService extends RecommendationChatBotService {
     - L'échange doit contenir environ 10 questions maximum
     - Chaque réponse doit TOUJOURS contenir une question pertinente
     - Fournis 1 à 4 suggestions de réponses courtes (maximum 5 mots chacune) pour faciliter l'interaction`;
+
+    // Ajouter le contexte de la dernière recommandation Howana si disponible
+    if (context.lastHowanaRecommandation) {
+      basePrompt += `\n\nCONTEXTE DE LA DERNIÈRE RECOMMANDATION HOWANA:`;
+      
+      if (context.lastHowanaRecommandation.userProfile) {
+        const profile = context.lastHowanaRecommandation.userProfile;
+        if (profile.supposedEmotionalState) {
+          basePrompt += `\n- État émotionnel précédent: ${profile.supposedEmotionalState}`;
+        }
+        if (profile.supposedCurrentNeeds && profile.supposedCurrentNeeds.length > 0) {
+          basePrompt += `\n- Besoins précédents: ${profile.supposedCurrentNeeds.join(', ')}`;
+        }
+        if (profile.supposedPreferences && profile.supposedPreferences.length > 0) {
+          basePrompt += `\n- Préférences précédentes: ${profile.supposedPreferences.join(', ')}`;
+        }
+        if (profile.supposedConstraints && profile.supposedConstraints.length > 0) {
+          basePrompt += `\n- Contraintes précédentes: ${profile.supposedConstraints.join(', ')}`;
+        }
+      }
+
+      if (context.lastHowanaRecommandation.recommendedCategories && context.lastHowanaRecommandation.recommendedCategories.length > 0) {
+        const categories = context.lastHowanaRecommandation.recommendedCategories.map(cat => cat.name).join(', ');
+        basePrompt += `\n- Pratiques recommandées précédemment: ${categories}`;
+      }
+
+      if (context.lastHowanaRecommandation.recommendedActivities && context.lastHowanaRecommandation.recommendedActivities.length > 0) {
+        const activities = context.lastHowanaRecommandation.recommendedActivities.map(act => act.name).join(', ');
+        basePrompt += `\n- Activités recommandées précédemment: ${activities}`;
+      }
+
+      if (context.lastHowanaRecommandation.activitiesReasons) {
+        basePrompt += `\n- Raisons des activités précédentes: ${context.lastHowanaRecommandation.activitiesReasons}`;
+      }
+
+      if (context.lastHowanaRecommandation.practicesReasons) {
+        basePrompt += `\n- Raisons des pratiques précédentes: ${context.lastHowanaRecommandation.practicesReasons}`;
+      }
+
+      if (context.lastHowanaRecommandation.importanteKnowledge && context.lastHowanaRecommandation.importanteKnowledge.length > 0) {
+        basePrompt += `\n- Connaissances importantes précédentes: ${context.lastHowanaRecommandation.importanteKnowledge.join(', ')}`;
+      }
+
+      basePrompt += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions et recommandations. Évite de répéter exactement les mêmes suggestions.`;
+    }
     
     // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
     if (!context.aiRules || !Array.isArray(context.aiRules) || context.aiRules.length === 0) {
