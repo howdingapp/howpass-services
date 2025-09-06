@@ -409,7 +409,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           properties: {
             response: {
               type: "string",
-              description: "Réponse principale de l'assistant Howana, très courte (2 phrases maximum)"
+              description: "Message de salutation soit nouveau context soit faisant référence à la conversation précédente de l'assistant Howana, très courte (30 mots maximum)"
             },
             quickReplies: {
               type: "array",
