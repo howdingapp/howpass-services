@@ -281,27 +281,27 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             userProfile: {
               type: "object",
               properties: {
-                emotionalState: {
+                supposedEmotionalState: {
                   type: "string",
                   description: "État émotionnel actuel de l'utilisateur, formulé de son point de vue (ex: 'Je me sens stressé', 'Je ressens de la fatigue')"
                 },
-                currentNeeds: {
+                supposedCurrentNeeds: {
                   type: "array",
                   items: { type: "string" },
                   description: "Besoins actuels identifiés, formulés du point de vue de l'utilisateur (ex: 'J'ai besoin de me détendre', 'Je veux retrouver de l'énergie')"
                 },
-                preferences: {
+                supposedPreferences: {
                   type: "array",
                   items: { type: "string" },
                   description: "Préférences de l'utilisateur, formulées de son point de vue (ex: 'J'aime les activités en groupe', 'Je préfère le matin')"
                 },
-                constraints: {
+                supposedConstraints: {
                   type: "array",
                   items: { type: "string" },
                   description: "Contraintes identifiées, formulées du point de vue de l'utilisateur (ex: 'Je n'ai que 30 minutes', 'Je ne peux pas sortir')"
                 }
               },
-              required: ["emotionalState", "currentNeeds", "preferences", "constraints"],
+              required: ["supposedEmotionalState", "supposedCurrentNeeds", "supposedPreferences", "supposedConstraints"],
               additionalProperties: false
             },
             recommendations: {
@@ -310,12 +310,22 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                 type: "object",
                 properties: {
                   recommandedCategories: {
-                    type: "string",
-                    description: "identifiant des pratiques recommandées"
+                    type: "array",
+                    items: { type: "string" },
+                    description: "identifiants des pratiques recommandées"
                   },
                   recommandedActivities: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "identifiants des activités recommandées"
+                  },
+                  activitiesReason: {
                     type: "string",
-                    description: "identifiant des activités recommandées"
+                    description: "Raisonnement pour les activités recommandées"
+                  },
+                  practicesReasons: {
+                    type: "string",
+                    description: "Raisonnement pour les pratiques recommandées"
                   },
                   relevanceScore: {
                     type: "number",
@@ -329,9 +339,14 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     type: "array",
                     items: { type: "string" },
                     description: "Bénéfices attendus"
+                  },
+                  importanteKnowledge: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Connaissances importantes à retenir"
                   }
                 },
-                required: ["recommandedCategories", "recommandedActivities", "relevanceScore", "reasoning", "benefits"],
+                required: ["recommandedCategories", "recommandedActivities", "activitiesReason", "practicesReasons", "relevanceScore", "reasoning", "benefits", "importanteKnowledge"],
                 additionalProperties: false
               }
             },

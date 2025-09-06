@@ -93,22 +93,22 @@ export class BilanChatBotService extends RecommendationChatBotService {
             userProfile: {
               type: "object",
               properties: {
-                emotionalState: {
+                supposedEmotionalState: {
                   type: "string",
                   description: "État émotionnel actuel de l'utilisateur, formulé de son point de vue (ex: 'Je me sens stressé', 'Je ressens de la fatigue')"
                 },
-                currentNeeds: {
+                supposedCurrentNeeds: {
                   type: "array",
                   items: { type: "string" },
                   description: "Besoins actuels identifiés, formulés du point de vue de l'utilisateur (ex: 'J'ai besoin de me détendre', 'Je veux retrouver de l'énergie')"
                 },
-                potentialChallenges: {
+                supposedPotentialChallenges: {
                   type: "array",
                   items: { type: "string" },
                   description: "Défis potentiels identifiés, formulés du point de vue de l'utilisateur (ex: 'En ce moment, je lutte avec le stress', 'Je me sens dépassé par mes responsabilités')"
                 }
               },
-              required: ["emotionalState", "currentNeeds", "potentialChallenges"]
+              required: ["supposedEmotionalState", "supposedCurrentNeeds", "supposedPotentialChallenges"]
             },
             bilanAnalysis: {
               type: "object",
@@ -155,17 +155,45 @@ export class BilanChatBotService extends RecommendationChatBotService {
                     type: "string",
                     description: "Priorité de l'amélioration (haute, moyenne, basse)"
                   },
-                  suggestedActivities: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "Activités suggérées pour cette catégorie"
-                  },
                   reasoning: {
                     type: "string",
                     description: "Raisonnement derrière cette recommandation"
+                  },
+                  // Champs hérités de RecommendationChatBotService
+                  recommandedCategories: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "identifiants des pratiques recommandées"
+                  },
+                  recommandedActivities: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "identifiants des activités recommandées"
+                  },
+                  activitiesReason: {
+                    type: "string",
+                    description: "Raisonnement derrière les activités recommandées"
+                  },
+                  practicesReasons: {
+                    type: "string",
+                    description: "Raisonnement derrière les pratiques recommandées"
+                  },
+                  relevanceScore: {
+                    type: "number",
+                    description: "Score de pertinence (0-1)"
+                  },
+                  benefits: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Bénéfices attendus"
+                  },
+                  importanteKnowledge: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Connaissances importantes à retenir"
                   }
                 },
-                required: ["category", "priority", "suggestedActivities", "reasoning"]
+                required: ["category", "priority", "suggestedActivities", "reasoning", "recommandedCategories", "recommandedActivities", "activitiesReason", "practicesReasons", "relevanceScore", "benefits", "importanteKnowledge"]
               }
             }
           },
