@@ -186,18 +186,18 @@ export class BilanChatBotService extends RecommendationChatBotService {
                     type: "array",
                     items: { type: "string" },
                     description: "Bénéfices attendus"
-                  },
-                  importanteKnowledge: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "Connaissances importantes à retenir"
                   }
                 },
-                required: ["category", "priority", "suggestedActivities", "reasoning", "recommandedCategories", "recommandedActivities", "activitiesReason", "practicesReasons", "relevanceScore", "benefits", "importanteKnowledge"]
+                required: ["category", "priority", "reasoning", "recommandedCategories", "recommandedActivities", "activitiesReason", "practicesReasons", "relevanceScore", "benefits"]
               }
+            },
+            importanteKnowledge: {
+              type: "array",
+              items: { type: "string" },
+              description: "Connaissances importantes à retenir"
             }
           },
-          required: ["userProfile", "bilanAnalysis", "recommendations"],
+          required: ["userProfile", "bilanAnalysis", "recommendations", "importanteKnowledge"],
           description: "Résumé structuré du bilan et des recommandations généré automatiquement"
         },
         strict: true

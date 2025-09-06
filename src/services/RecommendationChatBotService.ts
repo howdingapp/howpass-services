@@ -339,14 +339,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     type: "array",
                     items: { type: "string" },
                     description: "Bénéfices attendus"
-                  },
-                  importanteKnowledge: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "Connaissances importantes à retenir"
                   }
                 },
-                required: ["recommandedCategories", "recommandedActivities", "activitiesReason", "practicesReasons", "relevanceScore", "reasoning", "benefits", "importanteKnowledge"],
+                required: ["recommandedCategories", "recommandedActivities", "activitiesReason", "practicesReasons", "relevanceScore", "reasoning", "benefits"],
                 additionalProperties: false
               }
             },
@@ -354,9 +349,14 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               type: "array",
               items: { type: "string" },
               description: "Prochaines étapes recommandées"
+            },
+            importanteKnowledge: {
+              type: "array",
+              items: { type: "string" },
+              description: "Connaissances importantes à retenir"
             }
           },
-          required: ["userProfile", "recommendations", "nextSteps"],
+          required: ["userProfile", "recommendations", "nextSteps", "importanteKnowledge"],
           additionalProperties: false,
           description: "Résumé structuré des recommandations généré automatiquement"
         },
