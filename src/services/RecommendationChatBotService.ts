@@ -567,77 +567,19 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     const { availableActivityIds, availablePracticeIds } = constraints;
 
     switch (toolName) {
-      case 'faq':
-        // Schéma pour les réponses après utilisation de l'outil FAQ
-        // Pas de quickReplies avec des identifiants de pratiques car l'outil FAQ ne retourne pas d'activités/pratiques
+      case 'activities_and_practices_and_faq':
+        // Schéma pour les réponses après utilisation de l'outil combiné
+        // Peut inclure des quickReplies avec des identifiants de pratiques/activités valides
         return {
           format: { 
             type: "json_schema",
-            name: "FAQResponse",
+            name: "CombinedResponse",
             schema: {
               type: "object",
               properties: {
                 response: {
                   type: "string",
-                  description: "Réponse principale de l'assistant Howana basée sur la FAQ et tes connaissances de spécialisée en recommandations"
-                },
-                quickReplies: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      type: {
-                        type: "string",
-                        enum: ["text"],
-                        description: "Type de quick reply: uniquement 'text' pour les réponses FAQ"
-                      },
-                      text: {
-                        type: "string",
-                        description: "Texte de la suggestion (max 5 mots)"
-                      },
-                      textRedirection: {
-                        type: "string",
-                        description: "Texte d'invitation (toujours vide pour les réponses FAQ)"
-                      },
-                      practiceId: {
-                        type: "null",
-                        enum: [null],
-                        description: "Toujours null pour les réponses FAQ"
-                      },
-                      activityId: {
-                        type: "null",
-                        enum: [null],
-                        description: "Toujours null pour les réponses FAQ"
-                      }
-                    },
-                    required: ["type", "text", "textRedirection", "practiceId", "activityId"],
-                    additionalProperties: false
-                  },
-                  description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur.",
-                  maxItems: 4,
-                  minItems: 1
-                }
-              },
-              required: ["response", "quickReplies"],
-              additionalProperties: false
-            },
-            strict: true
-          }
-        };
-
-      case 'activities_and_practices':
-        // Schéma pour les réponses après utilisation de l'outil activities_and_practices
-        // Peut inclure des quickReplies avec des identifiants de pratiques valides
-        return {
-          format: { 
-            type: "json_schema",
-            name: "ActivitiesResponse",
-            schema: {
-              type: "object",
-              properties: {
-                response: {
-                  type: "string",
-                  description: "Réponse principale de l'assistant Howana avec recommandations d'activités/pratiques, pas trop de detail si on propose des activités dans les quicks answers (teasing)"
+                  description: "Réponse principale de l'assistant Howana avec recommandations d'activités/pratiques et informations FAQ, pas trop de detail si on propose des activités dans les quicks answers (teasing)"
                 },
                 quickReplies: {
                   type: "array",
@@ -647,7 +589,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                       type: {
                         type: "string",
                         enum: ["text", "practice", "activity"],
-                        description: "Type de quick reply: 'text' pour une réponse simple, 'practice' pour une redirection vers une pratique"
+                        description: "Type de quick reply: 'text' pour une réponse simple, 'practice' pour une redirection vers une pratique, 'activity' pour une redirection vers une activité"
                       },
                       text: {
                         type: "string",
@@ -671,7 +613,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     required: ["type", "text", "textRedirection","practiceId", "activityId"],
                     additionalProperties: false
                   },
-                  description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice' avec redirection vers une pratique. IMPORTANT: Les practiceId et activityId doivent être des identifiants valides retournés par l'outil activities_and_practices. Le champ textRedirection contient le texte d'invitation à découvrir une pratique/activité spécifique.",
+                  description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice'/'activity' avec redirection. IMPORTANT: Les practiceId et activityId doivent être des identifiants valides retournés par l'outil. Le champ textRedirection contient le texte d'invitation à découvrir une pratique/activité spécifique.",
                   maxItems: 4,
                   minItems: 1
                 }
@@ -716,24 +658,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       tools: [
         {
           type: 'function',
-          name: 'faq',
-          description: 'FAQ limitée à: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, sujets débutants, parrainage, ambassadeur Howana, Aper\'How bien-être (définition/participation/organisation/pratiques). N\'utilise PAS cet outil pour compte/connexion, prix, sécurité, support.',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description: 'La question ou le sujet à rechercher dans la FAQ'
-              }
-            },
-            required: ['query']
-          },
-          strict: false
-        },
-        {
-          type: 'function',
-          name: 'activities_and_practices',
-          description: 'Rechercher des activités et pratiques pertinentes pour l\'utilisateur',
+          name: 'activities_and_practices_and_faq',
+          description: 'Rechercher des activités et pratiques pertinentes pour l\'utilisateur et chercher dans la FAQ des informations',
           parameters: {
             type: 'object',
             properties: {
@@ -741,8 +667,12 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                 type: 'string',
                 description: 'Description de l\'état émotionnel et des besoins de l\'utilisateur, formulée de son point de vue avec des expressions comme "Je me sens...", "J\'ai besoin de...", "Je voudrais...". Ce format facilite la recherche vectorielle en alignant la formulation des besoins avec celle des descriptions d\'activités.'
               },
+              faqSearchTerm: {
+                type: 'string',
+                description: 'Question ou sujet à rechercher dans la FAQ, formulé du point de vue de l\'utilisateur (ex: "Comment gérer le stress?", "Qu\'est-ce que la méditation?", "Améliorer mon sommeil")'
+              }
             },
-            required: ['searchTerm']
+            required: ['searchTerm', 'faqSearchTerm']
           },
           strict: false
         }
@@ -751,17 +681,15 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
   }
 
   protected override buildToolUseSystemPrompt(_context: ConversationContext): string {
-    return `POLITIQUE D'UTILISATION DES OUTILS (obligatoire):\n- Utilise 'faq' UNIQUEMENT pour des questions informationnelles sur: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, sujets débutants (activités/pratiques), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques).\n- Exemples de requêtes 'faq': "comment gérer le stress au travail", "bienfaits de la méditation", "améliorer mon sommeil", "pratiques pour la concentration", "qu'est-ce qu'un Aper'How bien-être", "comment participer à un Aper'How", "quels types de pratiques aux Aper'How", "avantages du parrainage", "devenir ambassadeur Howana".\n- N'utilise PAS 'faq' pour des sujets de compte/connexion, abonnement/prix, sécurité/données, support/bugs, navigation/app: réponds sans outil ou utilise 'activities_and_practices' si c'est une demande de recommandations.\n- Pour des recommandations personnalisées (trouver activités/pratiques adaptées), appelle 'activities_and_practices'.`;
+    return `POLITIQUE D'UTILISATION DES OUTILS (obligatoire):\n- Utilise 'activities_and_practices_and_faq' pour toutes les recherches : activités/pratiques ET informations FAQ.\n- Pour les questions informationnelles sur: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, sujets débutants (activités/pratiques), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques), remplis le champ 'faqSearchTerm'.\n- Pour les recommandations personnalisées d'activités/pratiques, remplis le champ 'searchTerm'.\n- Tu peux remplir les deux champs si l'utilisateur a besoin à la fois d'informations et de recommandations.\n- Exemples de requêtes FAQ: "comment gérer le stress au travail", "bienfaits de la méditation", "améliorer mon sommeil", "pratiques pour la concentration", "qu'est-ce qu'un Aper'How bien-être", "comment participer à un Aper'How", "quels types de pratiques aux Aper'How", "avantages du parrainage", "devenir ambassadeur Howana".\n- N'utilise PAS cet outil pour des sujets de compte/connexion, abonnement/prix, sécurité/données, support/bugs, navigation/app: réponds sans outil.`;
   }
 
   protected async callTool(toolName: string, toolArgs: any, _context: ConversationContext): Promise<any> {
     switch (toolName) {
-      case 'faq':
-        return await this.searchFAQ(toolArgs.query);
-      
-      case 'activities_and_practices':
-        return await this.searchActivitiesAndPractices(
-          toolArgs.searchTerm, 
+      case 'activities_and_practices_and_faq':
+        return await this.searchActivitiesAndPracticesAndFAQ(
+          toolArgs.searchTerm,
+          toolArgs.faqSearchTerm
         );
       
       default:
@@ -769,42 +697,47 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     }
   }
 
-  private async searchFAQ(query: string): Promise<any> {
-    try {
-      console.log(`🔍 Recherche FAQ pour: ${query}`);
-      
-      // Utiliser SupabaseService pour la recherche vectorielle sur la table faq
-      const faqResults = await this.supabaseService.searchFAQ(query, 2)
-      
-      return faqResults;
-
-    } catch (error) {
-      console.error('❌ Erreur lors de la recherche FAQ:', error);
-      return {
-        results: [],
-        query: query,
-        error: 'Erreur lors de la recherche FAQ'
-      };
-    }
-  }
-
-  private async searchActivitiesAndPractices(
-    searchTerm: string, 
+  private async searchActivitiesAndPracticesAndFAQ(
+    searchTerm: string,
+    faqSearchTerm: string
   ): Promise<any> {
     try {
-      console.log(`🔍 Recherche d'activités et pratiques pour: ${searchTerm}`);
+      console.log(`🔍 Recherche combinée - Activités/Pratiques: ${searchTerm}, FAQ: ${faqSearchTerm}`);
       
-      // Utiliser SupabaseService pour la recherche vectorielle
-      const searchResults = await this.supabaseService.searchActivitiesAndPractices(
-        searchTerm,
-      );
-      
-      return searchResults;
+      const results: any = {
+        activities: [],
+        practices: [],
+        faq: []
+      };
+
+      // Recherche d'activités et pratiques si searchTerm est fourni
+      if (searchTerm && searchTerm.trim()) {
+        try {
+          const activitiesResults = await this.supabaseService.searchActivitiesAndPractices(searchTerm);
+          results.activities = activitiesResults.results.filter((item: any) => item.type === 'activity');
+          results.practices = activitiesResults.results.filter((item: any) => item.type === 'practice');
+        } catch (error) {
+          console.error('❌ Erreur lors de la recherche d\'activités et pratiques:', error);
+        }
+      }
+
+      // Recherche FAQ si faqSearchTerm est fourni
+      if (faqSearchTerm && faqSearchTerm.trim()) {
+        try {
+          const faqResults = await this.supabaseService.searchFAQ(faqSearchTerm, 2);
+          results.faq = faqResults.results;
+        } catch (error) {
+          console.error('❌ Erreur lors de la recherche FAQ:', error);
+        }
+      }
+
+      return results;
     } catch (error) {
-      console.error('❌ Erreur lors de la recherche d\'activités et pratiques:', error);
+      console.error('❌ Erreur lors de la recherche combinée:', error);
       return {
-        results: [],
-        searchTerm: searchTerm,
+        activities: [],
+        practices: [],
+        faq: [],
         error: 'Erreur lors de la recherche'
       };
     }
@@ -820,24 +753,25 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     const activities: ExtractedRecommandations['activities'] = [];
     const practices: ExtractedRecommandations['practices'] = [];
 
-    // Pour l'outil FAQ, rien à extraire
-    if (toolId === 'faq') {
-      console.log('📋 Outil FAQ - Aucune extraction nécessaire');
-      return { activities, practices };
-    }
-
-    // Pour l'outil activities_and_practices, extraire depuis les résultats de la recherche vectorielle
-    if (toolId === 'activities_and_practices' && response?.results && Array.isArray(response.results)) {
-      response.results.forEach((result: any) => {
-        if (result.id && result.title) {
-          // Distinguer les activités des pratiques grâce au champ 'type' ajouté
-          if (result.type === 'activity') {
+    // Pour l'outil activities_and_practices_and_faq, extraire depuis les résultats
+    if (toolId === 'activities_and_practices_and_faq' && response) {
+      // Extraire les activités
+      if (response.activities && Array.isArray(response.activities)) {
+        response.activities.forEach((result: any) => {
+          if (result.id && result.title) {
             activities.push(result);
-          } else if (result.type === 'practice') {
+          }
+        });
+      }
+
+      // Extraire les pratiques
+      if (response.practices && Array.isArray(response.practices)) {
+        response.practices.forEach((result: any) => {
+          if (result.id && result.title) {
             practices.push(result);
           }
-        }
-      });
+        });
+      }
     }
 
     console.log(`🔧 Extraction terminée: ${activities.length} activités, ${practices.length} pratiques`);

@@ -585,8 +585,10 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           extractedData = recommendationResponse?.extractedData;
           console.log('🔧 Réponse IA avec recommandations générée:', recommendationResponse);
           
-          // Les recommandations seront automatiquement extraites et stockées via generateIAResponse
-          // Le callId sera lié aux pratiques comme souhaité
+          // Ajouter immédiatement les extractedData au contexte pour que getSummaryOutputSchema puisse y accéder
+          if (extractedData) {
+            this.enrichContext(context, { extractedData });
+          }
           
         } catch (error) {
           console.error('❌ Erreur lors de la génération des recommandations:', error);
@@ -862,5 +864,33 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       console.warn('⚠️ Impossible d\'extraire le nom de l\'outil depuis l\'ID:', toolCallId, error);
       return null;
     }
+  }
+
+  /**
+   * Enrichit le contexte avec les données extraites
+   * @param context Le contexte de conversation à enrichir
+   * @param data Objet contenant les données à ajouter au contexte
+   * @param data.extractedData Les données extraites contenant les activités et pratiques
+   */
+  protected enrichContext(context: ConversationContext, data: { extractedData?: any }): void {
+    if (!data || !data.extractedData) {
+      console.warn('⚠️ Aucune extractedData fournie pour enrichir le contexte');
+      return;
+    }
+
+    const { extractedData } = data;
+    const recommendations = {
+      activities: extractedData.activities || [],
+      practices: extractedData.practices || []
+    };
+    
+    // Mettre à jour le contexte avec les recommandations
+    context.metadata = {
+      ...context.metadata,
+      recommendations: recommendations,
+      hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0)
+    };
+    
+    console.log('📋 Contexte enrichi avec les recommandations:', recommendations);
   }
 }
