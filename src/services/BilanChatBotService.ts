@@ -83,29 +83,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
   }
 
   protected override getSummaryOutputSchema(context: ConversationContext): any {
-    // Récupérer les recommandations des métadonnées pour contraindre les enums
-    const recommendations = context.metadata?.['recommendations'] || { activities: [], practices: [] };
-    
-    // Extraire les IDs et noms disponibles pour créer les enums
-    const availableActivities = recommendations.activities?.map((item: any) => ({
-      id: item.id,
-      name: item.title || item.name || 'Activité sans nom'
-    })) || [];
-    const availablePractices = recommendations.practices?.map((item: any) => ({
-      id: item.id,
-      name: item.title || item.name || 'Pratique sans nom'
-    })) || [];
-    
-    const availableActivityIds = availableActivities.map((item: any) => item.id);
-    const availablePracticeIds = availablePractices.map((item: any) => item.id);
-    const availableActivityNames = availableActivities.map((item: any) => item.name);
-    const availablePracticeNames = availablePractices.map((item: any) => item.name);
-    const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
-    
-    console.log(`📋 Schéma de sortie Bilan contraint avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
-      activities: availableActivities,
-      practices: availablePractices
-    });
+    const constraints = this.getActivitiesAndPracticesConstraints(context);
+    const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
 
     return {
       format: { 

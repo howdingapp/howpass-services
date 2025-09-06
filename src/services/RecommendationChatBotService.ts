@@ -270,7 +270,18 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     return prompt;
   }
 
-  protected getSummaryOutputSchema(context: ConversationContext): OpenAIJsonSchema {
+  /**
+   * Génère les contraintes d'IDs pour les activités et pratiques disponibles
+   * @param context Le contexte de conversation contenant les métadonnées
+   * @returns Un objet contenant les IDs et noms contraints pour les activités et pratiques
+   */
+  protected getActivitiesAndPracticesConstraints(context: ConversationContext): {
+    availableActivityIds: string[];
+    availablePracticeIds: string[];
+    availableActivityNames: string[];
+    availablePracticeNames: string[];
+    allAvailableIds: string[];
+  } {
     // Récupérer les recommandations des métadonnées pour contraindre les enums
     const recommendations = context.metadata?.['recommendations'] || { activities: [], practices: [] };
     
@@ -290,10 +301,23 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     const availablePracticeNames = availablePractices.map((item: any) => item.name);
     const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
     
-    console.log(`📋 Schéma de sortie contraint avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
+    console.log(`📋 Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
       activities: availableActivities,
       practices: availablePractices
     });
+
+    return {
+      availableActivityIds,
+      availablePracticeIds,
+      availableActivityNames,
+      availablePracticeNames,
+      allAvailableIds
+    };
+  }
+
+  protected getSummaryOutputSchema(context: ConversationContext): OpenAIJsonSchema {
+    const constraints = this.getActivitiesAndPracticesConstraints(context);
+    const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
 
     return {
       format: { 
@@ -475,7 +499,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     };
   }
 
-  protected override getAddMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+  protected override getAddMessageOutputSchema(context: ConversationContext): ChatBotOutputSchema {
+    const constraints = this.getActivitiesAndPracticesConstraints(context);
+    const { availableActivityIds, availablePracticeIds } = constraints;
+
     return {
       format: { 
         type: "json_schema",
@@ -486,38 +513,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             response: {
               type: "string",
               description: "Réponse principale de l'assistant Howana"
-            },
-            recommendations: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  type: {
-                    type: "string",
-                    enum: ["activity", "practice"],
-                    description: "Type de recommandation: 'activity' ou 'practice'"
-                  },
-                  id: {
-                    type: "string",
-                    description: "Identifiant de l'activité ou pratique recommandée"
-                  },
-                  title: {
-                    type: "string",
-                    description: "Titre de l'activité ou pratique"
-                  },
-                  relevanceScore: {
-                    type: "number",
-                    description: "Score de pertinence (0-1)"
-                  },
-                  reasoning: {
-                    type: "string",
-                    description: "Raisonnement derrière la recommandation"
-                  }
-                },
-                required: ["type", "id", "title", "relevanceScore", "reasoning"],
-                additionalProperties: false
-              },
-              description: "Liste des recommandations d'activités et pratiques générées par l'IA. Vide si aucune recommandation spécifique n'a été faite."
             },
             quickReplies: {
               type: "array",
@@ -539,10 +534,12 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                   },
                   practiceId: {
                     type: ["string", "null"],
+                    enum: [...availablePracticeIds, null],
                     description: "Identifiant de la pratique recommandée (requis si type='practice', peut être null si type='text')"
                   },
                   activityId: {
                     type: ["string", "null"],
+                    enum: [...availableActivityIds, null],
                     description: "Identifiant de l'activité associée si pertinent (optionnel, peut être null)"
                   }
                 },
@@ -554,7 +551,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               minItems: 1
             }
           },
-          required: ["response", "recommendations", "quickReplies"],
+          required: ["response", "quickReplies"],
           additionalProperties: false
         },
         strict: true
@@ -566,6 +563,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    * Détermine le schéma de sortie approprié selon l'outil utilisé
    */
   protected override getSchemaByUsedTool(toolName: string, context: ConversationContext): ChatBotOutputSchema {
+    const constraints = this.getActivitiesAndPracticesConstraints(context);
+    const { availableActivityIds, availablePracticeIds } = constraints;
+
     switch (toolName) {
       case 'faq':
         // Schéma pour les réponses après utilisation de l'outil FAQ
@@ -595,12 +595,18 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                         type: "string",
                         description: "Texte de la suggestion (max 5 mots)"
                       },
+                      textRedirection: {
+                        type: "string",
+                        description: "Texte d'invitation (toujours vide pour les réponses FAQ)"
+                      },
                       practiceId: {
                         type: "null",
+                        enum: [null],
                         description: "Toujours null pour les réponses FAQ"
                       },
                       activityId: {
                         type: "null",
+                        enum: [null],
                         description: "Toujours null pour les réponses FAQ"
                       }
                     },
@@ -653,10 +659,12 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                       },
                       practiceId: {
                         type: ["string", "null"],
+                        enum: [...availablePracticeIds, null],
                         description: "Identifiant de la pratique recommandée (requis si type='practice', doit être un ID valide d'une pratique retournée par l'outil, peut être null si type!='practice')"
                       },
                       activityId: {
                         type: ["string", "null"],
+                        enum: [...availableActivityIds, null],
                         description: "Identifiant de l'activité recommandée (requis si type='activity', doit être un ID valide d'une acitivté retournée par l'outil, peut être null si type='activity')"
                       }
                     },
