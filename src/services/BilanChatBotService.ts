@@ -162,13 +162,41 @@ export class BilanChatBotService extends RecommendationChatBotService {
                   // Champs hérités de RecommendationChatBotService
                   recommandedCategories: {
                     type: "array",
-                    items: { type: "string" },
-                    description: "identifiants des pratiques recommandées"
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: {
+                          type: "string",
+                          description: "Identifiant de la pratique recommandée"
+                        },
+                        name: {
+                          type: "string",
+                          description: "Nom de la pratique recommandée"
+                        }
+                      },
+                      required: ["id", "name"],
+                      additionalProperties: false
+                    },
+                    description: "Pratiques recommandées avec identifiant et nom"
                   },
                   recommandedActivities: {
                     type: "array",
-                    items: { type: "string" },
-                    description: "identifiants des activités recommandées"
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: {
+                          type: "string",
+                          description: "Identifiant de l'activité recommandée"
+                        },
+                        name: {
+                          type: "string",
+                          description: "Nom de l'activité recommandée"
+                        }
+                      },
+                      required: ["id", "name"],
+                      additionalProperties: false
+                    },
+                    description: "Activités recommandées avec identifiant et nom"
                   },
                   activitiesReason: {
                     type: "string",
