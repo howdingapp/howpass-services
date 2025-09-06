@@ -46,6 +46,8 @@ export class ConversationService {
       ...(request.initialContext?.activityData && { activityData: request.initialContext.activityData }),
       ...(request.initialContext?.bilanData && { bilanData: request.initialContext.bilanData }),
       ...(request.initialContext?.lastBilan && { lastBilan: request.initialContext.lastBilan }),
+      ...(request.initialContext?.lastHowanaRecommandation && { lastHowanaRecommandation: request.initialContext.lastHowanaRecommandation }),
+      ...(request.initialContext?.lastAnswer && { lastAnswer: request.initialContext.lastAnswer }),
       ...(request.initialContext?.practicienData && { practicienData: request.initialContext.practicienData }),
       ...(request.initialContext?.isEditing !== undefined && { isEditing: request.initialContext.isEditing }),
       ...(request.initialContext?.userData && { userData: request.initialContext.userData })

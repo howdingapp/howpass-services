@@ -26,7 +26,7 @@ export class GoogleCloudTasksService {
    * Créer une tâche pour le traitement IA
    */
   async createIATask(taskData: {
-    type: 'generate_response' | 'generate_summary' | 'generate_first_response';
+    type: 'generate_response' | 'generate_summary' | 'generate_first_response' | 'generate_unfinished_exchange';
     conversationId: string;
     userId: string;
     userMessage?: string;
@@ -85,7 +85,7 @@ export class GoogleCloudTasksService {
    * Créer une tâche avec délai (pour les tâches différées)
    */
   async createDelayedIATask(taskData: {
-    type: 'generate_response' | 'generate_summary' | 'generate_first_response';
+    type: 'generate_response' | 'generate_summary' | 'generate_first_response' | 'generate_unfinished_exchange';
     conversationId: string;
     userId: string;
     userMessage?: string;
@@ -144,7 +144,7 @@ export class GoogleCloudTasksService {
    * Créer une tâche avec priorité (utilise des queues séparées)
    */
   async createPriorityIATask(taskData: {
-    type: 'generate_response' | 'generate_summary' | 'generate_first_response';
+    type: 'generate_response' | 'generate_summary' | 'generate_first_response' | 'generate_unfinished_exchange';
     conversationId: string;
     userId: string;
     userMessage?: string;

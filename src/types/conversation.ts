@@ -79,6 +79,30 @@ export interface ConversationContext {
   activityData?: ActivityData;
   bilanData?: BilanData;
   lastBilan?: BilanComplet;
+  lastHowanaRecommandation?: {
+    userProfile?: {
+      supposedEmotionalState?: string;
+      supposedCurrentNeeds?: string[];
+      supposedPreferences?: string[];
+      supposedConstraints?: string[];
+    };
+    recommendedCategories?: Array<{
+      id: string;
+      name: string;
+    }>;
+    recommendedActivities?: Array<{
+      id: string;
+      name: string;
+    }>;
+    activitiesReason?: string;
+    practicesReasons?: string;
+    relevanceScore?: number;
+    reasoning?: string;
+    benefits?: string[];
+    importanteKnowledge?: string[];
+    lastUnfinishedExchange?: string;
+  };
+  lastAnswer?: string;
   // Propriétés ajoutées pour harmoniser avec la webapp
   practicienData?: {
     creatorExperience?: string;

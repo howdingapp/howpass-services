@@ -49,7 +49,7 @@ export class ConversationController {
         return;
       }
 
-      if (!['bilan', 'activity', 'recommandation'].includes(request.type)) {
+      if (!['bilan', 'activity', 'recommandation', 'unfinished_exchange'].includes(request.type)) {
         console.log('❌ [START_CONVERSATION] Type invalide:', { type: request.type });
         res.status(400).json({
           success: false,
@@ -271,6 +271,94 @@ export class ConversationController {
   }
 
 
+
+  /**
+   * Générer un échange non fini pour une conversation
+   * POST /api/conversations/:id/unfinished-exchange
+   */
+  async generateUnfinishedExchange(req: AuthenticatedRequest, res: Response): Promise<void> {
+    console.log('📝 [GENERATE_UNFINISHED_EXCHANGE] Requête reçue:', {
+      method: req.method,
+      url: req.url,
+      params: req.params,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'authorization': req.headers.authorization ? '***' : undefined
+      },
+      body: req.body,
+      timestamp: new Date().toISOString()
+    });
+
+    try {
+      const { id: conversationId } = req.params;
+      if (!conversationId) {
+        console.log('❌ [GENERATE_UNFINISHED_EXCHANGE] conversationId manquant dans les paramètres');
+        res.status(400).json({
+          success: false,
+          error: 'conversationId est requis'
+        });
+        return;
+      }
+
+      const { userId, aiResponseId, lastAnswer } = req.body;
+
+      // Validation des données
+      if (!userId) {
+        console.log('❌ [GENERATE_UNFINISHED_EXCHANGE] Validation échouée:', { userId });
+        res.status(400).json({
+          success: false,
+          error: 'userId est requis'
+        });
+        return;
+      }
+
+      // Récupérer le contexte de la conversation
+      const context = await this.conversationService.getContext(conversationId);
+      if (!context) {
+        console.log(`❌ [GENERATE_UNFINISHED_EXCHANGE] Conversation non trouvée: ${conversationId}`);
+        res.status(404).json({
+          success: false,
+          error: 'Conversation non trouvée'
+        });
+        return;
+      }
+
+      // Déclencher la génération de l'échange non fini
+      try {
+        const iaJob = await this.iaJobTriggerService.triggerIAJob({
+          type: 'generate_unfinished_exchange',
+          conversationId,
+          userId,
+          aiResponseId,
+          lastAnswer: lastAnswer || '',
+          priority: 'high'
+        }, req.authToken || '');
+
+        console.log(`🤖 [GENERATE_UNFINISHED_EXCHANGE] Job IA déclenché pour l'échange non fini: ${iaJob.jobId}`);
+
+        res.status(200).json({
+          success: true,
+          message: 'Génération de l\'échange non fini déclenchée avec succès',
+          jobId: iaJob.jobId,
+          estimatedTime: iaJob.estimatedTime,
+        });
+
+      } catch (iaError) {
+        console.error('❌ [GENERATE_UNFINISHED_EXCHANGE] Erreur lors du déclenchement du job IA:', iaError);
+        res.status(500).json({
+          success: false,
+          error: 'Erreur lors du déclenchement de la génération de l\'échange non fini'
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ [GENERATE_UNFINISHED_EXCHANGE] Erreur lors de la génération de l\'échange non fini:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erreur interne du serveur'
+      });
+    }
+  }
 
   /**
    * Obtenir les statistiques du service

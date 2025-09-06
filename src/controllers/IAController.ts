@@ -7,12 +7,13 @@ import { ConversationContext } from '../types/conversation';
 import { IAAuthenticatedRequest } from '../middleware/iaAuthMiddleware';
 
 interface IATaskRequest {
-  type: 'generate_response' | 'generate_summary' | 'generate_first_response';
+  type: 'generate_response' | 'generate_summary' | 'generate_first_response' | 'generate_unfinished_exchange';
   conversationId: string;
   userId: string;
   userMessage?: string;
   priority?: 'low' | 'medium' | 'high';
   aiResponseId?: string; // ID de l'entrée ai_response pré-créée
+  lastAnswer?: string; // Dernière réponse de l'utilisateur pour les échanges non finis
 }
 
 export class IAController {
@@ -109,6 +110,9 @@ export class IAController {
           break;
         case 'generate_first_response':
           await this.processGenerateFirstResponse(taskData, context);
+          break;
+        case 'generate_unfinished_exchange':
+          await this.processGenerateUnfinishedExchange(taskData, context);
           break;
         default:
           console.error('❌ Type de tâche non reconnu:', taskData.type);
@@ -312,6 +316,69 @@ export class IAController {
   }
 
 
+
+  /**
+   * Traiter la génération d'un échange non fini
+   */
+  private async processGenerateUnfinishedExchange(taskData: IATaskRequest, context: ConversationContext): Promise<any> {
+    console.log(`🔄 Génération d'un échange non fini pour: ${taskData.conversationId}`);
+    
+    // Obtenir le service de chatbot approprié
+    const chatBotService = this.getChatBotService(context);
+    
+    // Créer un message simple indiquant que l'utilisateur est parti
+    const lastAnswer = taskData.lastAnswer || 'L\'utilisateur a quitté la conversation';
+    const unfinishedMessage = `L'utilisateur est parti voir d'autre chose, mais voici sa dernière action : "${lastAnswer}". Cette conversation a été interrompue et peut être reprise plus tard.`;
+    
+    // Créer un objet de réponse simple
+    const unfinishedResponse = {
+      response: unfinishedMessage,
+      messageId: `unfinished_${Date.now()}`,
+      type: 'unfinished_exchange',
+      lastUserAction: lastAnswer,
+      timestamp: new Date().toISOString()
+    };
+
+    // Ajouter le message à la conversation
+    await this.conversationService.addMessage(taskData.conversationId, {
+      content: JSON.stringify(unfinishedResponse),
+      type: 'bot',
+      metadata: { 
+        source: 'ai', 
+        model: chatBotService.getAIModel(), 
+        type: 'unfinished_exchange', 
+        messageId: unfinishedResponse.messageId,
+        lastUserAction: lastAnswer
+      }
+    }, context);
+
+    // Mettre à jour l'entrée ai_response pré-créée
+    if (taskData.aiResponseId) {
+      await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
+        response_text: unfinishedMessage,
+        metadata: { 
+          source: 'ai', 
+          model: chatBotService.getAIModel(), 
+          type: 'unfinished_exchange', 
+          messageId: unfinishedResponse.messageId,
+          status: 'completed',
+          lastUserAction: lastAnswer,
+          conversationInterrupted: true
+        }
+      });
+      console.log(`✅ aiResponse mise à jour pour l'échange non fini: ${taskData.aiResponseId}`);
+    } else {
+      console.warn(`⚠️ Aucun aiResponseId fourni pour l'échange non fini de la conversation: ${taskData.conversationId}`);
+    }
+
+    return {
+      success: true,
+      response: unfinishedMessage,
+      messageId: unfinishedResponse.messageId,
+      workerId: 'google-cloud-tasks',
+      lastUserAction: lastAnswer
+    };
+  }
 
   /**
    * Endpoint de santé pour Google Cloud Tasks

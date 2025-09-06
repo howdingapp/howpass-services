@@ -24,5 +24,9 @@ router.post('/:id/summary', authenticateToken, (req: AuthenticatedRequest, res) 
   conversationController.generateSummary(req, res);
 });
 
+// Générer un échange non fini pour une conversation
+router.post('/:id/unfinished-exchange', authenticateToken, (req: AuthenticatedRequest, res) => {
+  conversationController.generateUnfinishedExchange(req, res);
+});
 
 export default router;

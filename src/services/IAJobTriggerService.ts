@@ -2,13 +2,14 @@ import { ConversationService } from './ConversationService';
 import { GoogleCloudTasksService } from './GoogleCloudTasksService';
 
 export interface IAJobRequest {
-  type: 'generate_response' | 'generate_summary' | 'generate_first_response';
+  type: 'generate_response' | 'generate_summary' | 'generate_first_response' | 'generate_unfinished_exchange';
   conversationId: string;
   userId: string;
   userMessage?: string;
   priority?: 'low' | 'medium' | 'high';
   authToken?: string; // Token d'authentification pour sécuriser les tâches
   aiResponseId?: string | undefined; // ID de l'entrée ai_response pré-créée
+  lastAnswer?: string; // Dernière réponse de l'utilisateur pour les échanges non finis
 }
 
 export class IAJobTriggerService {
