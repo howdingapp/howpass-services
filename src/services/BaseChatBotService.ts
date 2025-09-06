@@ -711,7 +711,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           properties: {
             response: {
               type: "string",
-              description: "Réponse principale de l'assistant"
+              description: "Réponse principale de l'assistant, très courte (2 phrases maximum)"
             }
           },
           required: ["response"],

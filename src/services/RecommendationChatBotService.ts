@@ -409,39 +409,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           properties: {
             response: {
               type: "string",
-              description: "Réponse principale de l'assistant Howana"
-            },
-            recommendations: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  type: {
-                    type: "string",
-                    enum: ["activity", "practice"],
-                    description: "Type de recommandation: 'activity' ou 'practice'"
-                  },
-                  id: {
-                    type: "string",
-                    description: "Identifiant de l'activité ou pratique recommandée"
-                  },
-                  title: {
-                    type: "string",
-                    description: "Titre de l'activité ou pratique"
-                  },
-                  relevanceScore: {
-                    type: "number",
-                    description: "Score de pertinence (0-1)"
-                  },
-                  reasoning: {
-                    type: "string",
-                    description: "Raisonnement derrière la recommandation"
-                  }
-                },
-                required: ["type", "id", "title", "relevanceScore", "reasoning"],
-                additionalProperties: false
-              },
-              description: "Liste des recommandations d'activités et pratiques générées par l'IA. Vide si aucune recommandation spécifique n'a été faite."
+              description: "Réponse principale de l'assistant Howana, très courte (2 phrases maximum)"
             },
             quickReplies: {
               type: "array",
@@ -455,35 +423,23 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                   },
                   type: {
                     type: "string",
-                    enum: ["text", "practice"],
-                    description: "Type de quick reply: 'text' pour une réponse simple, 'practice' pour une redirection vers une pratique"
+                    enum: ["text"],
+                    description: "Type de quick reply, alway text"
                   },
                   text: {
                     type: "string",
                     description: "Texte de la suggestion (max 5 mots)"
                   },
-                  textRedirection: {
-                    type: "string",
-                    description: "Texte d'invitation à découvrir une pratique/activité spécifique. Exemples: 'Voir cette pratique', 'Découvrir cette activité', 'Essayer cette pratique', 'Explorer cette activité'. Ce texte s'affiche quand l'IA propose une pratique/activité avec un ID valide."
-                  },
-                  practiceId: {
-                    type: ["string", "null"],
-                    description: "Identifiant de la pratique recommandée (requis si type='practice', peut être null si type='text')"
-                  },
-                  activityId: {
-                    type: ["string", "null"],
-                    description: "Identifiant de l'activité associée si pertinent (optionnel, peut être null)"
-                  }
                 },
-                required: ["type", "icon", "text", "textRedirection", "practiceId", "activityId"],
+                required: ["type", "icon", "text"],
                 additionalProperties: false
               },
-              description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice' avec redirection vers une pratique. Le champ textRedirection contient le texte d'invitation à découvrir une pratique/activité spécifique.",
+              description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur.",
               maxItems: 4,
               minItems: 1
             }
           },
-          required: ["response", "recommendations", "quickReplies"],
+          required: ["response", "quickReplies"],
           additionalProperties: false
         },
         strict: true
