@@ -31,6 +31,7 @@ export class ConversationService {
 
     console.log('🔍 Sauvegarde d\'une nouvelle conversation dans Redis:', request);
     console.log('🔍 Conversation ID:', conversationId);
+    console.log('🕐 Heure de création:', now);
     
     const context: ConversationContext = {
       id: conversationId,
@@ -39,7 +40,11 @@ export class ConversationService {
       startTime: now,
       lastActivity: now,
       messages: [],
-      metadata: request.initialContext || {},
+      metadata: {
+        ...(request.initialContext || {}),
+        createdAt: now,
+        lastUpdatedAt: now
+      },
       status: 'active',
       // Ajouter toutes les propriétés du contexte initial si elles existent
       ...(request.initialContext?.aiRules && { aiRules: request.initialContext.aiRules }),
@@ -66,16 +71,17 @@ export class ConversationService {
    */
   async addMessage(conversationId: string, request: AddMessageRequest, updatedContext?: ConversationContext): Promise<{ messageId: string; context: ConversationContext }> {
     
+    const messageId = uuidv4();
+    const now = new Date().toISOString();
+    
     console.log('🔍 Ajout d\'un message à la conversation dans Redis:', conversationId);
+    console.log('🕐 Heure d\'ajout du message:', now);
 
     const context = updatedContext || await this.getContext(conversationId);
 
     if(!context) {
       throw new Error('Conversation not found');
     }
-
-    const messageId = uuidv4();
-    const now = new Date().toISOString();
 
     const message: ChatMessage = {
       id: messageId,
@@ -87,6 +93,12 @@ export class ConversationService {
 
     context.messages.push(message);
     context.lastActivity = now;
+    
+    // Mettre à jour les métadonnées avec l'heure de dernière mise à jour
+    context.metadata = {
+      ...context.metadata,
+      lastUpdatedAt: now
+    };
 
     // Renouveler le TTL en mettant à jour la conversation
     await redisService.getClient().setex(conversationId, this.TTL_SECONDS, JSON.stringify(context));
