@@ -6,7 +6,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
   
   protected override buildSystemPrompt(context: ConversationContext): string {
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
-    Tu es bienveillant et professionnel.`;
+    Tu es bienveillant.`;
 
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
@@ -43,14 +43,11 @@ export class BilanChatBotService extends RecommendationChatBotService {
     - Réponds toujours en français
     - Sois concis mais utile
     - Reste professionnel et bienveillant
-    - Si tu ne sais pas quelque chose, dis-le honnêtement
-    - L'échange doit contenir environ 10 questions maximum
-    - Chaque réponse doit TOUJOURS contenir une question pertinente
-    - Fournis 1 à 4 suggestions de réponses courtes (maximum 5 mots chacune) pour faciliter l'interaction`;
+    - Si tu ne sais pas quelque chose, dis-le honnêtement`;
 
     // Ajouter le contexte de la dernière recommandation Howana si disponible
     if (context.lastHowanaRecommandation) {
-      basePrompt += `\n\nCONTEXTE DE LA DERNIÈRE RECOMMANDATION HOWANA:`;
+      basePrompt += `\n\nCONTEXTE DES DERNIERS ECHANGES:`;
       
       if (context.lastHowanaRecommandation.userProfile) {
         const profile = context.lastHowanaRecommandation.userProfile;
@@ -90,7 +87,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
         basePrompt += `\n- Connaissances importantes précédentes: ${context.lastHowanaRecommandation.importanteKnowledge.join(', ')}`;
       }
 
-      basePrompt += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions et recommandations. Évite de répéter exactement les mêmes suggestions.`;
+      basePrompt += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions. Évite de répéter exactement les mêmes suggestions.`;
     }
     
     // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
@@ -108,7 +105,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
 
     // Ajouter les informations du bilan si disponibles
     if (context.bilanData) {
-      basePrompt += `\n\nINFORMATIONS DU BILAN DISPONIBLES:
+      basePrompt += `\n\nINFORMATIONS DU PRE-BILAN DISPONIBLES:
       - Confort physique: ${context.bilanData.scores.principaux.confortPhysique}/9
       - Équilibre émotionnel: ${context.bilanData.scores.principaux.equilibreEmotionnel}/9
       - Qualité du sommeil: ${context.bilanData.scores.principaux.qualiteSommeil}/9
@@ -155,20 +152,16 @@ export class BilanChatBotService extends RecommendationChatBotService {
                     type: "string",
                     description: "Texte de la suggestion (max 5 mots)"
                   },
-                  textRedirection: {
-                    type: "string",
-                    description: "Texte d'invitation à découvrir une pratique/activité spécifique. Exemples: 'Voir cette pratique', 'Découvrir cette activité', 'Essayer cette pratique', 'Explorer cette activité'. Ce texte s'affiche quand l'IA propose une pratique/activité avec un ID valide."
-                  },
                 },
-                required: ["type", "text", "textRedirection"],
+                required: ["type", "text"],
                 additionalProperties: false
               },
               description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur.",
               maxItems: 4,
-              minItems: 1
+              minItems: 0
             }
           },
-          required: ["response", "quickReplies"],
+          required: ["response"],
           additionalProperties: false
         },
         strict: true
