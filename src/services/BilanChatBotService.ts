@@ -206,7 +206,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
                   description: "Défis potentiels identifiés, formulés du point de vue de l'utilisateur (ex: 'En ce moment, je lutte avec le stress', 'Je me sens dépassé par mes responsabilités')"
                 }
               },
-              required: ["supposedEmotionalState", "supposedCurrentNeeds", "supposedPotentialChallenges"]
+              required: ["supposedEmotionalState", "supposedCurrentNeeds", "supposedPotentialChallenges"],
+              additionalProperties: false
             },
             bilanAnalysis: {
               type: "object",
@@ -233,12 +234,14 @@ export class BilanChatBotService extends RecommendationChatBotService {
                         description: "Message destiné à l'utilisateur décrivant cette catégorie et pourquoi elle est importante pour vous (formulé en vous parlant directement l'un a l'autre)"
                       }
                     },
-                    required: ["categoryName", "score", "description"]
+                    required: ["categoryName", "score", "description"],
+                    additionalProperties: false
                   },
                   description: "Catégories personnalisées identifiées lors de votre conversation avec leurs scores"
                 }
               },
-              required: ["scoresAnalysis", "customCategories"]
+              required: ["scoresAnalysis", "customCategories"],
+              additionalProperties: false
             },
             recommendations: {
               type: "array",
@@ -322,7 +325,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
                     description: "Messages destinés à l'utilisateur listant les bénéfices concrets que vous pourrez retirer (formulés en vous parlant directement)"
                   }
                 },
-                required: ["category", "priority", "reasoning", "recommendedCategories", "recommendedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "benefits"]
+                required: ["category", "priority", "reasoning", "recommendedCategories", "recommendedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "benefits"],
+                additionalProperties: false
               }
             },
             importanteKnowledge: {
