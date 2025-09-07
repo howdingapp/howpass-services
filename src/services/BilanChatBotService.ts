@@ -6,7 +6,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
   
   protected override buildSystemPrompt(context: ConversationContext): string {
     let basePrompt = `Tu es Howana, un assistant personnel et confident spécialisé dans le bien-être et les activités de santé. 
-    Tu es bienveillant.`;
+    Tu es bienveillant.  Réponses courtes (maximum 30 mots).`;
 
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;

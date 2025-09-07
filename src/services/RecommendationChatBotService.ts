@@ -72,7 +72,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
   protected buildSystemPrompt(context: ConversationContext): string {
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
-    Tu es bienveillant et professionnel.
+    Tu es bienveillant et professionnel. Réponses courtes (maximum 30 mots).
 
 IMPORTANT - STRATÉGIE DE CONVERSATION:
 - Ne propose JAMAIS d'activités ou pratiques directement sans avoir d'abord creusé les besoins de l'utilisateur
