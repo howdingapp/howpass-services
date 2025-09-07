@@ -369,7 +369,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     const constraints = this.getActivitiesAndPracticesConstraints(context);
     const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
 
-    console.log(`📋 Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
+    console.log(`📋 [RECOMMANDATIONS] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
       availableActivityIds,
       availablePracticeIds,
       availableActivityNames,
@@ -417,6 +417,8 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                 properties: {
                   recommandedCategories: {
                     type: "array",
+                    minItems: availablePracticeIds.length > 0 ? 1 : 0,
+                    maxItems: availablePracticeIds.length > 0 ? Math.max(2, availablePracticeIds.length) : 0,
                     items: {
                       type: "object",
                       properties: {
@@ -438,6 +440,8 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                   },
                   recommandedActivities: {
                     type: "array",
+                    minItems: availableActivityIds.length > 0 ? 1 : 0,
+                    maxItems: availableActivityIds.length > 0 ? Math.max(2, availableActivityIds.length) : 0,
                     items: {
                       type: "object",
                       properties: {

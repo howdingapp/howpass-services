@@ -151,6 +151,14 @@ export class BilanChatBotService extends RecommendationChatBotService {
     const constraints = this.getActivitiesAndPracticesConstraints(context);
     const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
 
+    console.log(`📋 [BILANS] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
+      availableActivityIds,
+      availablePracticeIds,
+      availableActivityNames,
+      availablePracticeNames,
+      allAvailableIds
+    });
+
     return {
       format: { 
         type: "json_schema",
@@ -230,6 +238,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
                   // Champs hérités de RecommendationChatBotService
                   recommandedCategories: {
                     type: "array",
+                    minItems: availablePracticeIds.length > 0 ? 1 : 0,
+                    maxItems: availablePracticeIds.length > 0 ? Math.max(2, availablePracticeIds.length) : 0,
                     items: {
                       type: "object",
                       properties: {
@@ -251,6 +261,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
                   },
                   recommandedActivities: {
                     type: "array",
+                    minItems: availableActivityIds.length > 0 ? 1 : 0,
+                    maxItems: availableActivityIds.length > 0 ? Math.max(2, availableActivityIds.length) : 0,
                     items: {
                       type: "object",
                       properties: {
