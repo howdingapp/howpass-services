@@ -5,7 +5,7 @@ import { ChatBotOutputSchema } from '../types';
 export class BilanChatBotService extends RecommendationChatBotService {
   
   protected override buildSystemPrompt(context: ConversationContext): string {
-    let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
+    let basePrompt = `Tu es Howana, un assistant personnel et confident spécialisé dans le bien-être et les activités de santé. 
     Tu es bienveillant.`;
 
     // Règles de comportement et d'information spécifiques à respecter
