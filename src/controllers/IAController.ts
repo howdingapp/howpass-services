@@ -232,7 +232,7 @@ export class IAController {
       try {
         // Créer un objet avec le résumé et les métadonnées
         const responseData = {
-          response: { summary },
+          response: { summary: summary.summary },
           target_table: context.type === 'bilan' ? 'bilans' : context.type === 'activity' ? 'activities' : 'ai_responses',
           target_id: context.metadata?.['bilanId'] || context.metadata?.['activityId'] || null,
           summary_type: 'conversation_summary',
