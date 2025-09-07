@@ -607,7 +607,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
               minItems: 0
             }
           },
-          required: ["response"],
+          required: ["response", "quickReplies"],
           additionalProperties: false
         },
         strict: true
