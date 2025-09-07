@@ -562,7 +562,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     return {
       format: { 
         type: "json_schema",
-        name: "RecommendationResponse",
+        name: "ConversationResponse",
         schema: {
           type: "object",
           properties: {
