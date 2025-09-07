@@ -369,6 +369,14 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     const constraints = this.getActivitiesAndPracticesConstraints(context);
     const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
 
+    console.log(`📋 Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
+      availableActivityIds,
+      availablePracticeIds,
+      availableActivityNames,
+      availablePracticeNames,
+      allAvailableIds
+    });
+ 
     return {
       format: { 
         type: "json_schema",
