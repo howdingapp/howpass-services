@@ -138,28 +138,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
               type: "string",
               description: "Réponse principale de l'assistant Howana, maximum 25 mots."
             },
-            quickReplies: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  type: {
-                    type: "string",
-                    enum: ["text"],
-                    description: "Type de quick reply: 'text' pour une réponse simple"
-                  },
-                  text: {
-                    type: "string",
-                    description: "Texte de la suggestion (max 5 mots)"
-                  },
-                },
-                required: ["type", "text"],
-                additionalProperties: false
-              },
-              description: "0 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur.",
-              maxItems: 4,
-              minItems: 0
-            }
           },
           required: ["response"],
           additionalProperties: false

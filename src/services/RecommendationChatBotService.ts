@@ -236,11 +236,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     - Sois concis mais utile
     - Reste professionnel et bienveillant
     - Si tu ne sais pas quelque chose, dis-le honnêtement
-    - L'échange doit contenir environ 10 questions maximum
-    - Chaque réponse doit TOUJOURS contenir une question pertinente
-    - Fournis 1 à 4 suggestions de réponses courtes (maximum 5 mots chacune) pour faciliter l'interaction
-    - CRUCIAL: Ne propose des activités/pratiques qu'après avoir posé au moins 3-4 questions pour comprendre les vrais besoins
-    - Privilégie la qualité de la conversation à la rapidité des recommandations`;
+    - CRUCIAL: Ne propose des activités/pratiques qu'après avoir posé au moins 3 questions pour comprendre les vrais besoins`;
     
     // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
     if (!context.aiRules || !Array.isArray(context.aiRules) || context.aiRules.length === 0) {
@@ -319,9 +315,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
       prompt += `\n- Adapter tes recommandations selon l'historique disponible`;
     }
 
-    prompt += `\n\nIMPORTANT: Pour l'état émotionnel et les besoins, analyse-les du point de vue de l'utilisateur en utilisant des formulations comme "Je me sens...", "J'ai besoin de...", "Je ressens...". Cela facilitera le matching sémantique avec les activités et pratiques.
-    
-    Note: Les suggestions de réponses courtes (quickReplies) sont optionnelles et servent à faciliter l'interaction utilisateur.`;
+    prompt += `\n\nIMPORTANT: Pour l'état émotionnel et les besoins, analyse-les du point de vue de l'utilisateur en utilisant des formulations comme "Je me sens...", "J'ai besoin de...", "Je ressens...". Cela facilitera le matching sémantique avec les activités et pratiques.`;
 
     return prompt;
   }
