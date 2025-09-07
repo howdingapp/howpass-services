@@ -560,7 +560,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
           properties: {
             response: {
               type: "string",
-              description: "Réponse principale de l'assistant Howana, maximum 50 mots."
+              description: "Réponse principale de l'assistant Howana, maximum 20 mots."
             },
           },
           required: ["response"],
@@ -588,7 +588,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
               properties: {
                 response: {
                   type: "string",
-                  description: "Réponse principale de l'assistant Howana. Doit parler subtilementd es activités et pratiques proposés pour découvrir les besoins."
+                  description: "Réponse principale de l'assistant Howana. Maximum 30 mots."
                 },
               },
               required: ["response"],
