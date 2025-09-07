@@ -8,7 +8,7 @@ export interface MergeRequest {
   prefixVideo1BucketPath: string; // Première vidéo préfixe (qr_code_scene1_part1.mp4)
   prefixVideo2BucketPath: string; // Deuxième vidéo préfixe (qr_code_scene1_part2.mp4)
   postfixVideoUrl: string; // Vidéo fournie par le webhook
-  audioBucketPath?: string; // Son optionnel (ytmp3free.cc_playa-blanca-dream-youtubemp3free.org.mp3)
+  audioBucketPath?: string; // Son optionnel (a9e931e3e10ed43f0ca2a15b96453e86.mp3)
   quality?: 'low' | 'medium' | 'high';
   resolution?: string;
   fps?: number;

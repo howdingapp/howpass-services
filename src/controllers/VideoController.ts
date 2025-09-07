@@ -115,7 +115,7 @@ export class VideoController {
       // Obtenir les URLs publiques des vidéos préfixes et de l'audio via le service Supabase
       const prefixVideo1BucketPath = 'qr_codes/qr_code_scene1_part1.mp4';
       const prefixVideo2BucketPath = 'qr_codes/qr_code_scene1_part2.mp4';
-      const audioBucketPath = 'ytmp3free.cc_playa-blanca-dream-youtubemp3free.org.mp3';
+      const audioBucketPath = 'a9e931e3e10ed43f0ca2a15b96453e86.mp3';
 
       // Construire l'URL de la vidéo postfix depuis Supabase
       // Utiliser default_presentation_video_public_url si presentation_video_public_url n'est pas renseignée
