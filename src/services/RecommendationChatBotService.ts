@@ -635,8 +635,30 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                   type: "string",
                   description: "Réponse principale de l'assistant Howana. Maximum 30 mots."
                 },
+                quickReplies: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: {
+                        type: "string",
+                        enum: ["text"],
+                        description: "Type de quick reply: 'text' pour une réponse simple"
+                      },
+                      text: {
+                        type: "string",
+                        description: "Texte de la suggestion (max 5 mots)"
+                      },
+                    },
+                    required: ["type", "text"],
+                    additionalProperties: false
+                  },
+                  description: "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple.",
+                  maxItems: 3,
+                  minItems: 0
+                }
               },
-              required: ["response"],
+              required: ["response", "quickReplies"],
               additionalProperties: false
             },
             strict: true
