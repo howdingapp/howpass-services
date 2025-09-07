@@ -581,8 +581,6 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
    * Détermine le schéma de sortie approprié selon l'outil utilisé
    */
   protected override getSchemaByUsedTool(toolName: string, context: ConversationContext): ChatBotOutputSchema {
-    const constraints = this.getActivitiesAndPracticesConstraints(context);
-    const { availableActivityIds, availablePracticeIds } = constraints;
 
     switch (toolName) {
       case 'activities_and_practices_and_faq':
@@ -597,46 +595,10 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
               properties: {
                 response: {
                   type: "string",
-                  description: "Réponse principale de l'assistant Howana avec recommandations d'activités/pratiques et informations FAQ, pas trop de detail si on propose des activités dans les quicks answers (teasing)"
+                  description: "Réponse principale de l'assistant Howana"
                 },
-                quickReplies: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      type: {
-                        type: "string",
-                        enum: ["text", "practice", "activity"],
-                        description: "Type de quick reply: 'text' pour une réponse simple, 'practice' pour une redirection vers une pratique, 'activity' pour une redirection vers une activité"
-                      },
-                      text: {
-                        type: "string",
-                        description: "Texte de la suggestion (max 5 mots)"
-                      },
-                      textRedirection: {
-                        type: "string",
-                        description: "Texte d'invitation à découvrir une pratique/activité spécifique. Exemples: 'Voir une pratique', 'Essayer <activite titre>' 'Découvrir une activté <style d'activité ex: sympas, reposant, ...>', 'Essayer la pratique <nom pratique>', 'Explorer une activité'. Ce texte s'affiche quand l'IA propose une pratique/activité avec un ID valide."
-                      },
-                      practiceId: {
-                        type: ["string", "null"],
-                        enum: [...availablePracticeIds, null],
-                        description: "Identifiant de la pratique recommandée (requis si type='practice', doit être un ID valide d'une pratique retournée par l'outil, peut être null si type!='practice')"
-                      },
-                      activityId: {
-                        type: ["string", "null"],
-                        enum: [...availableActivityIds, null],
-                        description: "Identifiant de l'activité recommandée (requis si type='activity', doit être un ID valide d'une acitivté retournée par l'outil, peut être null si type='activity')"
-                      }
-                    },
-                    required: ["type", "text", "textRedirection","practiceId", "activityId"],
-                    additionalProperties: false
-                  },
-                  description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice'/'activity' avec redirection. IMPORTANT: Les practiceId et activityId doivent être des identifiants valides retournés par l'outil. Le champ textRedirection contient le texte d'invitation à découvrir une pratique/activité spécifique.",
-                  maxItems: 4,
-                  minItems: 1
-                }
               },
-              required: ["response", "quickReplies"],
+              required: ["response"],
               additionalProperties: false
             },
             strict: true
