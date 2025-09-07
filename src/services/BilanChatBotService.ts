@@ -156,7 +156,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
                 required: ["type", "text"],
                 additionalProperties: false
               },
-              description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur.",
+              description: "0 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur.",
               maxItems: 4,
               minItems: 0
             }
