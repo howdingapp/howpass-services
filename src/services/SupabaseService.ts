@@ -680,7 +680,7 @@ export class SupabaseService {
       console.log('Query params for vector search', {
         query_embedding: queryEmbedding?.slice(0, 10),
         table_name: table,
-        match_threshold: 0,
+        match_threshold: 0.4,
         match_count: limit
       })
 
