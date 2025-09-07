@@ -1,5 +1,6 @@
 import { RecommendationChatBotService } from './RecommendationChatBotService';
 import { ConversationContext } from '../types/conversation';
+import { ChatBotOutputSchema } from '../types';
 
 export class BilanChatBotService extends RecommendationChatBotService {
   
@@ -125,6 +126,54 @@ export class BilanChatBotService extends RecommendationChatBotService {
     }
 
     return basePrompt;
+  }
+
+  protected override getAddMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+
+    return {
+      format: { 
+        type: "json_schema",
+        name: "ConversationResponse",
+        schema: {
+          type: "object",
+          properties: {
+            response: {
+              type: "string",
+              description: "Réponse principale de l'assistant Howana, maximum 25 mots."
+            },
+            quickReplies: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  type: {
+                    type: "string",
+                    enum: ["text"],
+                    description: "Type de quick reply: 'text' pour une réponse simple"
+                  },
+                  text: {
+                    type: "string",
+                    description: "Texte de la suggestion (max 5 mots)"
+                  },
+                  textRedirection: {
+                    type: "string",
+                    description: "Texte d'invitation à découvrir une pratique/activité spécifique. Exemples: 'Voir cette pratique', 'Découvrir cette activité', 'Essayer cette pratique', 'Explorer cette activité'. Ce texte s'affiche quand l'IA propose une pratique/activité avec un ID valide."
+                  },
+                },
+                required: ["type", "text", "textRedirection"],
+                additionalProperties: false
+              },
+              description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur.",
+              maxItems: 4,
+              minItems: 1
+            }
+          },
+          required: ["response", "quickReplies"],
+          additionalProperties: false
+        },
+        strict: true
+      }
+    };
   }
 
   protected override getSummaryOutputSchema(context: ConversationContext): any {
@@ -285,6 +334,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
     };
   }
 
+
+  
   protected override buildFirstUserPrompt(_context: ConversationContext): string {
     return `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans l'analyse des bilans de bien-être.
     
