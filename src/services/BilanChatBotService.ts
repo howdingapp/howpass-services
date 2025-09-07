@@ -332,6 +332,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
             }
           },
           required: ["userProfile", "bilanAnalysis", "recommendations", "importanteKnowledge"],
+          additionalProperties: false,
           description: `Résumé personnalisé de votre bilan de bien-être avec recommandations adaptées. Les recommandations sont contraintes aux ${allAvailableIds.length} éléments disponibles dans le contexte.`
         },
         strict: true
