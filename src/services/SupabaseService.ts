@@ -680,7 +680,7 @@ export class SupabaseService {
       console.log('Query params for vector search', {
         query_embedding: queryEmbedding?.slice(0, 10),
         table_name: table,
-        match_threshold: 0.4,
+        match_threshold: 0.7,
         match_count: limit
       })
 
@@ -709,7 +709,7 @@ export class SupabaseService {
       const { data, error } = await this.supabase
         .rpc(functionName, {
           query_embedding: queryEmbedding,
-          match_threshold: 0.15,
+          match_threshold: 0.7,
           match_count: limit
         });
 
