@@ -32,8 +32,8 @@ export interface UserProfile {
  * Interface pour une recommandation
  */
 export interface Recommendation {
-  recommandedCategories: string;
-  recommandedActivities: string;
+  recommendedActivities: string;
+  recommendedCategories: string;
   relevanceScore: number;
   reasoning: string;
   benefits: string[];
@@ -122,11 +122,11 @@ export type ConstrainedRecommendationId<T extends ExtractedRecommandations> =
  * Interface pour les recommandations avec IDs contraints
  */
 export interface ConstrainedRecommendation<T extends ExtractedRecommandations> {
-  recommandedCategories: {
+  recommendedCategories: {
     id: ConstrainedRecommendationId<T>;
     name: string;
   }[];
-  recommandedActivities: {
+  recommendedActivities: {
     id: ConstrainedRecommendationId<T>;
     name: string;
   }[];

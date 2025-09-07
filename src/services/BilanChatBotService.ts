@@ -236,7 +236,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
                     description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation vous correspond (formulé en vous parlant directement l'un a l'autre)"
                   },
                   // Champs hérités de RecommendationChatBotService
-                  recommandedCategories: {
+                  recommendedCategories: {
                     type: "array",
                     minItems: availablePracticeIds.length > 0 ? 1 : 0,
                     maxItems: availablePracticeIds.length > 0 ? Math.max(2, availablePracticeIds.length) : 0,
@@ -259,7 +259,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
                     },
                     description: "Pratiques de bien-être recommandées basées sur l'analyse de votre bilan"
                   },
-                  recommandedActivities: {
+                  recommendedActivities: {
                     type: "array",
                     minItems: availableActivityIds.length > 0 ? 1 : 0,
                     maxItems: availableActivityIds.length > 0 ? Math.max(2, availableActivityIds.length) : 0,
@@ -300,7 +300,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
                     description: "Messages destinés à l'utilisateur listant les bénéfices concrets que vous pourrez retirer (formulés en vous parlant directement)"
                   }
                 },
-                required: ["category", "priority", "reasoning", "recommandedCategories", "recommandedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "benefits"]
+                required: ["category", "priority", "reasoning", "recommendedCategories", "recommendedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "benefits"]
               }
             },
             importanteKnowledge: {

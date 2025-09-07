@@ -415,7 +415,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
               items: {
                 type: "object",
                 properties: {
-                  recommandedCategories: {
+                  recommendedCategories: {
                     type: "array",
                     minItems: availablePracticeIds.length > 0 ? 1 : 0,
                     maxItems: availablePracticeIds.length > 0 ? Math.max(2, availablePracticeIds.length) : 0,
@@ -438,7 +438,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                     },
                     description: "Pratiques de bien-être recommandées basées sur l'analyse des besoins de l'utilisateur"
                   },
-                  recommandedActivities: {
+                  recommendedActivities: {
                     type: "array",
                     minItems: availableActivityIds.length > 0 ? 1 : 0,
                     maxItems: availableActivityIds.length > 0 ? Math.max(2, availableActivityIds.length) : 0,
@@ -483,7 +483,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                     description: "Messages destinés à l'utilisateur listant les bénéfices concrets que vous pourrez retirer (formulés en vous parlant directement)"
                   }
                 },
-                required: ["recommandedCategories", "recommandedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "reasoning", "benefits"],
+                required: ["recommendedCategories", "recommendedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "reasoning", "benefits"],
                 additionalProperties: false
               }
             },
