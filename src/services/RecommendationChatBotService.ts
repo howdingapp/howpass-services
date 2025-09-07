@@ -581,6 +581,8 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
    * Détermine le schéma de sortie approprié selon l'outil utilisé
    */
   protected override getSchemaByUsedTool(toolName: string, context: ConversationContext): ChatBotOutputSchema {
+    const constraints = this.getActivitiesAndPracticesConstraints(context);
+    const { availableActivityIds, availablePracticeIds } = constraints;
 
     switch (toolName) {
       case 'activities_and_practices_and_faq':
@@ -595,10 +597,54 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
               properties: {
                 response: {
                   type: "string",
-                  description: "Réponse principale de l'assistant Howana"
+                  description: "Réponse principale de l'assistant Howana en évoquant les activités/pratiques mais de façon subtile pour vérifier l'intérêt"
                 },
               },
               required: ["response"],
+              additionalProperties: false
+            },
+            strict: true
+          }
+        };
+
+      case 'user_ask_redirection_to_other_page':
+        // Schéma pour les réponses de redirection avec quickReplies contraintes
+        return {
+          format: { 
+            type: "json_schema",
+            name: "RedirectionResponse",
+            schema: {
+              type: "object",
+              properties: {
+                response: {
+                  type: "string",
+                  description: "Réponse principale de l'assistant Howana, maximum 50 mots."
+                },
+                redirection: {
+                  type: "object",
+                  properties: {
+                    type: {
+                      type: "string",
+                      enum: ["redirection"],
+                      description: "Type de quick reply: 'redirection' pour une redirection vers une page spécifique"
+                    },
+                    redirectionId: {
+                      type: "string",
+                      enum: [...availableActivityIds, ...availablePracticeIds],
+                      description: "Identifiant de l'activité ou pratique vers laquelle rediriger"
+                    },
+                    redirectionType: {
+                      type: "string",
+                      enum: ["activity", "practice"],
+                      description: "Type de redirection: 'activity' ou 'practice' selon l'ID"
+                    }
+                  },
+                  required: ["type", "redirectionId", "redirectionType"],
+                  additionalProperties: false,
+                  description: "Les informations de redirection"
+                }
+              },
+              required: ["response", "redirection"],
               additionalProperties: false
             },
             strict: true
@@ -666,13 +712,24 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
             required: []
           },
           strict: false
+        },
+        {
+          type: 'function',
+          name: 'user_ask_redirection_to_other_page',
+          description: 'Obtenir des informations de redirection vers une page spécifique',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: []
+          },
+          strict: false
         }
       ]
     };
   }
 
   protected override buildToolUseSystemPrompt(_context: ConversationContext): string {
-    return `POLITIQUE D'UTILISATION DES OUTILS (obligatoire):\n- Utilise 'activities_and_practices_and_faq' pour toutes les recherches : activités/pratiques ET informations FAQ.\n- Pour les questions informationnelles sur: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, sujets débutants (activités/pratiques), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques), remplis le champ 'faqSearchTerm'.\n- Pour les recommandations personnalisées d'activités/pratiques, remplis le champ 'searchTerm'.\n- Tu peux remplir les deux champs si l'utilisateur a besoin à la fois d'informations et de recommandations.\n- Utilise 'last_activity' pour récupérer l'historique des activités de l'utilisateur et mieux comprendre ses préférences et habitudes.\n- Exemples de requêtes FAQ: "comment gérer le stress au travail", "bienfaits de la méditation", "améliorer mon sommeil", "pratiques pour la concentration", "qu'est-ce qu'un Aper'How bien-être", "comment participer à un Aper'How", "quels types de pratiques aux Aper'How", "avantages du parrainage", "devenir ambassadeur Howana".\n- N'utilise PAS ces outils pour des sujets de compte/connexion, abonnement/prix, sécurité/données, support/bugs, navigation/app: réponds sans outil.`;
+    return `POLITIQUE D'UTILISATION DES OUTILS (obligatoire):\n- Utilise 'activities_and_practices_and_faq' pour toutes les recherches : activités/pratiques ET informations FAQ.\n- Pour les questions informationnelles sur: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, sujets débutants (activités/pratiques), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques), remplis le champ 'faqSearchTerm'.\n- Pour les recommandations personnalisées d'activités/pratiques, remplis le champ 'searchTerm'.\n- Tu peux remplir les deux champs si l'utilisateur a besoin à la fois d'informations et de recommandations.\n- Utilise 'last_activity' pour récupérer l'historique des activités de l'utilisateur et mieux comprendre ses préférences et habitudes.\n- Utilise 'user_ask_redirection_to_other_page' quand l'utilisateur demande explicitement à être redirigé vers une page spécifique ou quand tu veux proposer des redirections vers des activités/pratiques déjà recommandées dans le contexte.\n- Exemples de requêtes FAQ: "comment gérer le stress au travail", "bienfaits de la méditation", "améliorer mon sommeil", "pratiques pour la concentration", "qu'est-ce qu'un Aper'How bien-être", "comment participer à un Aper'How", "quels types de pratiques aux Aper'How", "avantages du parrainage", "devenir ambassadeur Howana".\n- N'utilise PAS ces outils pour des sujets de compte/connexion, abonnement/prix, sécurité/données, support/bugs, navigation/app: réponds sans outil.`;
   }
 
   protected async callTool(toolName: string, toolArgs: any, context: ConversationContext): Promise<any> {
@@ -685,6 +742,9 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
       
       case 'last_activity':
         return await this.getLastUserActivities(context.userId);
+      
+      case 'user_ask_redirection_to_other_page':
+        return await this.handleUserRedirectionRequest(context);
       
       default:
         throw new Error(`Outil non supporté: ${toolName}`);
@@ -799,6 +859,50 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
 
     console.log(`🔧 Extraction terminée: ${activities.length} activités, ${practices.length} pratiques`);
     return { activities, practices };
+  }
+
+  private async handleUserRedirectionRequest(context: ConversationContext): Promise<any> {
+    try {
+      console.log('🔍 Vérification des recommandations disponibles pour redirection...');
+      
+      // Vérifier s'il existe des recommandations dans les métadonnées
+      const recommendations = context.metadata?.['recommendations'] || { activities: [], practices: [] };
+      const hasRecommendations = (recommendations.activities?.length || 0) + (recommendations.practices?.length || 0) > 0;
+      
+      if (!hasRecommendations) {
+        console.log('❌ Aucune recommandation disponible dans le contexte');
+        return {
+          status: 'no-reeditection',
+          message: '<no-relevant-redirection-data>, continue with text response',
+          recommendations: []
+        };
+      }
+
+      // Extraire les recommandations du contexte
+      const extractedRecommendations = {
+        activities: recommendations.activities || [],
+        practices: recommendations.practices || []
+      };
+      
+      console.log(`✅ ${extractedRecommendations.activities.length} activités et ${extractedRecommendations.practices.length} pratiques disponibles pour redirection`);
+      
+      return {
+        status: 'recommendations-available',
+        message: 'Recommandations disponibles pour redirection',
+        recommendations: {
+          activities: extractedRecommendations.activities,
+          practices: extractedRecommendations.practices
+        }
+      };
+      
+    } catch (error) {
+      console.error('❌ Erreur lors de la vérification des recommandations:', error);
+      return {
+        status: 'error',
+        message: 'Erreur lors de la vérification des recommandations',
+        recommendations: []
+      };
+    }
   }
 
 }
