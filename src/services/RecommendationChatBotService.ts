@@ -599,15 +599,15 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                     description: "Identifiant de l'activité associée si pertinent (optionnel, peut être null)"
                   }
                 },
-                required: ["type", "text", "textRedirection", "practiceId", "activityId"],
+                required: ["type", "text"],
                 additionalProperties: false
               },
               description: "1 à 4 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou 'practice' avec redirection vers une pratique. Le champ textRedirection contient le texte d'invitation à découvrir une pratique/activité spécifique.",
               maxItems: 4,
-              minItems: 1
+              minItems: 0
             }
           },
-          required: ["response", "quickReplies"],
+          required: ["response"],
           additionalProperties: false
         },
         strict: true
