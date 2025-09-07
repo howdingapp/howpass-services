@@ -188,27 +188,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
         schema: {
           type: "object",
           properties: {
-            userProfile: {
-              type: "object",
-              properties: {
-                supposedEmotionalState: {
-                  type: "string",
-                  description: "État émotionnel actuel de l'utilisateur, formulé de son point de vue (ex: 'Je me sens stressé', 'Je ressens de la fatigue')"
-                },
-                supposedCurrentNeeds: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "Besoins actuels identifiés, formulés du point de vue de l'utilisateur (ex: 'J'ai besoin de me détendre', 'Je veux retrouver de l'énergie')"
-                },
-                supposedPotentialChallenges: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "Défis potentiels identifiés, formulés du point de vue de l'utilisateur (ex: 'En ce moment, je lutte avec le stress', 'Je me sens dépassé par mes responsabilités')"
-                }
-              },
-              required: ["supposedEmotionalState", "supposedCurrentNeeds", "supposedPotentialChallenges"],
-              additionalProperties: false
-            },
+            userProfile: this.getUserProfileSchemaFragment("Profil utilisateur analysé à partir de la conversation de bilan"),
             bilanAnalysis: {
               type: "object",
               properties: {
@@ -243,99 +223,20 @@ export class BilanChatBotService extends RecommendationChatBotService {
               required: ["scoresAnalysis", "customCategories"],
               additionalProperties: false
             },
-            recommendations: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  category: {
-                    type: "string",
-                    description: "Catégorie d'amélioration (physique, émotionnel, sommeil, énergie, ou personnalisée)"
-                  },
-                  priority: {
-                    type: "string",
-                    description: "Priorité de l'amélioration (haute, moyenne, basse)"
-                  },
-                  reasoning: {
-                    type: "string",
-                    description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation vous correspond (formulé en vous parlant directement l'un a l'autre)"
-                  },
-                  // Champs hérités de RecommendationChatBotService
-                  recommendedCategories: {
-                    type: "array",
-                    minItems: availablePracticeIds.length > 0 ? 1 : 0,
-                    maxItems: availablePracticeIds.length > 0 ? Math.max(2, availablePracticeIds.length) : 0,
-                    items: {
-                      type: "object",
-                      properties: {
-                        id: {
-                          type: "string",
-                          enum: availablePracticeIds,
-                          description: "Identifiant unique de la pratique de bien-être recommandée"
-                        },
-                        name: {
-                          type: "string",
-                          enum: availablePracticeNames,
-                          description: "Titre de la pratique de bien-être recommandée"
-                        }
-                      },
-                      required: ["id", "name"],
-                      additionalProperties: false
-                    },
-                    description: "Pratiques de bien-être recommandées basées sur l'analyse de votre bilan"
-                  },
-                  recommendedActivities: {
-                    type: "array",
-                    minItems: availableActivityIds.length > 0 ? 1 : 0,
-                    maxItems: availableActivityIds.length > 0 ? Math.max(2, availableActivityIds.length) : 0,
-                    items: {
-                      type: "object",
-                      properties: {
-                        id: {
-                          type: "string",
-                          enum: availableActivityIds,
-                          description: "Identifiant unique de l'activité de bien-être recommandée"
-                        },
-                        name: {
-                          type: "string",
-                          enum: availableActivityNames,
-                          description: "Titre de l'activité de bien-être recommandée"
-                        }
-                      },
-                      required: ["id", "name"],
-                      additionalProperties: false
-                    },
-                    description: "Activités de bien-être recommandées basées sur l'analyse de votre bilan"
-                  },
-                  activitiesReasons: {
-                    type: "string",
-                    description: "Message destiné à l'utilisateur expliquant pourquoi ces activités vous correspondent (formulé en vous parlant directement l'un a l'autre)"
-                  },
-                  practicesReasons: {
-                    type: "string",
-                    description: "Message destiné à l'utilisateur expliquant pourquoi ces pratiques vous correspondent (formulé en vous parlant directement l'un a l'autre)"
-                  },
-                  relevanceScore: {
-                    type: "number",
-                    description: "Score de pertinence de la recommandation (0 = non pertinent, 1 = très pertinent)"
-                  },
-                  benefits: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "Messages destinés à l'utilisateur listant les bénéfices concrets que vous pourrez retirer (formulés en vous parlant directement)"
-                  }
-                },
-                required: ["category", "priority", "reasoning", "recommendedCategories", "recommendedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "benefits"],
-                additionalProperties: false
-              }
-            },
+            recommendation: this.getRecommendationSchemaFragment(
+              availableActivityIds,
+              availableActivityNames,
+              availablePracticeIds,
+              availablePracticeNames,
+              "Recommandation personnalisée basée sur l'analyse du bilan de bien-être"
+            ),
             importanteKnowledge: {
               type: "array",
               items: { type: "string" },
               description: "Messages destinés à l'utilisateur contenant les points clés à retenir pour optimiser votre parcours de bien-être (formulés en vous parlant directement)"
             }
           },
-          required: ["userProfile", "bilanAnalysis", "recommendations", "importanteKnowledge"],
+          required: ["userProfile", "bilanAnalysis", "recommendation", "importanteKnowledge"],
           additionalProperties: false,
           description: `Résumé personnalisé de votre bilan de bien-être avec recommandations adaptées. Les recommandations sont contraintes aux ${allAvailableIds.length} éléments disponibles dans le contexte.`
         },
@@ -344,8 +245,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
     };
   }
 
-
-  
   protected override buildFirstUserPrompt(_context: ConversationContext): string {
     return `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans l'analyse des bilans de bien-être.
     
@@ -363,4 +262,5 @@ export class BilanChatBotService extends RecommendationChatBotService {
     
     Note: Les suggestions de réponses courtes (quickReplies) sont optionnelles et servent à faciliter l'interaction utilisateur.`;
   }
+
 }
