@@ -566,7 +566,18 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     switch (toolName) {
       case 'activities_and_practices_and_faq':
         // Schéma pour les réponses après utilisation de l'outil combiné
-        // Peut inclure des quickReplies avec des identifiants de pratiques/activités valides
+        // Inclut les contraintes d'activités et pratiques comme dans le résumé
+        const constraints = this.getActivitiesAndPracticesConstraints(context);
+        const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
+
+        console.log(`📋 [OUTIL] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
+          availableActivityIds,
+          availablePracticeIds,
+          availableActivityNames,
+          availablePracticeNames,
+          allAvailableIds
+        });
+
         return {
           format: { 
             type: "json_schema",
@@ -585,24 +596,35 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                     properties: {
                       type: {
                         type: "string",
-                        enum: ["text"],
-                        description: "Type de quick reply: 'text' pour une réponse simple"
+                        enum: ["text", "activity", "practice"],
+                        description: "Type de quick reply: 'text' pour une réponse simple, 'activity' ou 'practice' pour référencer un élément spécifique"
                       },
                       text: {
                         type: "string",
                         description: "Texte de la suggestion (max 5 mots)"
                       },
+                      id: {
+                        type: "string",
+                        enum: allAvailableIds,
+                        description: "ID de l'activité ou pratique référencée (requis si type = 'activity' ou 'practice')"
+                      },
+                      name: {
+                        type: "string",
+                        enum: [...availableActivityNames, ...availablePracticeNames],
+                        description: "Nom de l'activité ou pratique référencée (requis si type = 'activity' ou 'practice')"
+                      }
                     },
                     required: ["type", "text"],
                     additionalProperties: false
                   },
-                  description: "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple.",
+                  description: "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou référencer des activités/pratiques spécifiques.",
                   maxItems: 3,
                   minItems: 0
                 }
               },
               required: ["response", "quickReplies"],
-              additionalProperties: false
+              additionalProperties: false,
+              description: `Réponse après utilisation de l'outil combiné. Les quickReplies peuvent référencer les ${allAvailableIds.length} éléments disponibles dans le contexte.`
             },
             strict: true
           }
