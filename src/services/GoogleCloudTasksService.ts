@@ -28,7 +28,6 @@ export class GoogleCloudTasksService {
   async createIATask(taskData: {
     type: 'generate_response' | 'generate_summary' | 'generate_first_response' | 'generate_unfinished_exchange';
     conversationId: string;
-    userId: string;
     userMessage?: string;
     priority: 'low' | 'medium' | 'high';
     authToken: string; // Token d'authentification pour sécuriser les tâches
@@ -87,7 +86,6 @@ export class GoogleCloudTasksService {
   async createDelayedIATask(taskData: {
     type: 'generate_response' | 'generate_summary' | 'generate_first_response' | 'generate_unfinished_exchange';
     conversationId: string;
-    userId: string;
     userMessage?: string;
     priority: 'low' | 'medium' | 'high';
     authToken: string; // Token d'authentification pour sécuriser les tâches
@@ -146,7 +144,6 @@ export class GoogleCloudTasksService {
   async createPriorityIATask(taskData: {
     type: 'generate_response' | 'generate_summary' | 'generate_first_response' | 'generate_unfinished_exchange';
     conversationId: string;
-    userId: string;
     userMessage?: string;
     priority: 'low' | 'medium' | 'high';
     authToken: string; // Token d'authentification pour sécuriser les tâches

@@ -1,6 +1,7 @@
 import { ConversationService } from './ConversationService';
 import { SupabaseService } from './SupabaseService';
-import { ConversationContext, StartConversationRequest, AddMessageRequest, OpenAIToolsDescription } from '../types/conversation';
+import { StartConversationRequest, AddMessageRequest, OpenAIToolsDescription } from '../types/conversation';
+import { HowanaContext } from '../types/repositories';
 import { ChatBotOutputSchema, IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
 import OpenAI from 'openai';
 
@@ -9,7 +10,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   protected supabaseService: SupabaseService;
   protected openai: OpenAI;
   protected AI_MODEL = "gpt-4o-mini";
-  protected AI_MODEL_QUALITY = "gpt-4o-mini";
+  protected AI_MODEL_QUALITY = "gpt-4o";
 
   constructor() {
     this.conversationService = new ConversationService();
@@ -28,15 +29,12 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     success: boolean;
     conversationId: string;
     expiresIn: number;
-    context?: ConversationContext;
+    updatedContext?: HowanaContext;
     error?: string;
   }> {
     try {
       // Démarrer la conversation via le service local
-      const result = await this.conversationService.startConversation({
-        ...request,
-        initialContext: request.initialContext || {}
-      });
+      const result = await this.conversationService.startConversation(request);
 
       // Générer automatiquement une première réponse IA basée sur le contexte
       try {
@@ -45,19 +43,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           // Utiliser le messageId d'OpenAI si disponible
           const messageId = firstResponseResult.messageId;
           
-          // Ajouter le message à la conversation Redis
-          await this.conversationService.addMessage(
-            result.conversationId,
-            {
-              content: firstResponseResult.response,
-              type: 'bot',
-              metadata: { source: 'ai', model: this.AI_MODEL, type: 'first_response', messageId: messageId }
-            }
-          );
-          
           // Sauvegarder le messageId d'OpenAI dans le contexte pour les réponses suivantes
           if (messageId) {
-            result.context.metadata = { ...result.context.metadata, previousCallId: messageId };
+            result.context.previousCallId = messageId;
           }
           
           // Mettre à jour l'entrée ai_response pré-créée
@@ -77,11 +65,6 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             console.warn('⚠️ Aucun aiResponseId fourni pour la première réponse');
           }
           
-          // Récupérer le contexte mis à jour avec le premier message
-          const updatedContext = await this.conversationService.getContext(result.conversationId);
-          if (updatedContext) {
-            result.context = updatedContext;
-          }
         } else {
           console.error('❌ Erreur lors de la génération de la première réponse:', 'Réponse vide');
         }
@@ -94,7 +77,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
         success: true,
         conversationId: result.conversationId,
         expiresIn: 1800, // 30 minutes par défaut
-        context: result.context
+        updatedContext: result.context
       };
 
     } catch (error) {
@@ -112,127 +95,59 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    * Ajouter un message et obtenir la réponse de l'IA
    */
   async addMessage(
-    conversationId: string,
+    context: HowanaContext,
     request: AddMessageRequest
   ): Promise<{
     success: boolean;
-    messageId: string;
-    context?: ConversationContext;
+    updatedContext: HowanaContext;
+    aiResponse?: T|null;
     error?: string;
   }> {
     try {
-      // Ajouter le message utilisateur
-      const addResult = await this.conversationService.addMessage(
-        conversationId,
-        {
-          content: request.content,
-          type: request.type,
-          metadata: request.metadata || {}
-        }
-      );
-
-      // Si c'est un message utilisateur, appeler l'IA pour obtenir une réponse
-      if (request.type === 'user') {
-        try {
-          // Récupérer le contexte de la conversation
-          const context = await this.conversationService.getContext(conversationId);
-          if (context) {
-            // Générer une réponse IA
-            const aiResponse = await this.generateAIResponse(context, request.content);
-            
-            if (aiResponse) {
-              // Ajouter le message à la conversation Redis
-              await this.conversationService.addMessage(
-                conversationId,
-                {
-                  content: aiResponse.response,
-                  type: 'bot',
-                  metadata: { source: 'ai', model: this.AI_MODEL, messageId: aiResponse.messageId }
-                }
-              );
-              
-              // Mettre à jour l'entrée ai_response pré-créée
-              if (request.aiResponseId) {
-                await this.supabaseService.updateAIResponse(request.aiResponseId, {
-                  response_text: aiResponse.response,
-                  metadata: { 
-                    source: 'ai', 
-                    model: this.AI_MODEL,
-                    messageId: aiResponse.messageId,
-                    status: 'completed'
-                  }
-                });
-                console.log('✅ Entrée ai_response mise à jour avec succès:', request.aiResponseId);
-              } else {
-                console.warn('⚠️ Aucun aiResponseId fourni pour la réponse IA');
-              }
-            }
-          }
-        } catch (aiError) {
-          console.error('❌ Erreur lors de l\'appel IA:', aiError);
-          // Continuer même si l'IA échoue
-        }
-      }
-
-      // Récupérer le contexte mis à jour
-      const context = await this.conversationService.getContext(conversationId);
       
-      return {
-        success: true,
-        messageId: addResult.messageId,
-        ...(context && { context })
-      };
+      let aiResponse:T|null = null;
+
+      try {
+
+        // Générer une réponse IA
+        aiResponse = await this.generateAIResponse(context, request.content);
+        
+        return {
+          success: true,
+          updatedContext: context,
+          aiResponse,
+        };
+
+      } catch (aiError) {
+        console.error('❌ Erreur lors de l\'appel IA:', aiError);
+        return {
+          success: false,
+          updatedContext: context,
+          error: 'Erreur interne du service'
+        };
+      }
 
     } catch (error) {
       console.error('❌ Erreur dans BaseChatBotService.addMessage:', error);
       return {
         success: false,
-        messageId: '',
+        updatedContext: context,
         error: 'Erreur interne du service'
       };
     }
-  }
 
-  /**
-   * Récupérer le contexte d'une conversation
-   */
-  async getContext(conversationId: string): Promise<{
-    success: boolean;
-    context?: ConversationContext;
-    error?: string;
-  }> {
-    try {
-      const context = await this.conversationService.getContext(conversationId);
-      if (!context) {
-        return {
-          success: false,
-          error: 'Conversation not found'
-        };
-      }
-      
-      return {
-        success: true,
-        context
-      };
-    } catch (error) {
-      console.error('❌ Erreur dans BaseChatBotService.getContext:', error);
-      return {
-        success: false,
-        error: 'Erreur interne du service'
-      };
-    }
   }
 
   /**
    * Générer une réponse IA basée sur le contexte de la conversation
    */
-  protected async generateAIResponse(context: ConversationContext, userMessage: string): Promise<T> {
+  protected async generateAIResponse(context: HowanaContext, userMessage: string): Promise<T> {
     try {
       console.log('🔍 Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
       console.log('Dernier message de l\'utilisateur:', userMessage);
 
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
-      const previousCallId = context.metadata?.['previousCallId'];
+      const previousCallId = context.previousCallId;
       
       if (!previousCallId) {
         throw new Error('Aucun previousCallId trouvé dans le contexte. Impossible de générer une réponse sans référence à la conversation précédente.');
@@ -390,7 +305,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer une première réponse IA basée sur le contexte de la conversation
    */
-  protected async generateFirstResponse(context: ConversationContext): Promise<T> {
+  protected async generateFirstResponse(context: HowanaContext): Promise<T> {
     try {
       console.log('🔍 Génération de la première réponse IA pour la conversation:', context.id);
 
@@ -479,7 +394,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   protected async generateIAResponseAfterTools(
     previousResponseId: string, 
     toolResults: Array<{ tool_call_id: string; tool_name?: string; output: any }>, 
-    context: ConversationContext
+    context: HowanaContext
   ): Promise<T> {
     try {
       console.log('🔧 Génération d\'une réponse IA avec les résultats des outils');
@@ -562,7 +477,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer un résumé structuré de la conversation
    */
-  async generateConversationSummary(context: ConversationContext): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined}> {
+  async generateConversationSummary(context: HowanaContext): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined}> {
     try {
       // Vérifier si des recommandations sont requises pour le résumé
       const needsRecommendations = this.recommendationRequiredForSummary(context);
@@ -596,7 +511,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       }
 
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
-      const previousCallId = recommendationResponse?.messageId || context.metadata?.['previousCallId'];
+      const previousCallId = recommendationResponse?.messageId || context.previousCallId;
       
       if (!previousCallId) {
         throw new Error('No previous call ID found');
@@ -607,8 +522,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       
       try {
         const systemPrompt = this.buildSummarySystemPrompt(context);
-        const conversationText = context.messages
-          .map(msg => `${msg.type === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`)
+        const conversationText = (context.messages || [])
+          .map((msg: any) => `${msg.type === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`)
           .join('\n');
 
         const summarySchema = this.getSummaryOutputSchema(context);
@@ -669,20 +584,20 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Méthodes abstraites à implémenter dans les classes enfants
    */
-  protected abstract buildSystemPrompt(context: ConversationContext): string;
-  protected abstract buildFirstUserPrompt(context: ConversationContext): string;
-  protected abstract buildSummarySystemPrompt(context: ConversationContext): string;
-  protected abstract getSummaryOutputSchema(context: ConversationContext): ChatBotOutputSchema;
+  protected abstract buildSystemPrompt(context: HowanaContext): string;
+  protected abstract buildFirstUserPrompt(context: HowanaContext): string;
+  protected abstract buildSummarySystemPrompt(context: HowanaContext): string;
+  protected abstract getSummaryOutputSchema(context: HowanaContext): ChatBotOutputSchema;
   
   /**
    * Schéma de sortie pour startConversation (null si pas de schéma spécifique)
    */
-  protected abstract getStartConversationOutputSchema(context: ConversationContext): ChatBotOutputSchema;
+  protected abstract getStartConversationOutputSchema(context: HowanaContext): ChatBotOutputSchema;
   
   /**
    * Schéma de sortie pour addMessage (par défaut avec un champ response obligatoire)
    */
-  protected getFirstMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+  protected getFirstMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
     return {
       format: { 
         type: "json_schema",
@@ -703,7 +618,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     };
   }
 
-  protected getWelcomeMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+  protected getWelcomeMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
     return {
       format: { 
         type: "json_schema",
@@ -727,7 +642,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Schéma de sortie pour addMessage (par défaut avec un champ response obligatoire)
    */
-  protected getAddMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+  protected getAddMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
     return {
       format: { 
         type: "json_schema",
@@ -751,7 +666,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Détermine le schéma de sortie approprié selon l'outil utilisé
    */
-  protected getSchemaByUsedTool(_toolName: string, context: ConversationContext): ChatBotOutputSchema {
+  protected getSchemaByUsedTool(_toolName: string, context: HowanaContext): ChatBotOutputSchema {
     // Par défaut, utiliser le schéma de base
     return this.getAddMessageOutputSchema(context);
   }
@@ -761,12 +676,12 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Description des outils disponibles pour l'IA (null si pas d'outils)
    */
-  protected abstract getToolsDescription(context: ConversationContext): OpenAIToolsDescription | null;
+  protected abstract getToolsDescription(context: HowanaContext): OpenAIToolsDescription | null;
 
   /**
    * Exécuter un outil spécifique
    */
-  protected abstract callTool(toolName: string, toolArgs: any, context: ConversationContext): Promise<any>;
+  protected abstract callTool(toolName: string, toolArgs: any, context: HowanaContext): Promise<any>;
 
   /**
    * Fonction abstraite pour extraire les activités et pratiques des réponses d'outils
@@ -812,7 +727,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    * Par défaut, retourne false. Peut être surchargé dans les classes enfants.
    * Cette fonction peut utiliser le contexte pour vérifier si des recommandations ont déjà été générées.
    */
-  protected recommendationRequiredForSummary(_context: ConversationContext): boolean {
+  protected recommendationRequiredForSummary(_context: HowanaContext): boolean {
     // Par défaut, pas de recommandations requises
     return false;
   }
@@ -821,7 +736,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    * Lignes directrices (system) sur l'utilisation des outils lors des réponses suivantes
    * Par défaut, aucune consigne. Les classes enfants peuvent surcharger pour orienter l'appel d'outils.
    */
-  protected buildToolUseSystemPrompt(_context: ConversationContext): string {
+  protected buildToolUseSystemPrompt(_context: HowanaContext): string {
     return '';
   }
 
@@ -872,7 +787,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    * @param data Objet contenant les données à ajouter au contexte
    * @param data.extractedData Les données extraites contenant les activités et pratiques
    */
-  protected enrichContext(context: ConversationContext, data: { extractedData?: any }): void {
+  protected enrichContext(context: HowanaContext, data: { extractedData?: any }): void {
     if (!data || !data.extractedData) {
       console.warn('⚠️ Aucune extractedData fournie pour enrichir le contexte');
       return;
@@ -885,11 +800,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     };
     
     // Mettre à jour le contexte avec les recommandations
-    context.metadata = {
-      ...context.metadata,
-      recommendations: recommendations,
-      hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0)
-    };
+    context.recommendations = recommendations;
+    context.hasRecommendations = (recommendations.activities.length > 0 || recommendations.practices.length > 0);
     
     console.log('📋 Contexte enrichi avec les recommandations:', recommendations);
   }

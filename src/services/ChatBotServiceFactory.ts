@@ -2,14 +2,14 @@ import { BaseChatBotService } from './BaseChatBotService';
 import { ActivityChatBotService } from './ActivityChatBotService';
 import { BilanChatBotService } from './BilanChatBotService';
 import { RecommendationChatBotService } from './RecommendationChatBotService';
-import { ConversationContext } from '../types/conversation';
+import { HowanaContext } from '../types/repositories';
 
 export class ChatBotServiceFactory {
   
   /**
    * Crée une instance du service de chatbot approprié selon le type de conversation
    */
-  static createService(context: ConversationContext): BaseChatBotService {
+  static createService(context: HowanaContext): BaseChatBotService {
     switch (context.type) {
       case 'activity':
         return new ActivityChatBotService();
@@ -21,7 +21,7 @@ export class ChatBotServiceFactory {
         return new RecommendationChatBotService();
       
       default:
-        throw new Error(`Type de conversation non supporté: ${context.type}. Types supportés: ${ChatBotServiceFactory.getSupportedTypes().join(', ')}`);
+        throw new Error(`Type de conversation non supporté: ${(context as any).type}. Types supportés: ${ChatBotServiceFactory.getSupportedTypes().join(', ')}`);
     }
   }
 

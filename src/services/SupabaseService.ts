@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { EmbeddingService } from './EmbeddingService';
+import { HowanaContext } from '../types/repositories';
 
 export const VIDEO_BUCKET= "videos";
 export const IMAGE_BUCKET= "images";
@@ -1055,6 +1056,155 @@ export class SupabaseService {
       console.error('❌ Erreur inattendue lors de la récupération des dernières activités:', error);
       return {
         success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Récupérer le contexte d'une conversation Howana
+   */
+  async getContext(conversationId: string): Promise<HowanaContext | null> {
+    try {
+      console.log(`🔍 Récupération du contexte pour la conversation: ${conversationId}`);
+
+      const { data: conversation, error } = await this.supabase
+        .from('howana_conversations')
+        .select('*')
+        .eq('id', conversationId)
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération de la conversation:', error);
+        return null;
+      }
+
+      if (!conversation) {
+        console.log('⚠️ Conversation non trouvée:', conversationId);
+        return null;
+      }
+
+      // Vérifier si la conversation est active
+      if (conversation.status !== 'active') {
+        console.log('⚠️ Conversation non active:', conversationId, 'status:', conversation.status);
+        return null;
+      }
+
+      // Retourner le contexte stocké dans la conversation
+      return conversation.context as HowanaContext;
+
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération du contexte:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Mettre à jour le contexte d'une conversation Howana
+   */
+  async updateContext(conversationId: string, context: HowanaContext): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      console.log(`📝 Mise à jour du contexte pour la conversation: ${conversationId}`);
+
+      const { error } = await this.supabase
+        .from('howana_conversations')
+        .update({ 
+          context: context,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour du contexte:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log(`✅ Contexte mis à jour avec succès pour la conversation: ${conversationId}`);
+      return {
+        success: true
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la mise à jour du contexte:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Fonction centralisée pour finaliser une tâche IA
+   * Met à jour le contexte et la réponse IA en une seule opération
+   */
+  async onTaskFinish(
+    conversationId: string, 
+    updatedContext: HowanaContext, 
+    iaResponse: any, 
+    aiResponseId?: string
+  ): Promise<{
+    success: boolean;
+    contextUpdated: boolean;
+    aiResponseUpdated: boolean;
+    error?: string;
+  }> {
+    try {
+      console.log(`🎯 Finalisation de la tâche IA pour la conversation: ${conversationId}`);
+
+      // Mettre à jour le contexte
+      const contextUpdateResult = await this.updateContext(conversationId, updatedContext);
+      if (!contextUpdateResult.success) {
+        console.error('❌ Erreur lors de la mise à jour du contexte:', contextUpdateResult.error);
+        return {
+          success: false,
+          contextUpdated: false,
+          aiResponseUpdated: false,
+          error: `Erreur contexte: ${contextUpdateResult.error}`
+        };
+      }
+
+      // Mettre à jour la réponse IA si un ID est fourni
+      let aiResponseUpdated = false;
+      if (aiResponseId) {
+        const aiResponseUpdateResult = await this.updateAIResponse(aiResponseId, {
+          response_text: typeof iaResponse === 'string' ? iaResponse : JSON.stringify(iaResponse),
+          metadata: iaResponse.metadata || {}
+        });
+
+        if (!aiResponseUpdateResult.success) {
+          console.error('❌ Erreur lors de la mise à jour de la réponse IA:', aiResponseUpdateResult.error);
+          return {
+            success: false,
+            contextUpdated: true,
+            aiResponseUpdated: false,
+            error: `Erreur aiResponse: ${aiResponseUpdateResult.error}`
+          };
+        }
+        aiResponseUpdated = true;
+        console.log(`✅ Réponse IA mise à jour: ${aiResponseId}`);
+      } else {
+        console.warn(`⚠️ Aucun aiResponseId fourni pour la conversation: ${conversationId}`);
+      }
+
+      console.log(`✅ Tâche IA finalisée avec succès pour: ${conversationId}`);
+      return {
+        success: true,
+        contextUpdated: true,
+        aiResponseUpdated: aiResponseUpdated
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la finalisation de la tâche IA:', error);
+      return {
+        success: false,
+        contextUpdated: false,
+        aiResponseUpdated: false,
         error: 'Erreur interne du service'
       };
     }

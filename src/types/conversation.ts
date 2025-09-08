@@ -128,7 +128,6 @@ export interface StartConversationRequest {
   conversationId: string;
   userId: string;
   type: 'bilan' | 'activity' | 'recommandation';
-  initialContext?: Partial<ConversationContext>;
   aiResponseId?: string;
 }
 
@@ -142,7 +141,6 @@ export interface StartConversationResponse {
 
 export interface AddMessageRequest {
   content: string;
-  type: 'user' | 'bot';
   metadata?: Record<string, any>;
   aiResponseId?: string;
 }

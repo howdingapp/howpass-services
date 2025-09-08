@@ -1,19 +1,20 @@
 import { BaseChatBotService } from './BaseChatBotService';
-import { ConversationContext } from '../types/conversation';
+import { HowanaActivityContext, HowanaContext } from '../types/repositories';
 import { IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
 
 export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse> {
   
-  protected buildSystemPrompt(context: ConversationContext): string {
+  protected buildSystemPrompt(_context: HowanaContext): string {
+    const context:HowanaActivityContext & HowanaContext = _context as HowanaActivityContext & HowanaContext;
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
     Tu es bienveillant et professionnel.`;
 
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
-    if (context.aiRules && Array.isArray(context.aiRules) && context.aiRules.length > 0) {
+    if (context.iaRules && Array.isArray(context.iaRules) && context.iaRules.length > 0) {
       // Filtrer seulement les règles actives
-      const activeRules = context.aiRules.filter((rule) => rule.isActive);
+      const activeRules = context.iaRules.filter((rule) => rule.isActive);
       
       if (activeRules.length > 0) {
         // Trier les règles par priorité (priorité 1 = plus forte)
@@ -155,8 +156,8 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     - L'échange doit contenir environ 10 questions maximum
     - Chaque réponse doit TOUJOURS contenir une question pertinente`;
     
-    // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
-    if (!context.aiRules || !Array.isArray(context.aiRules) || context.aiRules.length === 0) {
+    // Règles contextuelles spécifiques (uniquement si pas d'iaRules)
+    if (!context.iaRules || !Array.isArray(context.iaRules) || context.iaRules.length === 0) {
       const isEditing = context.isEditing;
       
       if (isEditing) {
@@ -199,7 +200,10 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     return basePrompt;
   }
 
-  protected buildFirstUserPrompt(context: ConversationContext): string {
+  protected buildFirstUserPrompt(_context: HowanaContext): string {
+
+    const context:HowanaActivityContext & HowanaContext = _context as HowanaActivityContext & HowanaContext;
+
     if (context.activityData) {
       const isEditing = context.isEditing;
       
@@ -238,12 +242,12 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     return "Salue le praticien et présente-toi en tant qu'assistant Howana spécialisé dans l'accompagnement des praticiens experts.";
   }
 
-  protected buildSummarySystemPrompt(_context: ConversationContext): string {
+  protected buildSummarySystemPrompt(_context: HowanaContext): string {
     return `Tu es un assistant spécialisé dans l'analyse de conversations entre praticiens et experts. 
     Analyse la conversation et génère un résumé structuré qui permettra de remplir automatiquement les formulaires d'activité.`;
   }
 
-  protected getSummaryOutputSchema(_context: ConversationContext): any {
+  protected getSummaryOutputSchema(_context: HowanaContext): any {
     return {
       format: { 
         type: "json_schema",
@@ -286,16 +290,16 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     };
   }
 
-  protected getStartConversationOutputSchema(_context: ConversationContext): any | null {
+  protected getStartConversationOutputSchema(_context: HowanaContext): any | null {
     return null;
   }
 
 
-  protected getToolsDescription(_context: ConversationContext): any | null {
+  protected getToolsDescription(_context: HowanaContext): any | null {
     return null;
   }
 
-  protected async callTool(toolName: string, _toolArgs: any, _context: ConversationContext): Promise<any> {
+  protected async callTool(toolName: string, _toolArgs: any, _context: HowanaContext): Promise<any> {
     throw new Error(`Tool ${toolName} not implemented in ActivityChatBotService`);
   }
 

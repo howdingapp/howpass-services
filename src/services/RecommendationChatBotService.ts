@@ -1,5 +1,6 @@
 import { BaseChatBotService } from './BaseChatBotService';
-import { ConversationContext, OpenAIToolsDescription } from '../types/conversation';
+import { OpenAIToolsDescription } from '../types/conversation';
+import { HowanaContext, HowanaRecommandationContext } from '../types/repositories';
 import { 
   ChatBotOutputSchema, 
   OpenAIJsonSchema,
@@ -70,7 +71,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     };
   }
 
-  protected buildSystemPrompt(context: ConversationContext): string {
+  protected buildSystemPrompt(_context: HowanaContext): string {
+
+    const context:HowanaRecommandationContext & HowanaContext = _context as HowanaRecommandationContext & HowanaContext;
+
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
     Tu es bienveillant et professionnel. Réponses courtes (maximum 30 mots).
 
@@ -112,16 +116,16 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
         basePrompt += `\n- Notes personnelles: ${context.lastBilan.notesPersonnelles}`;
       }
 
-      if (context.lastBilan.howanaSummary && context.lastBilan.howanaSummary.userProfile) {
-        const profile = context.lastBilan.howanaSummary.userProfile;
-        if (profile.emotionalState) {
-          basePrompt += `\n- État émotionnel précédent: ${profile.emotionalState}`;
+      if (context.lastHowanaRecommandation && context.lastHowanaRecommandation.userProfile) {
+        const profile = context.lastHowanaRecommandation.userProfile;
+        if (profile.supposedEmotionalState) {
+          basePrompt += `\n- État émotionnel précédent: ${profile.supposedEmotionalState}`;
         }
-        if (profile.currentNeeds && profile.currentNeeds.length > 0) {
-          basePrompt += `\n- Besoins précédents: ${profile.currentNeeds.join(', ')}`;
+        if (profile.supposedCurrentNeeds && profile.supposedCurrentNeeds.length > 0) {
+          basePrompt += `\n- Besoins précédents: ${profile.supposedCurrentNeeds.join(', ')}`;
         }
-        if (profile.preferences && profile.preferences.length > 0) {
-          basePrompt += `\n- Préférences précédentes: ${profile.preferences.join(', ')}`;
+        if (profile.supposedPreferences && profile.supposedPreferences.length > 0) {
+          basePrompt += `\n- Préférences précédentes: ${profile.supposedPreferences.join(', ')}`;
         }
       }
 
@@ -191,9 +195,9 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
-    if (context.aiRules && Array.isArray(context.aiRules) && context.aiRules.length > 0) {
+    if (context.iaRules && Array.isArray(context.iaRules) && context.iaRules.length > 0) {
       // Filtrer seulement les règles actives
-      const activeRules = context.aiRules.filter((rule) => rule.isActive);
+      const activeRules = context.iaRules.filter((rule) => rule.isActive);
       
       if (activeRules.length > 0) {
         // Trier les règles par priorité (priorité 1 = plus forte)
@@ -223,7 +227,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     }
 
     // Ajouter le contexte spécifique aux recommandations
-    if (context.aiRules && Array.isArray(context.aiRules) && context.aiRules.length > 0) {
+    if (context.iaRules && Array.isArray(context.iaRules) && context.iaRules.length > 0) {
       basePrompt += `\n\nL'utilisateur cherche des recommandations personnalisées. Utilise ces informations pour appliquer tes règles personnalisées.`;
     } else {
       basePrompt += `\n\nL'utilisateur cherche des recommandations personnalisées d'activités et de pratiques. 
@@ -238,8 +242,8 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     - Si tu ne sais pas quelque chose, dis-le honnêtement
     - CRUCIAL: Ne propose des activités/pratiques qu'après avoir posé au moins 3 questions pour comprendre les vrais besoins`;
     
-    // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
-    if (!context.aiRules || !Array.isArray(context.aiRules) || context.aiRules.length === 0) {
+    // Règles contextuelles spécifiques (uniquement si pas d'iaRules)
+    if (!context.iaRules || !Array.isArray(context.iaRules) || context.iaRules.length === 0) {
       basePrompt += `
     - Aide l'utilisateur à identifier ses besoins et ses objectifs
     - Analyse son état émotionnel et ses préférences
@@ -258,7 +262,9 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     return basePrompt;
   }
 
-  protected buildFirstUserPrompt(context: ConversationContext): string {
+  protected buildFirstUserPrompt(_context: HowanaContext): string {
+
+    const context:HowanaRecommandationContext & HowanaContext = _context as HowanaRecommandationContext & HowanaContext;
     let prompt = `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans les recommandations personnalisées.
     
     Indique que tu es là pour l'aider à identifier ses besoins et lui recommander des activités et pratiques adaptées.`;
@@ -289,7 +295,9 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     return prompt;
   }
 
-  protected buildSummarySystemPrompt(context: ConversationContext): string {
+  protected buildSummarySystemPrompt(_context: HowanaContext): string {
+
+    const context:HowanaRecommandationContext & HowanaContext = _context as HowanaRecommandationContext & HowanaContext;
     let prompt = `Tu es un assistant spécialisé dans l'analyse de conversations de recommandation. 
     Analyse la conversation et génère un résumé structuré qui permettra de comprendre les besoins de l'utilisateur et les recommandations proposées.`;
 
@@ -325,7 +333,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
    * @param context Le contexte de conversation contenant les métadonnées
    * @returns Un objet contenant les IDs et noms contraints pour les activités et pratiques
    */
-  protected getActivitiesAndPracticesConstraints(context: ConversationContext): {
+  protected getActivitiesAndPracticesConstraints(context: HowanaContext): {
     availableActivityIds: string[];
     availablePracticeIds: string[];
     availableActivityNames: string[];
@@ -365,7 +373,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     };
   }
 
-  protected getSummaryOutputSchema(context: ConversationContext): OpenAIJsonSchema {
+  protected getSummaryOutputSchema(context: HowanaContext): OpenAIJsonSchema {
     const constraints = this.getActivitiesAndPracticesConstraints(context);
     const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
 
@@ -407,13 +415,13 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     };
   }
 
-  protected getStartConversationOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+  protected getStartConversationOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
     // Pas de schéma de sortie spécifique pour startConversation
     // L'IA répond librement selon le prompt
     return null;
   }
 
-  protected override getWelcomeMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+  protected override getWelcomeMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
     return {
       format: { 
         type: "json_schema",
@@ -461,7 +469,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     };
   }
 
-  protected override getAddMessageOutputSchema(context: ConversationContext): ChatBotOutputSchema {
+  protected override getAddMessageOutputSchema(context: HowanaContext): ChatBotOutputSchema {
 
     const constraints = this.getActivitiesAndPracticesConstraints(context);
     const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
@@ -519,7 +527,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
   /**
    * Détermine le schéma de sortie approprié selon l'outil utilisé
    */
-  protected override getSchemaByUsedTool(toolName: string, context: ConversationContext): ChatBotOutputSchema {
+  protected override getSchemaByUsedTool(toolName: string, context: HowanaContext): ChatBotOutputSchema {
     switch (toolName) {
       case 'activities_and_practices_and_faq':
         // Schéma pour les réponses après utilisation de l'outil combiné
@@ -576,7 +584,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
    * si elles n'ont pas encore été générées. Si des recommandations existent déjà dans le contexte,
    * on peut générer le résumé directement. Sinon, il faut forcer un appel aux outils.
    */
-  protected override recommendationRequiredForSummary(context: ConversationContext): boolean {
+  protected override recommendationRequiredForSummary(context: HowanaContext): boolean {
     const hasRecommendations = context.metadata?.['hasRecommendations'] || false;
     const recommendations = context.metadata?.['recommendations'] || { activities: [], practices: [] };
     
@@ -593,7 +601,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     return !hasRecommendations;
   }
 
-  protected getToolsDescription(_context: ConversationContext): OpenAIToolsDescription | null {
+  protected getToolsDescription(_context: HowanaContext): OpenAIToolsDescription | null {
     return {
       tools: [
         {
@@ -618,7 +626,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
         },
         {
           type: 'function',
-          name: 'last_activity',
+          name: 'last_user_activities',
           description: 'Récupérer les 5 dernières activités de l\'utilisateur pour comprendre son historique et ses préférences',
           parameters: {
             type: 'object',
@@ -631,11 +639,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     };
   }
 
-  protected override buildToolUseSystemPrompt(_context: ConversationContext): string {
-    return `POLITIQUE D'UTILISATION DES OUTILS (obligatoire):\n- Utilise 'activities_and_practices_and_faq' pour toutes les recherches : activités/pratiques ET informations FAQ.\n- Pour les questions informationnelles sur: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, sujets débutants (activités/pratiques), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques), remplis le champ 'faqSearchTerm'.\n- Pour les recommandations personnalisées d'activités/pratiques, remplis le champ 'searchTerm'.\n- Tu peux remplir les deux champs si l'utilisateur a besoin à la fois d'informations et de recommandations.\n- Utilise 'last_activity' pour récupérer l'historique des activités de l'utilisateur et mieux comprendre ses préférences et habitudes.\n- Exemples de requêtes FAQ: "comment gérer le stress au travail", "bienfaits de la méditation", "améliorer mon sommeil", "pratiques pour la concentration", "qu'est-ce qu'un Aper'How bien-être", "comment participer à un Aper'How", "quels types de pratiques aux Aper'How", "avantages du parrainage", "devenir ambassadeur Howana".\n- N'utilise PAS ces outils pour des sujets de compte/connexion, abonnement/prix, sécurité/données, support/bugs, navigation/app: réponds sans outil.`;
-  }
-
-  protected async callTool(toolName: string, toolArgs: any, context: ConversationContext): Promise<any> {
+  protected async callTool(toolName: string, toolArgs: any, context: HowanaContext): Promise<any> {
     switch (toolName) {
       case 'activities_and_practices_and_faq':
         return await this.searchActivitiesAndPracticesAndFAQ(
@@ -643,7 +647,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
           toolArgs.faqSearchTerm
         );
       
-      case 'last_activity':
+      case 'last_user_activities':
         return await this.getLastUserActivities(context.userId);
       
       default:

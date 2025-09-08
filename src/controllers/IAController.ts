@@ -3,7 +3,7 @@ import { ChatBotServiceFactory } from '../services/ChatBotServiceFactory';
 import { BaseChatBotService } from '../services/BaseChatBotService';
 import { ConversationService } from '../services/ConversationService';
 import { SupabaseService } from '../services/SupabaseService';
-import { ConversationContext } from '../types/conversation';
+import { HowanaContext } from '../types/repositories';
 import { IAAuthenticatedRequest } from '../middleware/iaAuthMiddleware';
 
 interface IATaskRequest {
@@ -25,10 +25,11 @@ export class IAController {
     this.supabaseService = new SupabaseService();
   }
 
+
   /**
    * Obtenir le service de chatbot approprié selon le type de conversation
    */
-  private getChatBotService(context: ConversationContext): BaseChatBotService {
+  private getChatBotService(context: HowanaContext): BaseChatBotService {
     const service = ChatBotServiceFactory.createService(context);
     console.log(`🤖 Service de chatbot créé: ${service.constructor.name} pour le type: ${context.type}`);
     return service;
@@ -65,22 +66,13 @@ export class IAController {
         return;
       }
 
-      // Vérifier que la conversation existe et est active
+      // Vérifier que la conversation existe et récupérer le contexte Howana
       const context = await this.conversationService.getContext(taskData.conversationId);
       if (!context) {
-        console.error(`❌ Conversation non trouvée: ${taskData.conversationId}`);
+        console.error(`❌ Contexte Howana non trouvé: ${taskData.conversationId}`);
         res.status(404).json({
-          error: 'Conversation non trouvée',
-          message: `La conversation ${taskData.conversationId} n'existe pas`
-        });
-        return;
-      }
-
-      if (context.status !== 'active') {
-        console.error(`❌ Conversation non active: ${taskData.conversationId}`);
-        res.status(400).json({
-          error: 'Conversation non active',
-          message: `La conversation ${taskData.conversationId} n'est plus active`
+          error: 'Contexte non trouvé',
+          message: `Le contexte de la conversation ${taskData.conversationId} n'existe pas`
         });
         return;
       }
@@ -101,18 +93,20 @@ export class IAController {
       console.log('🔍 Contexte de la conversation:', context);
 
       // Traiter selon le type de tâche
+      let result: { updatedContext: HowanaContext; iaResponse: any };
+      
       switch (taskData.type) {
         case 'generate_response':
-          await this.processGenerateResponse(taskData, context);
+          result = await this.processGenerateResponse(taskData, context);
           break;
         case 'generate_summary':
-          await this.processGenerateSummary(taskData, context);
+          result = await this.processGenerateSummary(taskData, context);
           break;
         case 'generate_first_response':
-          await this.processGenerateFirstResponse(taskData, context);
+          result = await this.processGenerateFirstResponse(taskData, context);
           break;
         case 'generate_unfinished_exchange':
-          await this.processGenerateUnfinishedExchange(taskData, context);
+          result = await this.processGenerateUnfinishedExchange(taskData, context);
           break;
         default:
           console.error('❌ Type de tâche non reconnu:', taskData.type);
@@ -122,6 +116,12 @@ export class IAController {
           });
           return;
       }
+
+      // Obtenir le service de chatbot pour onTaskFinish
+      const chatBotService = this.getChatBotService(result.updatedContext);
+
+      // Finaliser la tâche avec la mise à jour de la base de données
+      await this.finalizeTask(taskData, result.updatedContext, result.iaResponse, chatBotService);
 
       console.log(`✅ Tâche IA traitée avec succès: ${taskData.type}`);
       res.status(200).json({
@@ -141,9 +141,62 @@ export class IAController {
   }
 
   /**
+   * Fonction centralisée pour finaliser une tâche IA
+   * Met à jour le contexte et la réponse IA en une seule opération
+   */
+  private async finalizeTask(
+    taskData: IATaskRequest, 
+    updatedContext: HowanaContext, 
+    iaResponse: any, 
+    chatBotService: BaseChatBotService
+  ): Promise<void> {
+    try {
+      console.log(`🔄 Finalisation de la tâche ${taskData.type} pour ${taskData.conversationId}`);
+
+      // Mettre à jour le contexte en base de données
+      const contextUpdateResult = await this.supabaseService.updateContext(taskData.conversationId, updatedContext);
+      if (!contextUpdateResult.success) {
+        console.error('❌ Erreur lors de la mise à jour du contexte:', contextUpdateResult.error);
+        throw new Error(`Erreur lors de la mise à jour du contexte: ${contextUpdateResult.error}`);
+      }
+      console.log('✅ Contexte mis à jour en base de données');
+
+      // Mettre à jour l'entrée ai_response si un ID est fourni
+      if (taskData.aiResponseId) {
+        const updateResult = await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
+          response_text: JSON.stringify(iaResponse),
+          metadata: {
+            source: 'ai',
+            model: chatBotService.getAIModel(),
+            type: taskData.type,
+            messageId: iaResponse.messageId,
+            status: 'completed',
+            recommendations: iaResponse.recommendations || updatedContext.recommendations || { activities: [], practices: [] },
+            hasRecommendations: iaResponse.hasRecommendations || ((updatedContext.recommendations?.activities?.length || 0) > 0 || (updatedContext.recommendations?.practices?.length || 0) > 0),
+            recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](updatedContext)
+          }
+        });
+
+        if (!updateResult.success) {
+          console.error('❌ Erreur lors de la mise à jour de la réponse IA:', updateResult.error);
+          throw new Error(`Erreur lors de la mise à jour de la réponse IA: ${updateResult.error}`);
+        }
+        console.log(`✅ aiResponse mise à jour: ${taskData.aiResponseId}`);
+      } else {
+        console.warn(`⚠️ Aucun aiResponseId fourni pour la tâche: ${taskData.type}`);
+      }
+
+      console.log(`✅ Tâche ${taskData.type} finalisée avec succès`);
+    } catch (error) {
+      console.error(`❌ Erreur lors de la finalisation de la tâche ${taskData.type}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Traiter la génération d'une réponse IA
    */
-  private async processGenerateResponse(taskData: IATaskRequest, context: ConversationContext): Promise<any> {
+  private async processGenerateResponse(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
     if (!taskData.userMessage) {
       throw new Error('Message utilisateur manquant pour la génération de réponse');
     }
@@ -155,62 +208,45 @@ export class IAController {
     
     // Générer la réponse IA
     const aiResponse = await chatBotService['generateAIResponse'](context, taskData.userMessage);
+    const updatedContext = aiResponse.updatedContext;
     
     // Utiliser le messageId d'OpenAI si disponible, sinon créer un messageId local
     const messageId = aiResponse.messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Mettre à jour le contexte avec le nouveau messageId pour les futures réponses
-    context.metadata = { ...context.metadata, previousCallId: messageId, previousResponse: aiResponse.response };
+    updatedContext.previousCallId = messageId;
+    updatedContext.previousResponse = aiResponse.response;
     
-    // Ajouter la réponse à la conversation (cela met à jour automatiquement le contexte dans Redis)
-    await this.conversationService.addMessage(taskData.conversationId, {
-      content: JSON.stringify(aiResponse.response),
-      type: 'bot',
-      metadata: { source: 'ai', model: chatBotService.getAIModel(), messageId: messageId }
-    }, context);
+    // Récupérer les extractedData depuis la réponse IA
+    const extractedData = aiResponse.extractedData;
+    
+    // Construire les recommandations à partir des extractedData
+    const recommendations = extractedData ? {
+      activities: extractedData.activities || [],
+      practices: extractedData.practices || []
+    } : (context.recommendations || { activities: [], practices: [] });
 
-    // Mettre à jour l'entrée ai_response pré-créée
-    if (taskData.aiResponseId) {
-      // Récupérer les extractedData depuis la réponse IA
-      const extractedData = aiResponse.extractedData;
-      
-      // Construire les recommandations à partir des extractedData
-      const recommendations = extractedData ? {
-        activities: extractedData.activities || [],
-        practices: extractedData.practices || []
-      } : (context.metadata?.['recommendations'] || { activities: [], practices: [] });
+    // Créer l'objet de réponse IA
+    const iaResponse = {
+      ...aiResponse,
+      messageId: messageId,
+      recommendations: recommendations,
+      hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0)
+    };
 
-      await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
-        response_text: JSON.stringify(aiResponse),
-        metadata: { 
-          source: 'ai', 
-          model: chatBotService.getAIModel(),
-          messageId: messageId,
-          status: 'completed',
-          recommendations: recommendations,
-          hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0),
-          recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](context)
-        }
-      });
-      console.log(`✅ aiResponse mise à jour pour la réponse: ${taskData.aiResponseId}`);
-      console.log(`📋 Recommandations extraites: ${recommendations.activities.length} activités, ${recommendations.practices.length} pratiques`);
-      console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
-    } else {
-      console.warn(`⚠️ Aucun aiResponseId fourni pour la réponse de la conversation: ${taskData.conversationId}`);
-    }
+    console.log(`📋 Recommandations extraites: ${recommendations.activities.length} activités, ${recommendations.practices.length} pratiques`);
+    console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
 
     return {
-      success: true,
-      response: aiResponse.response,
-      messageId: messageId,
-      workerId: 'google-cloud-tasks'
+      updatedContext,
+      iaResponse
     };
   }
 
   /**
    * Traiter la génération d'un résumé IA
    */
-  private async processGenerateSummary(taskData: IATaskRequest, context: ConversationContext): Promise<any> {
+  private async processGenerateSummary(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
     console.log(`📝 Génération d'un résumé IA pour: ${taskData.conversationId}`);
     
     // Obtenir le service de chatbot approprié
@@ -225,51 +261,30 @@ export class IAController {
     const recommendations = extractedData ? {
       activities: extractedData.activities || [],
       practices: extractedData.practices || []
-    } : (context.metadata?.['recommendations'] || { activities: [], practices: [] });
+    } : (context.recommendations || { activities: [], practices: [] });
 
-    // Mettre à jour l'entrée ai_response pré-créée pour notifier le frontend
-    if (taskData.aiResponseId) {
-      try {
-        // Créer un objet avec le résumé et les métadonnées
-        const responseData = {
-          response: { summary: summary.summary },
-          target_table: context.type === 'bilan' ? 'bilans' : context.type === 'activity' ? 'activities' : 'ai_responses',
-          target_id: context.metadata?.['bilanId'] || context.metadata?.['activityId'] || null,
-          summary_type: 'conversation_summary',
-          recommendations: recommendations,
-          hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0)
-        };
+    // Créer l'objet de réponse IA pour le résumé
+    const iaResponse = {
+      response: { summary: summary.summary },
+      target_table: context.type === 'bilan' ? 'bilans' : context.type === 'activity' ? 'activities' : 'ai_responses',
+      target_id: context.bilanId || context.activityId || null,
+      summary_type: 'conversation_summary',
+      recommendations: recommendations,
+      hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0),
+      messageId: `summary_${Date.now()}`,
+      type: 'summary'
+    };
 
-        await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
-          response_text: JSON.stringify(responseData),
-          metadata: { 
-            source: 'ai', 
-            model: chatBotService.getAIModel(), 
-            type: 'summary',
-            status: 'completed'
-          }
-        });
-        console.log(`✅ aiResponse mise à jour pour notifier le frontend du résumé disponible: ${taskData.aiResponseId}`);
-      } catch (error) {
-        console.error(`❌ Erreur lors de la mise à jour de l'aiResponse:`, error);
-        // Cette erreur est critique car le frontend ne sera pas notifié
-        throw error;
-      }
-    } else {
-      console.warn(`⚠️ Aucun aiResponseId fourni pour le résumé de la conversation: ${taskData.conversationId}`);
-    }
-    
     return {
-      success: true,
-      summary: summary,
-      workerId: 'google-cloud-tasks'
+      updatedContext: context,
+      iaResponse
     };
   }
 
   /**
    * Traiter la génération d'une première réponse IA
    */
-  private async processGenerateFirstResponse(taskData: IATaskRequest, context: ConversationContext): Promise<any> {
+  private async processGenerateFirstResponse(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
     console.log(`👋 Génération d'une première réponse IA pour: ${taskData.conversationId}`);
     
     // Obtenir le service de chatbot approprié
@@ -277,41 +292,25 @@ export class IAController {
     
     const firstResponseResult = await chatBotService['generateFirstResponse'](context);
     
-    context.metadata = { ...context.metadata, previousCallId: firstResponseResult.messageId, previousResponse: firstResponseResult.response };
+    // Mettre à jour le contexte avec les nouvelles informations
+    const updatedContext = { ...context };
+    updatedContext.previousCallId = firstResponseResult.messageId;
+    updatedContext.previousResponse = firstResponseResult.response;
 
-    // Ajouter la réponse à la conversation
-    await this.conversationService.addMessage(taskData.conversationId, {
-      content: JSON.stringify(firstResponseResult),
-      type: 'bot',
-      metadata: { source: 'ai', model: chatBotService.getAIModel(), type: 'first_response', messageId: firstResponseResult.messageId }
-    }, context);
+    // Créer l'objet de réponse IA
+    const iaResponse = {
+      ...firstResponseResult,
+      messageId: firstResponseResult.messageId || `msg_${Date.now()}`,
+      type: 'first_response',
+      recommendations: context.recommendations || { activities: [], practices: [] },
+      hasRecommendations: context.hasRecommendations || false
+    };
 
-    // Mettre à jour l'entrée ai_response pré-créée
-    if (taskData.aiResponseId) {
-      await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
-        response_text: JSON.stringify(firstResponseResult),
-        metadata: { 
-          source: 'ai', 
-          model: chatBotService.getAIModel(), 
-          type: 'first_response', 
-          messageId: firstResponseResult.messageId,
-          status: 'completed',
-          recommendations: context.metadata?.['recommendations'] || { activities: [], practices: [] },
-          hasRecommendations: context.metadata?.['hasRecommendations'] || false,
-          recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](context)
-        }
-      });
-      console.log(`✅ aiResponse mise à jour pour la première réponse: ${taskData.aiResponseId}`);
-      console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
-    } else {
-      console.warn(`⚠️ Aucun aiResponseId fourni pour la première réponse de la conversation: ${taskData.conversationId}`);
-    }
+    console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
 
     return {
-      success: true,
-      response: firstResponseResult.response,
-      messageId: firstResponseResult.messageId || `msg_${Date.now()}`,
-      workerId: 'google-cloud-tasks'
+      updatedContext,
+      iaResponse
     };
   }
 
@@ -320,63 +319,26 @@ export class IAController {
   /**
    * Traiter la génération d'un échange non fini
    */
-  private async processGenerateUnfinishedExchange(taskData: IATaskRequest, context: ConversationContext): Promise<any> {
+  private async processGenerateUnfinishedExchange(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
     console.log(`🔄 Génération d'un échange non fini pour: ${taskData.conversationId}`);
-    
-    // Obtenir le service de chatbot approprié
-    const chatBotService = this.getChatBotService(context);
     
     // Créer un message simple indiquant que l'utilisateur est parti
     const lastAnswer = taskData.lastAnswer || 'L\'utilisateur a quitté la conversation';
     const unfinishedMessage = `L'utilisateur est parti voir d'autre chose, mais voici sa dernière action : "${lastAnswer}". Cette conversation a été interrompue et peut être reprise plus tard.`;
     
-    // Créer un objet de réponse simple
-    const unfinishedResponse = {
+    // Créer l'objet de réponse IA
+    const iaResponse = {
       response: unfinishedMessage,
       messageId: `unfinished_${Date.now()}`,
       type: 'unfinished_exchange',
       lastUserAction: lastAnswer,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      conversationInterrupted: true
     };
 
-    // Ajouter le message à la conversation
-    await this.conversationService.addMessage(taskData.conversationId, {
-      content: JSON.stringify(unfinishedResponse),
-      type: 'bot',
-      metadata: { 
-        source: 'ai', 
-        model: chatBotService.getAIModel(), 
-        type: 'unfinished_exchange', 
-        messageId: unfinishedResponse.messageId,
-        lastUserAction: lastAnswer
-      }
-    }, context);
-
-    // Mettre à jour l'entrée ai_response pré-créée
-    if (taskData.aiResponseId) {
-      await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
-        response_text: unfinishedMessage,
-        metadata: { 
-          source: 'ai', 
-          model: chatBotService.getAIModel(), 
-          type: 'unfinished_exchange', 
-          messageId: unfinishedResponse.messageId,
-          status: 'completed',
-          lastUserAction: lastAnswer,
-          conversationInterrupted: true
-        }
-      });
-      console.log(`✅ aiResponse mise à jour pour l'échange non fini: ${taskData.aiResponseId}`);
-    } else {
-      console.warn(`⚠️ Aucun aiResponseId fourni pour l'échange non fini de la conversation: ${taskData.conversationId}`);
-    }
-
     return {
-      success: true,
-      response: unfinishedMessage,
-      messageId: unfinishedResponse.messageId,
-      workerId: 'google-cloud-tasks',
-      lastUserAction: lastAnswer
+      updatedContext: context,
+      iaResponse
     };
   }
 

@@ -6,7 +6,6 @@ import {
   StartConversationRequest,
   AddMessageRequest,
   StartConversationResponse,
-  AddMessageResponse,
   GenerateSummaryRequest
 } from '../types/conversation';
 
@@ -53,20 +52,18 @@ export class ConversationController {
         console.log('❌ [START_CONVERSATION] Type invalide:', { type: request.type });
         res.status(400).json({
           success: false,
-          error: 'type doit être "bilan" ou "activity"'
+          error: 'type doit être dans la liste des types valides (bilan, activity, recommandation, unfinished_exchange)'
         });
         return;
       }
 
       const conversationId = request.conversationId;
-      const { context } = await this.conversationService.startConversation(request);
 
       // Déclencher automatiquement la première réponse IA
       try {
         const iaJob = await this.iaJobTriggerService.triggerIAJob({
           type: 'generate_first_response',
           conversationId: conversationId,
-          userId: request.userId,
           priority: 'high',
           aiResponseId: request.aiResponseId
         }, req.authToken || '');
@@ -80,7 +77,6 @@ export class ConversationController {
         success: true,
         conversationId,
         expiresIn: 1800, // 30 minutes en secondes
-        context
       };
 
       res.status(201).json(response);
@@ -124,54 +120,26 @@ export class ConversationController {
       }
       const request: AddMessageRequest = req.body;
 
-      // Validation des données
-      if (!request.content || !request.type) {
-        console.log('❌ [ADD_MESSAGE] Validation échouée:', { content: request.content, type: request.type });
-        res.status(400).json({
-          success: false,
-          error: 'content et type sont requis'
-        });
-        return;
-      }
-
-      if (!['user', 'bot'].includes(request.type)) {
-        console.log('❌ [ADD_MESSAGE] Type de message invalide:', { type: request.type });
-        res.status(400).json({
-          success: false,
-          error: 'type doit être "user" ou "bot"'
-        });
-        return;
-      }
-
-      // Ajouter le message à la conversation
-      const { messageId, context } = await this.conversationService.addMessage(conversationId, request);
-
-      // Si c'est un message utilisateur, déclencher une réponse IA
-      if (request.type === 'user') {
-        try {
-                  const iaJob = await this.iaJobTriggerService.triggerIAJob({
-          type: 'generate_response',
-          conversationId,
-          userId: context.userId,
-          userMessage: request.content,
-          priority: 'medium',
-          aiResponseId: request.aiResponseId
-        }, req.authToken || '');
+      try {
+        const iaJob = await this.iaJobTriggerService.triggerIAJob({
+            type: 'generate_response',
+            conversationId,
+            userMessage: request.content,
+            priority: 'medium',
+            aiResponseId: request.aiResponseId
+          }, req.authToken || '');
 
           console.log(`🤖 [ADD_MESSAGE] Job IA déclenché pour la réponse: ${iaJob.jobId}`);
         } catch (iaError) {
           console.warn(`⚠️ [ADD_MESSAGE] Erreur lors du déclenchement du job IA (non bloquant):`, iaError);
         }
-      }
 
-      const response: AddMessageResponse = {
-        success: true,
-        messageId,
-        context
-      };
+        const response = {
+          success: true,
+        };
 
       res.status(200).json(response);
-      console.log(`💬 [ADD_MESSAGE] Message ajouté à la conversation ${conversationId}: ${messageId}`);
+      console.log(`💬 [ADD_MESSAGE] Message ajouté à la conversation ${conversationId}: ${request.content}`);
     } catch (error) {
       if (error instanceof Error && error.message === 'Conversation not found') {
         console.log(`❌ [ADD_MESSAGE] Conversation non trouvée: ${req.params['id']}`);
@@ -240,7 +208,6 @@ export class ConversationController {
           type: 'generate_summary',
           conversationId,
           aiResponseId: request.aiResponseId,
-          userId: context.userId,
           priority: 'high'
         }, req.authToken || '');
 
@@ -328,7 +295,6 @@ export class ConversationController {
         const iaJob = await this.iaJobTriggerService.triggerIAJob({
           type: 'generate_unfinished_exchange',
           conversationId,
-          userId,
           aiResponseId,
           lastAnswer: lastAnswer || '',
           priority: 'high'
@@ -360,34 +326,4 @@ export class ConversationController {
     }
   }
 
-  /**
-   * Obtenir les statistiques du service
-   * GET /api/conversations/stats
-   */
-  async getStats(req: AuthenticatedRequest, res: Response): Promise<void> {
-    console.log('📝 [GET_STATS] Requête reçue:', {
-      method: req.method,
-      url: req.url,
-      headers: {
-        'user-agent': req.headers['user-agent'],
-        'authorization': req.headers.authorization ? '***' : undefined
-      },
-      timestamp: new Date().toISOString()
-    });
-
-    try {
-      const stats = await this.conversationService.getStats();
-      res.status(200).json({
-        success: true,
-        ...stats
-      });
-      console.log('📊 [GET_STATS] Statistiques récupérées avec succès');
-    } catch (error) {
-      console.error('❌ [GET_STATS] Erreur lors de la récupération des statistiques:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Erreur interne du serveur'
-      });
-    }
-  }
 }

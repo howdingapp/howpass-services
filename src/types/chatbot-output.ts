@@ -3,6 +3,7 @@
  */
 
 import { QuickReply } from './quick-replies';
+import { HowanaContext } from './repositories';
 
 /**
  * Interface de base pour toutes les réponses de ChatBot
@@ -85,6 +86,7 @@ export interface IAMessageResponse {
   messageId: string;
   response: string;
   extractedData?: ExtractedRecommandations;
+  updatedContext: HowanaContext;
 }
 
 /**

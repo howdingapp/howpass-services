@@ -1,233 +1,93 @@
-import { v4 as uuidv4 } from 'uuid';
-import { redisService } from './RedisService';
-import { SupabaseService } from './SupabaseService';
+  import { SupabaseService } from './SupabaseService';
 import {
-  ConversationContext,
-  ChatMessage,
   StartConversationRequest,
-  AddMessageRequest,
-  ConversationStats
 } from '../types/conversation';
+import { HowanaContext } from '../types/repositories';
 
 export class ConversationService {
   private supabaseService: SupabaseService;
-  private readonly TTL_SECONDS = 1800; // 30 minutes en secondes
-  private readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Nettoyage toutes les 5 minutes
 
   constructor() {
     // Initialiser le service Supabase
     this.supabaseService = new SupabaseService();
-
-    // Démarrer le nettoyage automatique (pour les conversations orphelines)
-    this.startCleanupScheduler();
   }
 
   /**
    * Démarrer une nouvelle conversation
    */
-  async startConversation(request: StartConversationRequest): Promise<{ conversationId: string; context: ConversationContext }> {
+  async startConversation(request: StartConversationRequest): Promise<{ conversationId: string; context: HowanaContext }> {
     const conversationId = request.conversationId;
     const now = new Date().toISOString();
 
-    console.log('🔍 Sauvegarde d\'une nouvelle conversation dans Redis:', request);
+    console.log('🔍 Sauvegarde d\'une nouvelle conversation:', request);
     console.log('🔍 Conversation ID:', conversationId);
     console.log('🕐 Heure de création:', now);
     
-    const context: ConversationContext = {
-      id: conversationId,
-      userId: request.userId,
+    // Créer un contexte par défaut
+    const context: HowanaContext = {
       type: request.type,
-      startTime: now,
-      lastActivity: now,
-      messages: [],
-      metadata: {
-        ...(request.initialContext || {}),
-        createdAt: now,
-        lastUpdatedAt: now
-      },
-      status: 'active',
-      // Ajouter toutes les propriétés du contexte initial si elles existent
-      ...(request.initialContext?.aiRules && { aiRules: request.initialContext.aiRules }),
-      ...(request.initialContext?.activityData && { activityData: request.initialContext.activityData }),
-      ...(request.initialContext?.bilanData && { bilanData: request.initialContext.bilanData }),
-      ...(request.initialContext?.lastBilan && { lastBilan: request.initialContext.lastBilan }),
-      ...(request.initialContext?.lastHowanaRecommandation && { lastHowanaRecommandation: request.initialContext.lastHowanaRecommandation }),
-      ...(request.initialContext?.lastAnswer && { lastAnswer: request.initialContext.lastAnswer }),
-      ...(request.initialContext?.practicienData && { practicienData: request.initialContext.practicienData }),
-      ...(request.initialContext?.isEditing !== undefined && { isEditing: request.initialContext.isEditing }),
-      ...(request.initialContext?.userData && { userData: request.initialContext.userData })
-    };
+      userData: {
+        firstName: '',
+        lastName: '',
+        age: 0,
+        experience: ''
+      }
+    } as HowanaContext;
 
     console.log('🔍 Conversation context:', context);
-
-    // Stocker avec TTL automatique
-    await redisService.getClient().setex(conversationId, this.TTL_SECONDS, JSON.stringify(context));
 
     return { conversationId, context };
   }
 
   /**
-   * Ajouter un message à une conversation
+   * Récupérer le contexte d'une conversation depuis Supabase
    */
-  async addMessage(conversationId: string, request: AddMessageRequest, updatedContext?: ConversationContext): Promise<{ messageId: string; context: ConversationContext }> {
-    
-    const messageId = uuidv4();
-    const now = new Date().toISOString();
-    
-    console.log('🔍 Ajout d\'un message à la conversation dans Redis:', conversationId);
-    console.log('🕐 Heure d\'ajout du message:', now);
-
-    const context = updatedContext || await this.getContext(conversationId);
-
-    if(!context) {
-      throw new Error('Conversation not found');
-    }
-
-    const message: ChatMessage = {
-      id: messageId,
-      content: request.content,
-      type: request.type,
-      timestamp: now,
-      ...(request.metadata && { metadata: request.metadata })
-    };
-
-    context.messages.push(message);
-    context.lastActivity = now;
-    
-    // Mettre à jour les métadonnées avec l'heure de dernière mise à jour
-    context.metadata = {
-      ...context.metadata,
-      lastUpdatedAt: now
-    };
-
-    // Renouveler le TTL en mettant à jour la conversation
-    await redisService.getClient().setex(conversationId, this.TTL_SECONDS, JSON.stringify(context));
-
-    return { messageId, context };
-  }
-
-  /**
-   * Récupérer le contexte d'une conversation
-   */
-  async getContext(conversationId: string): Promise<ConversationContext | null> {
+  async getContext(conversationId: string): Promise<HowanaContext | null> {
     try {
-      const contextData = await redisService.getClient().get(conversationId);
-      if (!contextData) {
-        return null;
-      }
-
-      const context: ConversationContext = JSON.parse(contextData);
+      // Utiliser la fonction getContext de SupabaseService
+      const howanaContext = await this.supabaseService.getContext(conversationId);
       
-      // Vérifier si la conversation a expiré (double vérification)
-      const lastActivity = new Date(context.lastActivity);
-      const now = new Date();
-      if ((now.getTime() - lastActivity.getTime()) > (this.TTL_SECONDS * 1000)) {
-        await redisService.getClient().del(conversationId);
+      if (!howanaContext) {
+        console.log('⚠️ Contexte Howana non trouvé pour la conversation:', conversationId);
         return null;
       }
 
-      return context;
+      // Récupérer les règles IA spécifiques au type de conversation
+      try {
+        const { data: iaRules, error } = await this.supabaseService.getSupabaseClient()
+          .from('ia_rules')
+          .select('*')
+          .eq('type', howanaContext.type)
+          .eq('is_active', true)
+          .order('priority', { ascending: true });
+
+        if (error) {
+          console.error('❌ Erreur lors de la récupération des règles IA:', error);
+        } else {
+          // Transformer les données de snake_case vers camelCase
+          const transformedRules = (iaRules || []).map(rule => ({
+            id: rule.id,
+            type: rule.type,
+            name: rule.name,
+            description: rule.description,
+            priority: rule.priority,
+            isActive: rule.is_active,
+            createdAt: new Date(rule.created_at),
+            updatedAt: new Date(rule.updated_at)
+          }));
+
+          howanaContext.iaRules = transformedRules;
+          console.log(`✅ ${transformedRules.length} règles IA récupérées pour le type: ${howanaContext.type}`);
+        }
+      } catch (error) {
+        console.error('❌ Erreur lors de la récupération des règles IA:', error);
+      }
+
+      return howanaContext;
     } catch (error) {
       console.error('❌ Erreur lors de la récupération du contexte:', error);
       return null;
     }
   }
 
-  /**
-   * Obtenir les statistiques du service
-   */
-  async getStats(): Promise<ConversationStats> {
-    try {
-      const now = new Date();
-      
-      // Compter les conversations actives (clés avec TTL > 0)
-      const keys = await redisService.getClient().keys('*');
-      let activeCount = 0;
-      let totalSize = 0;
-
-      for (const key of keys) {
-        const ttl = await redisService.getClient().ttl(key);
-        if (ttl > 0) {
-          activeCount++;
-          const contextData = await redisService.getClient().get(key);
-          if (contextData) {
-            totalSize += contextData.length;
-          }
-        }
-      }
-
-      return {
-        activeConversations: activeCount,
-        totalConversations: keys.length,
-        memoryUsage: totalSize,
-        timestamp: now.toISOString()
-      };
-    } catch (error) {
-      console.error('❌ Erreur lors de la récupération des statistiques:', error);
-      return {
-        activeConversations: 0,
-        totalConversations: 0,
-        memoryUsage: 0,
-        timestamp: new Date().toISOString()
-      };
-    }
-  }
-
-  /**
-   * Démarrer le planificateur de nettoyage automatique
-   */
-  private startCleanupScheduler(): void {
-    setInterval(async () => {
-      try {
-        await this.cleanupExpiredConversations();
-      } catch (error) {
-        console.error('❌ Erreur lors du nettoyage automatique:', error);
-      }
-    }, this.CLEANUP_INTERVAL_MS);
-  }
-
-  /**
-   * Nettoyer les conversations expirées (pour les conversations orphelines)
-   */
-  private async cleanupExpiredConversations(): Promise<void> {
-    try {
-      const keys = await redisService.getClient().keys('*');
-      let cleanedCount = 0;
-      let supabaseCleanedCount = 0;
-
-      for (const key of keys) {
-        const ttl = await redisService.getClient().ttl(key);
-        if (ttl === -1 || ttl === -2) { // Pas de TTL ou clé inexistante
-          try {
-            // Nettoyer la table ai_responses dans Supabase avant de supprimer la conversation Redis
-            const cleanupResult = await this.supabaseService.deleteAIResponsesByConversation(key);
-            if (cleanupResult.success && cleanupResult.deletedCount) {
-              supabaseCleanedCount += cleanupResult.deletedCount;
-              console.log(`🧹 Supprimé ${cleanupResult.deletedCount} réponse(s) IA pour la conversation: ${key}`);
-            }
-          } catch (supabaseError) {
-            console.warn(`⚠️ Erreur lors du nettoyage Supabase pour ${key}:`, supabaseError);
-            // Continuer le nettoyage Redis même si Supabase échoue
-          }
-
-          // Supprimer la conversation Redis
-          await redisService.getClient().del(key);
-          cleanedCount++;
-        }
-      }
-
-      if (cleanedCount > 0 || supabaseCleanedCount > 0) {
-        console.log(`🧹 Nettoyage automatique: ${cleanedCount} conversations orphelines supprimées de Redis, ${supabaseCleanedCount} réponses IA supprimées de Supabase`);
-      }
-    } catch (error) {
-      console.error('❌ Erreur lors du nettoyage automatique:', error);
-    }
-  }
-
-  /**
-   * Fermer la connexion Redis
-   */
-  async disconnect(): Promise<void> {
-    await redisService.getClient().quit();
-  }
 }

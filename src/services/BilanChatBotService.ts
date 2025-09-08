@@ -1,19 +1,22 @@
 import { RecommendationChatBotService } from './RecommendationChatBotService';
-import { ConversationContext } from '../types/conversation';
+import { HowanaBilanContext, HowanaContext } from '../types/repositories';
 import { ChatBotOutputSchema } from '../types';
 
 export class BilanChatBotService extends RecommendationChatBotService {
   
-  protected override buildSystemPrompt(context: ConversationContext): string {
+  protected override buildSystemPrompt(_context: HowanaContext): string {
+
+    const context:HowanaBilanContext & HowanaContext = _context as HowanaBilanContext & HowanaContext;
+    
     let basePrompt = `Tu es Howana, un assistant personnel et confident spécialisé dans le bien-être et les activités de santé. 
     Tu es bienveillant.  Réponses courtes (maximum 30 mots).`;
 
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
-    if (context.aiRules && Array.isArray(context.aiRules) && context.aiRules.length > 0) {
+    if (context.iaRules && Array.isArray(context.iaRules) && context.iaRules.length > 0) {
       // Filtrer seulement les règles actives
-      const activeRules = context.aiRules.filter((rule) => rule.isActive);
+      const activeRules = context.iaRules.filter((rule) => rule.isActive);
       
       if (activeRules.length > 0) {
         // Trier les règles par priorité (priorité 1 = plus forte)
@@ -31,7 +34,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
     }
 
     // Ajouter le contexte spécifique au bilan
-    if (context.aiRules && Array.isArray(context.aiRules) && context.aiRules.length > 0) {
+    if (context.iaRules && Array.isArray(context.iaRules) && context.iaRules.length > 0) {
       basePrompt += `\n\nL'utilisateur vient de remplir son bilan de bien-être. Utilise ces informations pour appliquer tes règles personnalisées.`;
     } else {
       basePrompt += `\n\nL'utilisateur vient de remplir son bilan de bien-être. 
@@ -90,8 +93,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
       basePrompt += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions. Évite de répéter exactement les mêmes suggestions.`;
     }
     
-    // Règles contextuelles spécifiques (uniquement si pas d'aiRules)
-    if (!context.aiRules || !Array.isArray(context.aiRules) || context.aiRules.length === 0) {
+    // Règles contextuelles spécifiques (uniquement si pas d'iaRules)
+    if (!context.iaRules || !Array.isArray(context.iaRules) || context.iaRules.length === 0) {
       basePrompt += `
     - Analyse les données du bilan pour comprendre l'état actuel de l'utilisateur
     - Identifie les points d'amélioration et les forces
@@ -125,7 +128,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
     return basePrompt;
   }
 
-  protected override getAddMessageOutputSchema(_context: ConversationContext): ChatBotOutputSchema {
+  protected override getAddMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
 
     return {
       format: { 
@@ -169,7 +172,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
     };
   }
 
-  protected override getSummaryOutputSchema(context: ConversationContext): any {
+  protected override getSummaryOutputSchema(context: HowanaContext): any {
     const constraints = this.getActivitiesAndPracticesConstraints(context);
     const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
 
@@ -245,7 +248,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
     };
   }
 
-  protected override buildFirstUserPrompt(_context: ConversationContext): string {
+  protected override buildFirstUserPrompt(_context: HowanaContext): string {
     return `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans l'analyse des bilans de bien-être.
     
     Indique que tu es là pour l'aider à comprendre son bilan, identifier les points d'amélioration et lui proposer des recommandations personnalisées.
@@ -253,7 +256,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
     Commence par un accueil chaleureux et pose une première question engageante pour l'accompagner dans l'analyse de son bilan.`;
   }
 
-  protected override buildSummarySystemPrompt(_context: ConversationContext): string {
+  protected override buildSummarySystemPrompt(_context: HowanaContext): string {
     return `Tu es un assistant spécialisé dans l'analyse de conversations de bilan de bien-être. 
     Analyse la conversation et génère un résumé structuré qui permettra de comprendre l'état de l'utilisateur, 
     l'analyse de son bilan et les recommandations proposées.

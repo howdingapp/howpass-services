@@ -1,10 +1,8 @@
-import { ConversationService } from './ConversationService';
 import { GoogleCloudTasksService } from './GoogleCloudTasksService';
 
 export interface IAJobRequest {
   type: 'generate_response' | 'generate_summary' | 'generate_first_response' | 'generate_unfinished_exchange';
   conversationId: string;
-  userId: string;
   userMessage?: string;
   priority?: 'low' | 'medium' | 'high';
   authToken?: string; // Token d'authentification pour sécuriser les tâches
@@ -13,11 +11,9 @@ export interface IAJobRequest {
 }
 
 export class IAJobTriggerService {
-  private conversationService: ConversationService;
   private googleCloudTasksService: GoogleCloudTasksService;
 
   constructor() {
-    this.conversationService = new ConversationService();
     this.googleCloudTasksService = new GoogleCloudTasksService();
   }
 
@@ -31,12 +27,6 @@ export class IAJobTriggerService {
   }> {
     try {
       console.log(`🚀 Déclenchement d'un job IA: ${request.type} pour la conversation ${request.conversationId}`);
-
-      // Récupérer le contexte de la conversation
-      const context = await this.conversationService.getContext(request.conversationId);
-      if (!context) {
-        throw new Error(`Conversation ${request.conversationId} non trouvée`);
-      }
 
       // Déterminer la priorité
       const priority = this.determinePriority(request.priority, request.type);
@@ -75,7 +65,6 @@ export class IAJobTriggerService {
       const taskData: Parameters<typeof this.googleCloudTasksService.createPriorityIATask>[0] = {
         type: request.type,
         conversationId: request.conversationId,
-        userId: request.userId,
         priority: priority,
         authToken: authToken // Ajouter le token d'authentification
       };
