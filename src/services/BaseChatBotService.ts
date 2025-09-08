@@ -141,13 +141,14 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
       if (toolCalls.length > 0) {
         console.log('🔧 Outils demandés par l\'IA:', toolCalls);
-        
+
         // Exécuter chaque outil demandé
         const toolResults = [];
         for (const toolCall of toolCalls) {
           if (toolCall.type === "function_call") {
             console.log("Find tool to call: ", toolCall.id, toolCall.call_id, toolCall.name);
-
+            context.metadata['requestedTools'] = (context.metadata['requestedTools'] ?? []).push(toolCall.name);
+        
             try {
               // Extraire les arguments de l'appel d'outil
               let toolArgs = {};
@@ -435,7 +436,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer un résumé structuré de la conversation
    */
-  async generateConversationSummary(context: HowanaContext): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined}> {
+  async generateConversationSummary(context: HowanaContext): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined, updatedContext: HowanaContext}> {
     try {
       // Vérifier si des recommandations sont requises pour le résumé
       const needsRecommendations = this.recommendationRequiredForSummary(context);
@@ -460,7 +461,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           
           // Ajouter immédiatement les extractedData au contexte pour que getSummaryOutputSchema puisse y accéder
           if (extractedData) {
-            this.enrichContext(context, { extractedData });
+            context = this.enrichContext(context, { extractedData });
           }
           
         } catch (error) {
@@ -516,6 +517,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             return {
               summary: parsedSummary,
               extractedData,
+              updatedContext: context,
             };
           } catch (parseError) {
             console.warn('⚠️ Erreur de parsing JSON, fallback vers résumé simple:', parseError);
@@ -528,13 +530,15 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       return {
         summary: "Résumé de la conversation généré automatiquement.",
         extractedData,
+        updatedContext: context,
       };
       
     } catch (error) {
       console.error('❌ Erreur lors de la génération du résumé:', error);
       return {
         summary: "Résumé de la conversation généré automatiquement.",
-        extractedData: { activities: [], practices: [] }
+        extractedData: { activities: [], practices: [] },
+        updatedContext: context,
       };
     }
   }
@@ -745,10 +749,10 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    * @param data Objet contenant les données à ajouter au contexte
    * @param data.extractedData Les données extraites contenant les activités et pratiques
    */
-  protected enrichContext(context: HowanaContext, data: { extractedData?: any }): void {
+  protected enrichContext(context: HowanaContext, data: { extractedData?: any }): HowanaContext {
     if (!data || !data.extractedData) {
       console.warn('⚠️ Aucune extractedData fournie pour enrichir le contexte');
-      return;
+      return context;
     }
 
     const { extractedData } = data;
@@ -762,5 +766,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     context.hasRecommendations = (recommendations.activities.length > 0 || recommendations.practices.length > 0);
     
     console.log('📋 Contexte enrichi avec les recommandations:', recommendations);
+
+    return context;
+
   }
 }

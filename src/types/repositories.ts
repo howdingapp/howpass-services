@@ -177,7 +177,7 @@ export type HowanaContext = (HowanaActivityContext | HowanaBilanContext | Howana
   activityId?: string;
   
   // Métadonnées générales (pour compatibilité)
-  metadata?: {
+  metadata: {
     [key: string]: any;
   };
   
