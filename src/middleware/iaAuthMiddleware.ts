@@ -146,7 +146,7 @@ export async function validateIAToken(req: IAAuthenticatedRequest, res: Response
     }
 
     // Validation des autres champs requis
-    const requiredFields = ['type', 'conversationId', 'userId'];
+    const requiredFields = ['type', 'conversationId'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {
