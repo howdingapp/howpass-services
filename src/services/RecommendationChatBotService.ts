@@ -623,7 +623,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                   },
                   description: "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou référencer des activités/pratiques spécifiques.",
                   maxItems: 3,
-                  minItems: 0
+                  minItems: 1
                 }
               },
               required: ["response", "quickReplies"],
