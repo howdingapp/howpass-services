@@ -264,7 +264,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     try {
       console.log('🔍 Génération de la première réponse IA pour la conversation:', context.id);
 
-      const systemPrompt = this.buildSystemPrompt(context);
+      const systemPrompt = await this.buildSystemPrompt(context);
       const userPrompt = this.buildFirstUserPrompt(context);
 
       console.log('🔍 System prompt:', systemPrompt);
@@ -546,7 +546,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Méthodes abstraites à implémenter dans les classes enfants
    */
-  protected abstract buildSystemPrompt(context: HowanaContext): string;
+  protected abstract buildSystemPrompt(context: HowanaContext): Promise<string>;
   protected abstract buildFirstUserPrompt(context: HowanaContext): string;
   protected abstract buildSummarySystemPrompt(context: HowanaContext): string;
   protected abstract getSummaryOutputSchema(context: HowanaContext): ChatBotOutputSchema;

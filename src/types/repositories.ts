@@ -180,9 +180,7 @@ export type HowanaContext = (HowanaActivityContext | HowanaBilanContext | Howana
   metadata: {
     [key: string]: any;
   };
-  
-  // Règles IA spécifiques au type de conversation
-  iaRules?: IARule[];
+
 };
 
 // ===== HOWANA RECOMMENDATION TYPES =====

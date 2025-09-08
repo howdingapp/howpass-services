@@ -4,28 +4,53 @@ import { IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-ou
 
 export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse> {
   
-  protected buildSystemPrompt(_context: HowanaContext): string {
+  protected async buildSystemPrompt(_context: HowanaContext): Promise<string> {
     const context:HowanaActivityContext & HowanaContext = _context as HowanaActivityContext & HowanaContext;
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
     Tu es bienveillant et professionnel.`;
 
-    // Règles de comportement et d'information spécifiques à respecter
+    // Récupérer les règles IA spécifiques au type de conversation
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
-    if (context.iaRules && Array.isArray(context.iaRules) && context.iaRules.length > 0) {
-      // Filtrer seulement les règles actives
-      const activeRules = context.iaRules.filter((rule) => rule.isActive);
-      
-      if (activeRules.length > 0) {
-        // Trier les règles par priorité (priorité 1 = plus forte)
-        const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
+    try {
+      const iaRulesResult = await this.supabaseService.getIARules(context.type);
+      if (iaRulesResult.success && iaRulesResult.data && iaRulesResult.data.length > 0) {
+        // Filtrer seulement les règles actives
+        const activeRules = iaRulesResult.data.filter((rule) => rule.isActive);
         
-        sortedRules.forEach((rule, index) => {
-          basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
-        });
+        if (activeRules.length > 0) {
+          // Trier les règles par priorité (priorité 1 = plus forte)
+          const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
+          
+          sortedRules.forEach((rule, index) => {
+            basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
+          });
+        }
+      } else {
+        // COMPORTEMENT PAR DÉFAUT : Howana experte des pratiques
+        basePrompt += `\n1. [EXPERTISE] Expertise des pratiques: Tu es experte des pratiques de bien-être et de santé. 
+        Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.
+        
+        OBJECTIFS SPÉCIFIQUES POUR LE RÉSUMÉ STRUCTURÉ:
+        Tu dois collecter des informations précises pour générer automatiquement un résumé structuré avec ces 6 éléments:
+        
+        A) TITRE (max 100 caractères): Un titre optimisé et descriptif de l'activité
+        B) DESCRIPTION COURTE (max 200 caractères): Description accrocheuse mettant en avant l'unicité
+        C) DESCRIPTION DÉTAILLÉE (max 500 caractères): Déroulement, approche et expérience des participants
+        D) MOTS-CLÉS: Liste des termes les plus pertinents pour cette activité
+        E) BÉNÉFICES: Liste des bénéfices concrets et mesurables pour les participants
+        F) PROFIL IDÉAL: Description du profil psychologique et situation idéale de l'utilisateur cible
+        
+        STRATÉGIE DE COLLECTE:
+        -Tu n'as le droit de poser qu'une seule question ou demade d'information dans chacune de tes réponses pour ne pas surcharger l'utilisateur.
+        - Pose des questions ciblées pour chaque élément
+        - Demande des exemples concrets et spécifiques
+        - Vérifie la cohérence avec la pratique associée
+        - Collecte des détails qui permettront de remplir automatiquement les formulaires`;
       }
-    } else {
-      // COMPORTEMENT PAR DÉFAUT : Howana experte des pratiques
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des règles IA:', error);
+      // COMPORTEMENT PAR DÉFAUT en cas d'erreur
       basePrompt += `\n1. [EXPERTISE] Expertise des pratiques: Tu es experte des pratiques de bien-être et de santé. 
       Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.
       
@@ -156,12 +181,11 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     - L'échange doit contenir environ 10 questions maximum
     - Chaque réponse doit TOUJOURS contenir une question pertinente`;
     
-    // Règles contextuelles spécifiques (uniquement si pas d'iaRules)
-    if (!context.iaRules || !Array.isArray(context.iaRules) || context.iaRules.length === 0) {
-      const isEditing = context.isEditing;
-      
-      if (isEditing) {
-        basePrompt += `
+    // Règles contextuelles spécifiques
+    const isEditing = context.isEditing;
+    
+    if (isEditing) {
+      basePrompt += `
     - Tu es en mode AMÉLIORATION : l'utilisateur revient pour affiner des informations déjà générées
     - Analyse la qualité des données existantes et propose des améliorations ciblées
     - Utilise les informations de catégorie et famille pour enrichir le contexte
@@ -176,8 +200,8 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     
     - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
-      } else {
-        basePrompt += `
+    } else {
+      basePrompt += `
     - Ton objectif principal est d'aider le praticien à valider la conformité de son activité avec la pratique associée
     - Pose des questions pertinentes pour mieux comprendre l'activité et établir la conformité
     - Identifie le profil d'utilisateur idéal pour cette activité/pratique
@@ -194,7 +218,6 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     
     - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
-      }
     }
 
     return basePrompt;

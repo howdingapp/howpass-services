@@ -1100,6 +1100,59 @@ export class SupabaseService {
   }
 
   /**
+   * Récupérer les règles IA spécifiques au type de conversation
+   */
+  async getIARules(conversationType: string): Promise<{
+    success: boolean;
+    data?: any[];
+    error?: string;
+  }> {
+    try {
+      console.log(`📋 Récupération des règles IA pour le type: ${conversationType}`);
+
+      const { data: iaRules, error } = await this.supabase
+        .from('ia_rules')
+        .select('*')
+        .eq('type', conversationType)
+        .eq('is_active', true)
+        .order('priority', { ascending: true });
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des règles IA:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      // Transformer les données de snake_case vers camelCase
+      const transformedRules = (iaRules || []).map(rule => ({
+        id: rule.id,
+        type: rule.type,
+        name: rule.name,
+        description: rule.description,
+        priority: rule.priority,
+        isActive: rule.is_active,
+        createdAt: new Date(rule.created_at),
+        updatedAt: new Date(rule.updated_at)
+      }));
+
+      console.log(`✅ ${transformedRules.length} règles IA récupérées pour le type: ${conversationType}`);
+      return {
+        success: true,
+        data: transformedRules
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération des règles IA:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
    * Mettre à jour le contexte d'une conversation Howana
    */
   async updateContext(conversationId: string, context: HowanaContext): Promise<{

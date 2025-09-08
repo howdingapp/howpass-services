@@ -71,7 +71,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     };
   }
 
-  protected buildSystemPrompt(_context: HowanaContext): string {
+  protected async buildSystemPrompt(_context: HowanaContext): Promise<string> {
 
     const context:HowanaRecommandationContext & HowanaContext = _context as HowanaRecommandationContext & HowanaContext;
 
@@ -195,20 +195,41 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
-    if (context.iaRules && Array.isArray(context.iaRules) && context.iaRules.length > 0) {
-      // Filtrer seulement les règles actives
-      const activeRules = context.iaRules.filter((rule) => rule.isActive);
-      
-      if (activeRules.length > 0) {
-        // Trier les règles par priorité (priorité 1 = plus forte)
-        const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
+    try {
+      const iaRulesResult = await this.supabaseService.getIARules(context.type);
+      if (iaRulesResult.success && iaRulesResult.data && iaRulesResult.data.length > 0) {
+        // Filtrer seulement les règles actives
+        const activeRules = iaRulesResult.data.filter((rule) => rule.isActive);
         
-        sortedRules.forEach((rule, index) => {
-          basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
-        });
+        if (activeRules.length > 0) {
+          // Trier les règles par priorité (priorité 1 = plus forte)
+          const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
+          
+          sortedRules.forEach((rule, index) => {
+            basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
+          });
+        }
+      } else {
+        // COMPORTEMENT PAR DÉFAUT : Howana expert en recommandations personnalisées
+        basePrompt += `\n1. [RECOMMANDATION] Expert en recommandations personnalisées: Tu es spécialisée dans l'analyse des besoins 
+        et la recommandation d'activités et de pratiques adaptées au profil de l'utilisateur.
+        
+        OBJECTIFS SPÉCIFIQUES:
+        - Analyser l'état émotionnel et les besoins de l'utilisateur
+        - Recommander les activités et pratiques les plus pertinentes
+        - Fournir une analyse détaillée de l'état de l'utilisateur
+        - Donner des suggestions personnalisées et adaptées
+        
+        STRATÉGIE DE RECOMMANDATION:
+        - Pose des questions ciblées pour comprendre les besoins
+        - Analyse les préférences et contraintes de l'utilisateur
+        - Propose des activités avec un score de pertinence
+        - Explique le raisonnement derrière chaque recommandation
+        - Adapte tes suggestions selon le profil et l'expérience`;
       }
-    } else {
-      // COMPORTEMENT PAR DÉFAUT : Howana expert en recommandations personnalisées
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des règles IA:', error);
+      // COMPORTEMENT PAR DÉFAUT en cas d'erreur
       basePrompt += `\n1. [RECOMMANDATION] Expert en recommandations personnalisées: Tu es spécialisée dans l'analyse des besoins 
       et la recommandation d'activités et de pratiques adaptées au profil de l'utilisateur.
       
@@ -227,12 +248,8 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     }
 
     // Ajouter le contexte spécifique aux recommandations
-    if (context.iaRules && Array.isArray(context.iaRules) && context.iaRules.length > 0) {
-      basePrompt += `\n\nL'utilisateur cherche des recommandations personnalisées. Utilise ces informations pour appliquer tes règles personnalisées.`;
-    } else {
-      basePrompt += `\n\nL'utilisateur cherche des recommandations personnalisées d'activités et de pratiques. 
-      Aide-le à identifier ses besoins et propose des solutions adaptées.`;
-    }
+    basePrompt += `\n\nL'utilisateur cherche des recommandations personnalisées d'activités et de pratiques. 
+    Aide-le à identifier ses besoins et propose des solutions adaptées.`;
 
     // Règles générales (toujours présentes)
     basePrompt += `\n\nRègles importantes:
@@ -242,9 +259,8 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     - Si tu ne sais pas quelque chose, dis-le honnêtement
     - CRUCIAL: Ne propose des activités/pratiques qu'après avoir posé au moins 3 questions pour comprendre les vrais besoins`;
     
-    // Règles contextuelles spécifiques (uniquement si pas d'iaRules)
-    if (!context.iaRules || !Array.isArray(context.iaRules) || context.iaRules.length === 0) {
-      basePrompt += `
+    // Règles contextuelles spécifiques
+    basePrompt += `
     - Aide l'utilisateur à identifier ses besoins et ses objectifs
     - Analyse son état émotionnel et ses préférences
     - Propose des activités et pratiques avec un score de pertinence
@@ -254,7 +270,6 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement
     - STRATÉGIE: Commence par des questions ouvertes sur son état actuel, ses défis, ses envies
     - Ne propose des activités/pratiques qu'après avoir bien cerné ses besoins spécifiques`;
-    }
 
     // Politique d'utilisation des outils (FAQ limitée à un périmètre précis)
     basePrompt += `\n\nUtilisation des outils:\n- Utilise l'outil 'faq' UNIQUEMENT pour des questions informationnelles relevant des thèmes suivants: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, débutants (pratiques/activités), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques).\n- Pour toute autre question (y compris compte/connexion, abonnement/prix, sécurité/données, support/bugs), ne pas utiliser 'faq'.\n- Si la question concerne des recommandations personnalisées d'activités/pratiques, utilise 'activities_and_practices'.`;

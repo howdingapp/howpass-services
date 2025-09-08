@@ -1,10 +1,9 @@
 import { RecommendationChatBotService } from './RecommendationChatBotService';
 import { HowanaBilanContext, HowanaContext } from '../types/repositories';
-import { ChatBotOutputSchema } from '../types';
 
 export class BilanChatBotService extends RecommendationChatBotService {
   
-  protected override buildSystemPrompt(_context: HowanaContext): string {
+  protected override async buildSystemPrompt(_context: HowanaContext): Promise<string> {
 
     const context:HowanaBilanContext & HowanaContext = _context as HowanaBilanContext & HowanaContext;
     
@@ -14,32 +13,37 @@ export class BilanChatBotService extends RecommendationChatBotService {
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
-    if (context.iaRules && Array.isArray(context.iaRules) && context.iaRules.length > 0) {
-      // Filtrer seulement les règles actives
-      const activeRules = context.iaRules.filter((rule) => rule.isActive);
-      
-      if (activeRules.length > 0) {
-        // Trier les règles par priorité (priorité 1 = plus forte)
-        const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
+    try {
+      const iaRulesResult = await this.supabaseService.getIARules(context.type);
+      if (iaRulesResult.success && iaRulesResult.data && iaRulesResult.data.length > 0) {
+        // Filtrer seulement les règles actives
+        const activeRules = iaRulesResult.data.filter((rule) => rule.isActive);
         
-        sortedRules.forEach((rule, index) => {
-          basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
-        });
+        if (activeRules.length > 0) {
+          // Trier les règles par priorité (priorité 1 = plus forte)
+          const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
+          
+          sortedRules.forEach((rule, index) => {
+            basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
+          });
+        }
+      } else {
+        // COMPORTEMENT PAR DÉFAUT : Howana analyste du bilan et accompagnateur
+        basePrompt += `\n1. [BILAN] Analyse du bilan et accompagnement: Tu es spécialisée dans l'analyse des bilans de bien-être 
+        et l'accompagnement personnalisé. Ton objectif est d'aider l'utilisateur à comprendre son bilan, 
+        à identifier les points d'amélioration et à lui proposer des recommandations adaptées.`;
       }
-    } else {
-      // COMPORTEMENT PAR DÉFAUT : Howana analyste du bilan et accompagnateur
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des règles IA:', error);
+      // COMPORTEMENT PAR DÉFAUT en cas d'erreur
       basePrompt += `\n1. [BILAN] Analyse du bilan et accompagnement: Tu es spécialisée dans l'analyse des bilans de bien-être 
       et l'accompagnement personnalisé. Ton objectif est d'aider l'utilisateur à comprendre son bilan, 
       à identifier les points d'amélioration et à lui proposer des recommandations adaptées.`;
     }
 
     // Ajouter le contexte spécifique au bilan
-    if (context.iaRules && Array.isArray(context.iaRules) && context.iaRules.length > 0) {
-      basePrompt += `\n\nL'utilisateur vient de remplir son bilan de bien-être. Utilise ces informations pour appliquer tes règles personnalisées.`;
-    } else {
-      basePrompt += `\n\nL'utilisateur vient de remplir son bilan de bien-être. 
-      Aide-le à comprendre ses résultats, identifie les points d'amélioration et propose des recommandations personnalisées.`;
-    }
+    basePrompt += `\n\nL'utilisateur vient de remplir son bilan de bien-être. 
+    Aide-le à comprendre ses résultats, identifie les points d'amélioration et propose des recommandations personnalisées.`;
 
     // Règles générales (toujours présentes)
     basePrompt += `\n\nRègles importantes:
@@ -93,9 +97,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
       basePrompt += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions. Évite de répéter exactement les mêmes suggestions.`;
     }
     
-    // Règles contextuelles spécifiques (uniquement si pas d'iaRules)
-    if (!context.iaRules || !Array.isArray(context.iaRules) || context.iaRules.length === 0) {
-      basePrompt += `
+    // Règles contextuelles spécifiques
+    basePrompt += `
     - Analyse les données du bilan pour comprendre l'état actuel de l'utilisateur
     - Identifie les points d'amélioration et les forces
     - Propose des activités et pratiques adaptées aux scores du bilan
@@ -104,7 +107,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
     - Demande des scores de 1 à 9 pour ces nouvelles catégories (1 = très déséquilibré, 9 = très équilibré)
     - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
-    }
 
     // Ajouter les informations du bilan si disponibles
     if (context.bilanData) {
