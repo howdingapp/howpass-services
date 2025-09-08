@@ -147,7 +147,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
         for (const toolCall of toolCalls) {
           if (toolCall.type === "function_call") {
             console.log("Find tool to call: ", toolCall.id, toolCall.call_id, toolCall.name);
-            context.metadata['requestedTools'] = (context.metadata['requestedTools'] ?? []).push(toolCall.name);
+            context.metadata['requestedTools'] = [...(context.metadata['requestedTools'] ?? []), toolCall.name];
         
             try {
               // Extraire les arguments de l'appel d'outil
