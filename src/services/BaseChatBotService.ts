@@ -523,7 +523,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
               updatedContext: context,
             };
           } catch (parseError) {
-            console.warn('⚠️ Erreur de parsing JSON, fallback vers résumé simple:', parseError);
+            console.warn('⚠️ Erreur de parsing JSON, fallback vers résumé simple:', parseError, resultText);
           }
         }
       } catch (responseError) {
