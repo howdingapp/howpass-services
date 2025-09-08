@@ -356,7 +356,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     allAvailableIds: string[];
   } {
     // Récupérer les recommandations des métadonnées pour contraindre les enums
-    const recommendations = context.metadata?.['recommendations'] || { activities: [], practices: [] };
+    const recommendations = context.recommendations || { activities: [], practices: [] };
     
     // Extraire les IDs et noms disponibles pour créer les enums
     const availableActivities = recommendations.activities?.map((item: any) => ({

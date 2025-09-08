@@ -469,6 +469,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
         }
       }
 
+      console.log("RecommendationResponse.messageId", recommendationResponse?.messageId);
+      console.log("context.previousCallId", context.previousCallId);
+
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
       const previousCallId = recommendationResponse?.messageId || context.previousCallId;
       
