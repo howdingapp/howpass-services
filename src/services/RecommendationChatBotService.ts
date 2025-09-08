@@ -200,6 +200,13 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
+    // RÈGLE OBLIGATOIRE : Toujours faire référence aux conversations précédentes si disponibles
+    if (context.lastHowanaRecommandation || context.lastBilan) {
+      basePrompt += `\n0. [CONFIANT] Comportement de confident: Tu es comme un confident qui retrouve quelqu'un qu'il connaît bien. 
+      Tu DOIS TOUJOURS faire référence aux conversations précédentes, demander des nouvelles, et montrer que tu te souviens 
+      de vos échanges. Cette règle est PRIORITAIRE sur toutes les autres.`;
+    }
+
     try {
       const iaRulesResult = await this.supabaseService.getIARules(context.type);
       if (iaRulesResult.success && iaRulesResult.data && iaRulesResult.data.length > 0) {
@@ -289,13 +296,25 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     
     Indique que tu es là pour l'aider à identifier ses besoins et lui recommander des activités et pratiques adaptées.`;
 
+    // Vérifier s'il y a des informations de conversations précédentes
+    const hasPreviousContext = context.lastHowanaRecommandation || context.lastBilan;
+    
+    if (hasPreviousContext) {
+      prompt += `\n\nIMPORTANT - RÉFÉRENCE AUX CONVERSATIONS PRÉCÉDENTES:
+      Tu as accès à des informations de conversations précédentes avec cet utilisateur. Tu DOIS absolument:
+      - Faire référence à ces informations de manière naturelle et confidente
+      - Montrer que tu te souviens de vos échanges précédents
+      - Utiliser ces informations pour personnaliser ton accueil
+      - Ne jamais ignorer ou omettre ces éléments contextuels`;
+    }
+
     if (context.lastBilan) {
       const analysis = this.analyzeBilanScores(context.lastBilan);
       
       prompt += `\n\nTu as accès à son dernier bilan complet. Utilise ces informations pour:`;
       
       if (analysis.availableScores.length > 0) {
-        prompt += `\n- Faire référence à ses scores disponibles (${analysis.availableScores.join(', ')}) de manière bienveillante`;
+        prompt += `\n- Faire référence à ses scores disponibles (${analysis.availableScores.join(', ')}) de manière bienveillante et confidente`;
         prompt += `\n- Proposer des améliorations ciblées selon ses points faibles`;
         if (analysis.lowScores.length > 0) {
           prompt += `\n- Suggérer des activités qui peuvent aider à améliorer ses scores les plus bas (${analysis.lowScores.join(', ')})`;
@@ -310,7 +329,15 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
       prompt += `\n- Adapter tes recommandations selon son profil établi`;
     }
 
-    prompt += `\n\nCommence par un accueil chaleureux et pose une première question engageante pour comprendre ses objectifs et ses besoins actuels.`;
+    if (context.lastHowanaRecommandation) {
+      prompt += `\n\nTu as également accès à nos échanges précédents. Utilise ces informations pour:
+      - Faire référence aux recommandations précédentes de manière naturelle
+      - Montrer que tu te souviens de ses préférences et besoins passés
+      - Adapter ton approche selon l'évolution de sa situation
+      - Éviter de répéter exactement les mêmes suggestions`;
+    }
+
+    prompt += `\n\nCommence par un accueil chaleureux et confident qui fait référence à vos échanges précédents (si disponibles) et pose une première question engageante pour comprendre ses objectifs et ses besoins actuels.`;
 
     return prompt;
   }

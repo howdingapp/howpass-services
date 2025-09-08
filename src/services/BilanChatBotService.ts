@@ -13,6 +13,13 @@ export class BilanChatBotService extends RecommendationChatBotService {
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
+    // RÈGLE OBLIGATOIRE : Toujours faire référence aux conversations précédentes si disponibles
+    if (context.lastHowanaRecommandation || context.bilanData) {
+      basePrompt += `\n0. [CONFIANT] Comportement de confident: Tu es comme un confident qui retrouve quelqu'un qu'il connaît bien. 
+      Tu DOIS TOUJOURS faire référence aux conversations précédentes, demander des nouvelles, et montrer que tu te souviens 
+      de vos échanges. Cette règle est PRIORITAIRE sur toutes les autres.`;
+    }
+
     try {
       const iaRulesResult = await this.supabaseService.getIARules(context.type);
       if (iaRulesResult.success && iaRulesResult.data && iaRulesResult.data.length > 0) {
@@ -212,11 +219,44 @@ export class BilanChatBotService extends RecommendationChatBotService {
   }
 
   protected override buildFirstUserPrompt(_context: HowanaContext): string {
-    return `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans l'analyse des bilans de bien-être.
+    const context: HowanaBilanContext & HowanaContext = _context as HowanaBilanContext & HowanaContext;
     
-    Indique que tu es là pour l'aider à comprendre son bilan, identifier les points d'amélioration et lui proposer des recommandations personnalisées.
+    let prompt = `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans l'analyse des bilans de bien-être.
     
-    Commence par un accueil chaleureux et pose une première question engageante pour l'accompagner dans l'analyse de son bilan.`;
+    Indique que tu es là pour l'aider à comprendre son bilan, identifier les points d'amélioration et lui proposer des recommandations personnalisées.`;
+
+    // Vérifier s'il y a des informations de conversations précédentes
+    const hasPreviousContext = context.lastHowanaRecommandation || context.bilanData;
+    
+    if (hasPreviousContext) {
+      prompt += `\n\nIMPORTANT - COMPORTEMENT DE CONFIANT:
+      Tu es comme un confident qui retrouve quelqu'un qu'il connaît bien. Tu DOIS absolument:
+      - Demander des nouvelles de manière chaleureuse et personnelle
+      - Faire référence aux conversations précédentes de manière naturelle
+      - Montrer que tu te souviens de vos échanges précédents
+      - Adopter un ton de confident qui s'intéresse sincèrement à l'évolution de la personne
+      - Ne jamais ignorer ou omettre ces éléments contextuels`;
+    }
+
+    if (context.bilanData) {
+      prompt += `\n\nTu as accès à son bilan de bien-être. Utilise ces informations pour:
+      - Faire référence à ses scores de manière bienveillante et confidente
+      - Montrer que tu connais déjà son état de bien-être
+      - Adapter ton approche selon les résultats de son bilan
+      - Poser des questions ciblées basées sur ses scores`;
+    }
+
+    if (context.lastHowanaRecommandation) {
+      prompt += `\n\nTu as également accès à nos échanges précédents. Utilise ces informations pour:
+      - Demander des nouvelles des recommandations précédentes
+      - Montrer que tu te souviens de ses préférences et besoins passés
+      - Adapter ton approche selon l'évolution de sa situation
+      - Créer une continuité dans votre relation de confiance`;
+    }
+
+    prompt += `\n\nCommence par un accueil chaleureux de confident qui demande des nouvelles, fait référence à vos échanges précédents (si disponibles) et pose une première question engageante pour l'accompagner dans l'analyse de son bilan.`;
+
+    return prompt;
   }
 
   protected override buildSummarySystemPrompt(_context: HowanaContext): string {
