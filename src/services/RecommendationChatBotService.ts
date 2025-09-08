@@ -516,41 +516,36 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     };
   }
 
-  protected override getAddMessageOutputSchema(context: HowanaContext, forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
-    // Déterminer le schéma de quickReplies selon le contexte
-    let quickRepliesSchema;
-    let schemaName;
-    
+  protected override getAddMessageOutputSchema(_context: HowanaContext, forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
     if (forceSummaryToolCall) {
-      // Utiliser des quickReplies avec contraintes pour le résumé
-      const constraints = this.getActivitiesAndPracticesConstraints(context);
-      const { availableActivityIds, availableActivityNames, availablePracticeIds, availablePracticeNames } = constraints;
-      
-      quickRepliesSchema = this.getQuickRepliesWithConstraintsSchema(
-        availableActivityIds,
-        availableActivityNames,
-        availablePracticeIds,
-        availablePracticeNames,
-        "1 à 3 suggestions de propposiiton d'activités/pratiques HOW PASS spécifiques pertinentes pour l'utilisateur.",
-        1,
-        3,
-        true // idsOnly = true
-      );
-      schemaName = "HowPassContentResponse";
-    } else {
-      // Utiliser des quickReplies simples pour les conversations normales
-      quickRepliesSchema = this.getSimpleQuickRepliesSchema(
-        "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple.",
-        0,
+      // Si on force un summaryToolCall, utiliser le format idsOnly sans contraintes
+      const activitiesAndPracticesSchema = this.getActivitiesAndPracticesResponseSchema(
+        "Recommandations d'activités et pratiques HOW PASS spécifiques",
         3
       );
-      schemaName = "ConversationResponse";
+
+      return {
+        format: { 
+          type: "json_schema",
+          name: "HowPassContentResponse",
+          schema: {
+            type: "object",
+            properties: {
+              ...activitiesAndPracticesSchema.properties
+            },
+            required: ["activities", "practices"],
+            additionalProperties: false
+          },
+          strict: true
+        }
+      };
     }
 
+    // Pour les conversations normales, utiliser des quickReplies simples
     return {
       format: { 
         type: "json_schema",
-        name: schemaName,
+        name: "ConversationResponse",
         schema: {
           type: "object",
           properties: {
@@ -558,7 +553,11 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
               type: "string",
               description: "Réponse principale de l'assistant Howana, maximum 25 mots."
             },
-            quickReplies: quickRepliesSchema
+            quickReplies: this.getSimpleQuickRepliesSchema(
+              "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple.",
+              0,
+              3
+            )
           },
           required: ["response", "quickReplies"],
           additionalProperties: false
@@ -978,6 +977,67 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
         required: ["type", "text"],
         additionalProperties: false
       },
+      description
+    };
+  }
+
+  /**
+   * Schéma pour les réponses avec activités et pratiques (format idsOnly sans contraintes)
+   * @param description Description personnalisée du champ
+   * @param maxItems Nombre maximum d'éléments par array (défaut: 3)
+   */
+  protected getActivitiesAndPracticesResponseSchema(
+    description: string = "Réponse avec recommandations d'activités et pratiques HOW PASS",
+    maxItems: number = 3
+  ): any {
+    return {
+      type: "object",
+      properties: {
+        activities: {
+          type: "array",
+          minItems: 0,
+          maxItems,
+          items: {
+            type: "object",
+            properties: {
+              id: {
+                type: "string",
+                description: "ID de l'activité recommandée"
+              },
+              name: {
+                type: "string",
+                description: "Nom de l'activité recommandée"
+              }
+            },
+            required: ["id", "name"],
+            additionalProperties: false
+          },
+          description: "Activités HOW PASS recommandées"
+        },
+        practices: {
+          type: "array",
+          minItems: 0,
+          maxItems,
+          items: {
+            type: "object",
+            properties: {
+              id: {
+                type: "string",
+                description: "ID de la pratique recommandée"
+              },
+              name: {
+                type: "string",
+                description: "Nom de la pratique recommandée"
+              }
+            },
+            required: ["id", "name"],
+            additionalProperties: false
+          },
+          description: "Pratiques HOW PASS recommandées"
+        }
+      },
+      required: ["activities", "practices"],
+      additionalProperties: false,
       description
     };
   }
