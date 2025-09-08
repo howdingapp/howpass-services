@@ -1,5 +1,5 @@
 import { BaseChatBotService } from './BaseChatBotService';
-import { OpenAIToolsDescription } from '../types/conversation';
+import { OpenAITool, OpenAIToolsDescription } from '../types/conversation';
 import { HowanaContext, HowanaRecommandationContext } from '../types/repositories';
 import { 
   ChatBotOutputSchema, 
@@ -662,42 +662,54 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     return !hasRecommendations;
   }
 
-  protected getToolsDescription(_context: HowanaContext): OpenAIToolsDescription | null {
+  protected getToolsDescription(_context: HowanaContext, forceSummaryToolCall:boolean): OpenAIToolsDescription | null {
+    
+    const activitiesAndPracticesAndFAQTool:OpenAITool = {
+      type: 'function',
+      name: 'activities_and_practices_and_faq',
+      description: 'Rechercher des activités et pratiques pertinentes pour l\'utilisateur et chercher dans la FAQ des informations',
+      parameters: {
+        type: 'object',
+        properties: {
+          searchTerm: {
+            type: 'string',
+            description: 'Description de l\'état émotionnel et des besoins de l\'utilisateur, formulée de son point de vue avec des expressions comme "Je me sens...", "J\'ai besoin de...", "Je voudrais...". Ce format facilite la recherche vectorielle en alignant la formulation des besoins avec celle des descriptions d\'activités.'
+          },
+          faqSearchTerm: {
+            type: 'string',
+            description: 'Question ou sujet à rechercher dans la FAQ, formulé du point de vue de l\'utilisateur (ex: "Comment gérer le stress?", "Qu\'est-ce que la méditation?", "Améliorer mon sommeil")'
+          }
+        },
+        required: ['searchTerm', 'faqSearchTerm']
+      },
+      strict: false
+    };
+
+    const lastUserActivitiesTool:OpenAITool = {
+      type: 'function',
+      name: 'last_user_activities',
+      description: 'Récupérer les 5 dernières activités de l\'utilisateur pour comprendre son historique et ses préférences',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      strict: false
+    };
+
+    if (forceSummaryToolCall) {
+      return {
+        tools: [activitiesAndPracticesAndFAQTool]
+      };
+    }
+
     return {
       tools: [
-        {
-          type: 'function',
-          name: 'activities_and_practices_and_faq',
-          description: 'Rechercher des activités et pratiques pertinentes pour l\'utilisateur et chercher dans la FAQ des informations',
-          parameters: {
-            type: 'object',
-            properties: {
-              searchTerm: {
-                type: 'string',
-                description: 'Description de l\'état émotionnel et des besoins de l\'utilisateur, formulée de son point de vue avec des expressions comme "Je me sens...", "J\'ai besoin de...", "Je voudrais...". Ce format facilite la recherche vectorielle en alignant la formulation des besoins avec celle des descriptions d\'activités.'
-              },
-              faqSearchTerm: {
-                type: 'string',
-                description: 'Question ou sujet à rechercher dans la FAQ, formulé du point de vue de l\'utilisateur (ex: "Comment gérer le stress?", "Qu\'est-ce que la méditation?", "Améliorer mon sommeil")'
-              }
-            },
-            required: ['searchTerm', 'faqSearchTerm']
-          },
-          strict: false
-        },
-        {
-          type: 'function',
-          name: 'last_user_activities',
-          description: 'Récupérer les 5 dernières activités de l\'utilisateur pour comprendre son historique et ses préférences',
-          parameters: {
-            type: 'object',
-            properties: {},
-            required: []
-          },
-          strict: false
-        }
+        activitiesAndPracticesAndFAQTool,
+        lastUserActivitiesTool,
       ]
     };
+    
   }
 
   protected async callTool(toolName: string, toolArgs: any, context: HowanaContext): Promise<any> {

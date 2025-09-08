@@ -94,7 +94,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer une réponse IA basée sur le contexte de la conversation
    */
-  protected async generateAIResponse(context: HowanaContext, userMessage: string): Promise<T> {
+  protected async generateAIResponse(context: HowanaContext, userMessage: string, forceSummaryToolCall:boolean = false): Promise<T> {
     try {
       console.log('🔍 Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
       console.log('Dernier message de l\'utilisateur:', userMessage);
@@ -110,7 +110,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       console.log('🔍 Utilisation de l\'API responses avec callID:', previousCallId);
       
       const outputSchema = this.getAddMessageOutputSchema(context);
-      const toolsDescription = this.getToolsDescription(context);
+      const toolsDescription = this.getToolsDescription(context, forceSummaryToolCall);
       const toolUseGuidance = this.buildToolUseSystemPrompt(context);
       
       const result = await this.openai.responses.create({
@@ -455,7 +455,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
         try {
           // Appeler generateIAResponse avec la demande explicite
-          recommendationResponse = await this.generateAIResponse(context, explicitRequest);
+          recommendationResponse = await this.generateAIResponse(context, explicitRequest, true);
           extractedData = recommendationResponse?.extractedData;
           console.log('🔧 Réponse IA avec recommandations générée:', recommendationResponse);
           
@@ -641,7 +641,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Description des outils disponibles pour l'IA (null si pas d'outils)
    */
-  protected abstract getToolsDescription(context: HowanaContext): OpenAIToolsDescription | null;
+  protected abstract getToolsDescription(context: HowanaContext, forceSummaryToolCall:boolean): OpenAIToolsDescription | null;
 
   /**
    * Exécuter un outil spécifique
