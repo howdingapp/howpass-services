@@ -589,42 +589,15 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                   type: "string",
                   description: "Réponse principale de l'assistant Howana. Maximum 30 mots."
                 },
-                quickReplies: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      type: {
-                        type: "string",
-                        enum: ["text", "activity", "practice"],
-                        description: "Type de quick reply: 'text' pour une réponse simple, 'activity' ou 'practice' pour référencer un élément spécifique"
-                      },
-                      text: {
-                        type: "string",
-                        description: "Texte de la suggestion (max 5 mots)"
-                      },
-                      textRedirection: {
-                        type: ["string", "null"],
-                        description: "Texte d'action personnalisé incluant le nom de l'activité/pratique (ex: 'Découvrir <nom pratique>', 'Montre-moi <nom activité>') - max 5 mots. Peut être null si non applicable."
-                      },
-                      id: {
-                        type: ["string", "null"],
-                        enum: [...allAvailableIds, null],
-                        description: "ID de l'activité ou pratique référencée (requis si type = 'activity' ou 'practice', null sinon)"
-                      },
-                      name: {
-                        type: ["string", "null"],
-                        enum: [...availableActivityNames, ...availablePracticeNames, null],
-                        description: "Nom de l'activité ou pratique référencée (requis si type = 'activity' ou 'practice', null sinon)"
-                      }
-                    },
-                    required: ["type", "text", "textRedirection", "id", "name"],
-                    additionalProperties: false
-                  },
-                  description: "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou référencer des activités/pratiques spécifiques.",
-                  maxItems: 3,
-                  minItems: 1
-                }
+                quickReplies: this.getQuickRepliesWithConstraintsSchema(
+                  availableActivityIds,
+                  availableActivityNames,
+                  availablePracticeIds,
+                  availablePracticeNames,
+                  "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou référencer des activités/pratiques spécifiques.",
+                  1,
+                  3
+                )
               },
               required: ["response", "quickReplies"],
               additionalProperties: false,
@@ -958,6 +931,66 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
           }
         },
         required: ["id", "name"],
+        additionalProperties: false
+      },
+      description
+    };
+  }
+
+  /**
+   * Schéma réutilisable pour les quickReplies avec contraintes d'activités et pratiques
+   * @param availableActivityIds Liste des IDs d'activités disponibles
+   * @param availableActivityNames Liste des noms d'activités disponibles
+   * @param availablePracticeIds Liste des IDs de pratiques disponibles
+   * @param availablePracticeNames Liste des noms de pratiques disponibles
+   * @param description Description personnalisée du champ
+   * @param minItems Nombre minimum d'éléments (défaut: 1)
+   * @param maxItems Nombre maximum d'éléments (défaut: 3)
+   */
+  protected getQuickRepliesWithConstraintsSchema(
+    availableActivityIds: string[],
+    availableActivityNames: string[],
+    availablePracticeIds: string[],
+    availablePracticeNames: string[],
+    description: string = "Suggestions de réponses courtes pour l'utilisateur",
+    minItems: number = 1,
+    maxItems: number = 3
+  ): any {
+    const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
+    const allAvailableNames = [...availableActivityNames, ...availablePracticeNames];
+
+    return {
+      type: "array",
+      minItems,
+      maxItems,
+      items: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["text", "activity", "practice"],
+            description: "Type de quick reply: 'text' pour une réponse simple, 'activity' ou 'practice' pour référencer un élément spécifique"
+          },
+          text: {
+            type: "string",
+            description: "Texte de la suggestion (max 5 mots)"
+          },
+          textRedirection: {
+            type: ["string", "null"],
+            description: "Texte d'action personnalisé incluant le nom de l'activité/pratique (ex: 'Découvrir <nom pratique>', 'Montre-moi <nom activité>') - max 5 mots. Peut être null si non applicable."
+          },
+          id: {
+            type: ["string", "null"],
+            enum: [...allAvailableIds, null],
+            description: "ID de l'activité ou pratique référencée (requis si type = 'activity' ou 'practice', null sinon)"
+          },
+          name: {
+            type: ["string", "null"],
+            enum: [...allAvailableNames, null],
+            description: "Nom de l'activité ou pratique référencée (requis si type = 'activity' ou 'practice', null sinon)"
+          }
+        },
+        required: ["type", "text", "textRedirection", "id", "name"],
         additionalProperties: false
       },
       description
