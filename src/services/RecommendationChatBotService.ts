@@ -603,6 +603,10 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                         type: "string",
                         description: "Texte de la suggestion (max 5 mots)"
                       },
+                      textRedirection: {
+                        type: "string",
+                        description: "Texte d'action personnalisé incluant le nom de l'activité/pratique (ex: 'Découvrir <nom pratique>', 'Montre-moi <nom activité>') - max 5 mots"
+                      },
                       id: {
                         type: "string",
                         enum: allAvailableIds,
