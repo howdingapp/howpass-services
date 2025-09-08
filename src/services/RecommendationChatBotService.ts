@@ -516,11 +516,41 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     };
   }
 
-  protected override getAddMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
+  protected override getAddMessageOutputSchema(context: HowanaContext, forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
+    // Déterminer le schéma de quickReplies selon le contexte
+    let quickRepliesSchema;
+    let schemaName;
+    
+    if (forceSummaryToolCall) {
+      // Utiliser des quickReplies avec contraintes pour le résumé
+      const constraints = this.getActivitiesAndPracticesConstraints(context);
+      const { availableActivityIds, availableActivityNames, availablePracticeIds, availablePracticeNames } = constraints;
+      
+      quickRepliesSchema = this.getQuickRepliesWithConstraintsSchema(
+        availableActivityIds,
+        availableActivityNames,
+        availablePracticeIds,
+        availablePracticeNames,
+        "1 à 3 suggestions de propposiiton d'activités/pratiques HOW PASS spécifiques pertinentes pour l'utilisateur.",
+        1,
+        3,
+        true // idsOnly = true
+      );
+      schemaName = "HowPassContentResponse";
+    } else {
+      // Utiliser des quickReplies simples pour les conversations normales
+      quickRepliesSchema = this.getSimpleQuickRepliesSchema(
+        "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple.",
+        0,
+        3
+      );
+      schemaName = "ConversationResponse";
+    }
+
     return {
       format: { 
         type: "json_schema",
-        name: "ConversationResponse",
+        name: schemaName,
         schema: {
           type: "object",
           properties: {
@@ -528,28 +558,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
               type: "string",
               description: "Réponse principale de l'assistant Howana, maximum 25 mots."
             },
-            quickReplies: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  type: {
-                    type: "string",
-                    enum: ["text"],
-                    description: "Type de quick reply: 'text' pour une réponse simple"
-                  },
-                  text: {
-                    type: "string",
-                    description: "Texte de la suggestion (max 5 mots)"
-                  },
-                },
-                required: ["type", "text"],
-                additionalProperties: false
-              },
-              description: "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple.",
-              maxItems: 3,
-              minItems: 0
-            }
+            quickReplies: quickRepliesSchema
           },
           required: ["response", "quickReplies"],
           additionalProperties: false
@@ -562,7 +571,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
   /**
    * Détermine le schéma de sortie approprié selon l'outil utilisé
    */
-  protected override getSchemaByUsedTool(toolName: string, context: HowanaContext): ChatBotOutputSchema {
+  protected override getSchemaByUsedTool(toolName: string, context: HowanaContext, forceSummaryToolCall:boolean = false): ChatBotOutputSchema {
     switch (toolName) {
       case 'activities_and_practices_and_faq':
         // Schéma pour les réponses après utilisation de l'outil combiné
@@ -596,7 +605,8 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                   availablePracticeNames,
                   "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou référencer des activités/pratiques spécifiques.",
                   1,
-                  3
+                  3,
+                  forceSummaryToolCall,
                 )
               },
               required: ["response", "quickReplies"],
@@ -609,7 +619,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
 
       default:
         // Schéma par défaut pour les autres outils ou cas non spécifiés
-        return this.getAddMessageOutputSchema(context);
+        return this.getAddMessageOutputSchema(context, false);
     }
   }
 
@@ -938,6 +948,41 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
   }
 
   /**
+   * Schéma réutilisable pour les quickReplies simples (texte seulement)
+   * @param description Description personnalisée du champ
+   * @param minItems Nombre minimum d'éléments (défaut: 0)
+   * @param maxItems Nombre maximum d'éléments (défaut: 3)
+   */
+  protected getSimpleQuickRepliesSchema(
+    description: string = "Suggestions de réponses courtes pour l'utilisateur",
+    minItems: number = 0,
+    maxItems: number = 3
+  ): any {
+    return {
+      type: "array",
+      minItems,
+      maxItems,
+      items: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["text"],
+            description: "Type de quick reply: 'text' pour une réponse simple"
+          },
+          text: {
+            type: "string",
+            description: "Texte de la suggestion (max 5 mots)"
+          }
+        },
+        required: ["type", "text"],
+        additionalProperties: false
+      },
+      description
+    };
+  }
+
+  /**
    * Schéma réutilisable pour les quickReplies avec contraintes d'activités et pratiques
    * @param availableActivityIds Liste des IDs d'activités disponibles
    * @param availableActivityNames Liste des noms d'activités disponibles
@@ -954,8 +999,68 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     availablePracticeNames: string[],
     description: string = "Suggestions de réponses courtes pour l'utilisateur",
     minItems: number = 1,
-    maxItems: number = 3
+    maxItems: number = 3,
+    idsOnly: boolean = false
   ): any {
+    if (idsOnly) {
+      // Mode idsOnly : retourner deux arrays séparés pour activités et pratiques
+      return {
+        type: "object",
+        properties: {
+          activities: {
+            type: "array",
+            minItems: 0,
+            maxItems: maxItems,
+            items: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "string",
+                  enum: availableActivityIds,
+                  description: "ID de l'activité recommandée"
+                },
+                name: {
+                  type: "string",
+                  enum: availableActivityNames,
+                  description: "Nom de l'activité recommandée"
+                }
+              },
+              required: ["id", "name"],
+              additionalProperties: false
+            },
+            description: "Activités HOW PASS recommandées"
+          },
+          practices: {
+            type: "array",
+            minItems: 0,
+            maxItems: maxItems,
+            items: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "string",
+                  enum: availablePracticeIds,
+                  description: "ID de la pratique recommandée"
+                },
+                name: {
+                  type: "string",
+                  enum: availablePracticeNames,
+                  description: "Nom de la pratique recommandée"
+                }
+              },
+              required: ["id", "name"],
+              additionalProperties: false
+            },
+            description: "Pratiques HOW PASS recommandées"
+          }
+        },
+        required: ["activities", "practices"],
+        additionalProperties: false,
+        description: "Recommandations d'activités et pratiques HOW PASS spécifiques"
+      };
+    }
+
+    // Mode normal : quickReplies avec contraintes
     const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
     const allAvailableNames = [...availableActivityNames, ...availablePracticeNames];
 

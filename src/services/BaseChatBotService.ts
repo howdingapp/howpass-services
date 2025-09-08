@@ -92,6 +92,96 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   }
 
   /**
+   * Générer une première réponse IA basée sur le contexte de la conversation
+   */
+  protected async generateFirstResponse(context: HowanaContext): Promise<T> {
+    try {
+      console.log('🔍 Génération de la première réponse IA pour la conversation:', context.id);
+
+      const systemPrompt = await this.buildSystemPrompt(context);
+      const userPrompt = this.buildFirstUserPrompt(context);
+
+      console.log('🔍 System prompt:', systemPrompt);
+      console.log('🔍 Génération de la première réponse IA:', userPrompt);
+
+      // Utiliser l'API responses pour la première réponse avec le même schéma que les messages suivants
+      const outputSchema = this.getWelcomeMessageOutputSchema(context);
+      
+      const result = await this.openai.responses.create({
+        model: this.AI_MODEL,
+        input: [
+          {
+            role: "user",
+            content: [{ type: "input_text", text: userPrompt }],
+          },
+          {
+            type: "message",
+            role: "system",
+            content: [{ 
+              type: "input_text", 
+              text: systemPrompt
+            }],
+            status: "completed",
+          },
+        ],
+        ...(outputSchema && { text: outputSchema })
+      });
+
+      // Récupérer le messageId du premier résultat de type "message"
+      const messageOutput = result.output.find(output => output.type === "message");
+      const messageId = result.id;
+      
+             // Extraire le texte de la réponse
+       let resultText = "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
+       if (messageOutput?.content?.[0]) {
+         const content = messageOutput.content[0];
+         if ('text' in content) {
+           resultText = content.text;
+         }
+       }
+
+       // Si un schéma de sortie est défini, parser le JSON
+       if (outputSchema) {
+         try {
+           const parsedResponse = JSON.parse(resultText);
+           if (!parsedResponse.response) {
+             throw new Error('La réponse JSON ne contient pas le champ "response" requis');
+           }
+           
+           console.log('🔍 Première réponse IA via API responses (JSON):', parsedResponse);
+           console.log('🔍 MessageID OpenAI:', messageId);
+           
+           return {
+             ...parsedResponse,
+             messageId,
+             updatedContext: context,
+           } as T;
+         } catch (parseError) {
+           console.warn('⚠️ Erreur de parsing JSON, fallback vers réponse simple:', parseError);
+         }
+       }
+
+       // Fallback : réponse simple sans JSON
+       console.log('🔍 Première réponse IA via API responses (simple):', resultText);
+       console.log('🔍 MessageID OpenAI:', messageId);
+
+       return { 
+         response: resultText, 
+         messageId,
+         updatedContext: context,
+       } as T;  
+         } catch (error) {
+       console.error('❌ Erreur lors de la génération de la première réponse:', error);
+       return { 
+         response: "Bonjour ! Je suis Howana, votre assistant personnel. Comment puis-je vous aider aujourd'hui ?",
+         messageId: "error",
+         updatedContext: context,
+       } as T;
+    }
+  }
+
+
+  /**
    * Générer une réponse IA basée sur le contexte de la conversation
    */
   protected async generateAIResponse(context: HowanaContext, userMessage: string, forceSummaryToolCall:boolean = false): Promise<T> {
@@ -109,7 +199,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       // Utiliser exclusivement l'API responses pour référencer l'appel précédent
       console.log('🔍 Utilisation de l\'API responses avec callID:', previousCallId);
       
-      const outputSchema = this.getAddMessageOutputSchema(context);
+      const outputSchema = this.getAddMessageOutputSchema(context, forceSummaryToolCall);
       const toolsDescription = this.getToolsDescription(context, forceSummaryToolCall);
       const toolUseGuidance = this.buildToolUseSystemPrompt(context);
       
@@ -257,94 +347,6 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     }
   }
 
-  /**
-   * Générer une première réponse IA basée sur le contexte de la conversation
-   */
-  protected async generateFirstResponse(context: HowanaContext): Promise<T> {
-    try {
-      console.log('🔍 Génération de la première réponse IA pour la conversation:', context.id);
-
-      const systemPrompt = await this.buildSystemPrompt(context);
-      const userPrompt = this.buildFirstUserPrompt(context);
-
-      console.log('🔍 System prompt:', systemPrompt);
-      console.log('🔍 Génération de la première réponse IA:', userPrompt);
-
-      // Utiliser l'API responses pour la première réponse avec le même schéma que les messages suivants
-      const outputSchema = this.getWelcomeMessageOutputSchema(context);
-      
-      const result = await this.openai.responses.create({
-        model: this.AI_MODEL,
-        input: [
-          {
-            role: "user",
-            content: [{ type: "input_text", text: userPrompt }],
-          },
-          {
-            type: "message",
-            role: "system",
-            content: [{ 
-              type: "input_text", 
-              text: systemPrompt
-            }],
-            status: "completed",
-          },
-        ],
-        ...(outputSchema && { text: outputSchema })
-      });
-
-      // Récupérer le messageId du premier résultat de type "message"
-      const messageOutput = result.output.find(output => output.type === "message");
-      const messageId = result.id;
-      
-             // Extraire le texte de la réponse
-       let resultText = "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
-       if (messageOutput?.content?.[0]) {
-         const content = messageOutput.content[0];
-         if ('text' in content) {
-           resultText = content.text;
-         }
-       }
-
-       // Si un schéma de sortie est défini, parser le JSON
-       if (outputSchema) {
-         try {
-           const parsedResponse = JSON.parse(resultText);
-           if (!parsedResponse.response) {
-             throw new Error('La réponse JSON ne contient pas le champ "response" requis');
-           }
-           
-           console.log('🔍 Première réponse IA via API responses (JSON):', parsedResponse);
-           console.log('🔍 MessageID OpenAI:', messageId);
-           
-           return {
-             ...parsedResponse,
-             messageId,
-             updatedContext: context,
-           } as T;
-         } catch (parseError) {
-           console.warn('⚠️ Erreur de parsing JSON, fallback vers réponse simple:', parseError);
-         }
-       }
-
-       // Fallback : réponse simple sans JSON
-       console.log('🔍 Première réponse IA via API responses (simple):', resultText);
-       console.log('🔍 MessageID OpenAI:', messageId);
-
-       return { 
-         response: resultText, 
-         messageId,
-         updatedContext: context,
-       } as T;  
-         } catch (error) {
-       console.error('❌ Erreur lors de la génération de la première réponse:', error);
-       return { 
-         response: "Bonjour ! Je suis Howana, votre assistant personnel. Comment puis-je vous aider aujourd'hui ?",
-         messageId: "error",
-         updatedContext: context,
-       } as T;
-    }
-  }
 
   /**
    * Générer une réponse IA après l'exécution des outils
@@ -457,7 +459,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           // Appeler generateIAResponse avec la demande explicite
           recommendationResponse = await this.generateAIResponse(context, explicitRequest, true);
           extractedData = recommendationResponse?.extractedData;
-          console.log('🔧 Réponse IA avec recommandations générée:', recommendationResponse);
+          console.log('🔧 Réponse IA avec recommandations générée (we will only use tool data):', recommendationResponse);
           
           // Ajouter immédiatement les extractedData au contexte pour que getSummaryOutputSchema puisse y accéder
           if (extractedData) {
@@ -607,7 +609,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Schéma de sortie pour addMessage (par défaut avec un champ response obligatoire)
    */
-  protected getAddMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
+  protected getAddMessageOutputSchema(_context: HowanaContext, _forceSummaryToolCall:boolean = false): ChatBotOutputSchema {
     return {
       format: { 
         type: "json_schema",
@@ -631,7 +633,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Détermine le schéma de sortie approprié selon l'outil utilisé
    */
-  protected getSchemaByUsedTool(_toolName: string, context: HowanaContext): ChatBotOutputSchema {
+  protected getSchemaByUsedTool(_toolName: string, context: HowanaContext, _forceSummaryToolCall:boolean = false): ChatBotOutputSchema {
     // Par défaut, utiliser le schéma de base
     return this.getAddMessageOutputSchema(context);
   }
