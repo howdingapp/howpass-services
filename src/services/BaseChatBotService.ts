@@ -1,6 +1,6 @@
 import { ConversationService } from './ConversationService';
 import { SupabaseService } from './SupabaseService';
-import { StartConversationRequest, AddMessageRequest, OpenAIToolsDescription } from '../types/conversation';
+import { StartConversationRequest, OpenAIToolsDescription } from '../types/conversation';
 import { HowanaContext } from '../types/repositories';
 import { ChatBotOutputSchema, IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
 import OpenAI from 'openai';
@@ -89,53 +89,6 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
         error: 'Erreur interne du service'
       };
     }
-  }
-
-  /**
-   * Ajouter un message et obtenir la réponse de l'IA
-   */
-  async addMessage(
-    context: HowanaContext,
-    request: AddMessageRequest
-  ): Promise<{
-    success: boolean;
-    updatedContext: HowanaContext;
-    aiResponse?: T|null;
-    error?: string;
-  }> {
-    try {
-      
-      let aiResponse:T|null = null;
-
-      try {
-
-        // Générer une réponse IA
-        aiResponse = await this.generateAIResponse(context, request.content);
-        
-        return {
-          success: true,
-          updatedContext: context,
-          aiResponse,
-        };
-
-      } catch (aiError) {
-        console.error('❌ Erreur lors de l\'appel IA:', aiError);
-        return {
-          success: false,
-          updatedContext: context,
-          error: 'Erreur interne du service'
-        };
-      }
-
-    } catch (error) {
-      console.error('❌ Erreur dans BaseChatBotService.addMessage:', error);
-      return {
-        success: false,
-        updatedContext: context,
-        error: 'Erreur interne du service'
-      };
-    }
-
   }
 
   /**
@@ -250,7 +203,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
             console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
 
-            return { ...finalResponse, extractedData } as T;
+            return { ...finalResponse, extractedData, updatedContext: context } as T;
           }
         }
       }
@@ -293,7 +246,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       return {
         ...parsedResponse,
         extractedData,
-        messageId
+        messageId,
+        updatedContext: context,
       } as T;
 
     } catch (error) {
@@ -364,7 +318,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
            
            return {
              ...parsedResponse,
-             messageId
+             messageId,
+             updatedContext: context,
            } as T;
          } catch (parseError) {
            console.warn('⚠️ Erreur de parsing JSON, fallback vers réponse simple:', parseError);
@@ -377,13 +332,15 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
        return { 
          response: resultText, 
-         messageId 
-       } as T;
+         messageId,
+         updatedContext: context,
+       } as T;  
          } catch (error) {
        console.error('❌ Erreur lors de la génération de la première réponse:', error);
        return { 
          response: "Bonjour ! Je suis Howana, votre assistant personnel. Comment puis-je vous aider aujourd'hui ?",
-         messageId: "error"
+         messageId: "error",
+         updatedContext: context,
        } as T;
     }
   }
@@ -465,7 +422,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       console.log('🔍 Réponse finale IA générée avec succès:', parsedResponse);
       return { 
         ...parsedResponse,
-        messageId
+        messageId,
+        updatedContext: context,
       } as T;
 
     } catch (error) {
