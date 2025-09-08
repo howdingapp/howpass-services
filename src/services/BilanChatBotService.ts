@@ -128,50 +128,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
     return basePrompt;
   }
 
-  protected override getAddMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
-
-    return {
-      format: { 
-        type: "json_schema",
-        name: "ConversationResponse",
-        schema: {
-          type: "object",
-          properties: {
-            response: {
-              type: "string",
-              description: "Réponse principale de l'assistant Howana, maximum 25 mots."
-            },
-            quickReplies: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  type: {
-                    type: "string",
-                    enum: ["text"],
-                    description: "Type de quick reply: 'text' pour une réponse simple"
-                  },
-                  text: {
-                    type: "string",
-                    description: "Texte de la suggestion (max 5 mots)"
-                  },
-                },
-                required: ["type", "text"],
-                additionalProperties: false
-              },
-              description: "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple.",
-              maxItems: 3,
-              minItems: 0
-            }
-          },
-          required: ["response", "quickReplies"],
-          additionalProperties: false
-        },
-        strict: true
-      }
-    };
-  }
-
   protected override getSummaryOutputSchema(context: HowanaContext): any {
     const constraints = this.getActivitiesAndPracticesConstraints(context);
     const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;

@@ -469,19 +469,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     };
   }
 
-  protected override getAddMessageOutputSchema(context: HowanaContext): ChatBotOutputSchema {
-
-    const constraints = this.getActivitiesAndPracticesConstraints(context);
-    const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
-
-    console.log(`📋 [RECOMMANDATIONS] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
-      availableActivityIds,
-      availablePracticeIds,
-      availableActivityNames,
-      availablePracticeNames,
-      allAvailableIds
-    });
-
+  protected override getAddMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
     return {
       format: { 
         type: "json_schema",
@@ -491,7 +479,7 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
           properties: {
             response: {
               type: "string",
-              description: "Réponse principale de l'assistant Howana, maximum 20 mots."
+              description: "Réponse principale de l'assistant Howana, maximum 25 mots."
             },
             quickReplies: {
               type: "array",
