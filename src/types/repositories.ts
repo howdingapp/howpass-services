@@ -184,6 +184,13 @@ export type HowanaContext = (HowanaActivityContext | HowanaBilanContext | Howana
 };
 
 // ===== HOWANA RECOMMENDATION TYPES =====
+export interface Top1Recommandation {
+  id: string; // ID de la pratique ou activité recommandée
+  name: string; // Nom de la pratique ou activité
+  type: 'activity' | 'practice'; // Type de recommandation
+  reason: string; // Raison de cette recommandation prioritaire
+}
+
 export interface HowanaRecommandation {
   id: string;
   userId: string;
@@ -207,6 +214,7 @@ export interface HowanaRecommandation {
   practicesReasons?: string;
   importanteKnowledge?: string[];
   relevanceScore?: number;
+  top1Recommandation?: Top1Recommandation; // Recommandation prioritaire
 }
 
 // ===== IA RULES TYPES =====

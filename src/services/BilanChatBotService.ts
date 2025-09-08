@@ -94,6 +94,11 @@ export class BilanChatBotService extends RecommendationChatBotService {
         basePrompt += `\n- Connaissances importantes précédentes: ${context.lastHowanaRecommandation.importanteKnowledge.join(', ')}`;
       }
 
+      if (context.lastHowanaRecommandation.top1Recommandation) {
+        const top1 = context.lastHowanaRecommandation.top1Recommandation;
+        basePrompt += `\n- Recommandation prioritaire précédente: ${top1.name} (${top1.type === 'activity' ? 'activité' : 'pratique'}) - ${top1.reason}`;
+      }
+
       basePrompt += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions. Évite de répéter exactement les mêmes suggestions.`;
     }
     

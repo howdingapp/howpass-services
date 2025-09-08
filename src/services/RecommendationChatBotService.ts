@@ -189,6 +189,11 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
         basePrompt += `\n- Connaissances importantes précédentes: ${context.lastHowanaRecommandation.importanteKnowledge.join(', ')}`;
       }
 
+      if (context.lastHowanaRecommandation.top1Recommandation) {
+        const top1 = context.lastHowanaRecommandation.top1Recommandation;
+        basePrompt += `\n- Recommandation prioritaire précédente: ${top1.name} (${top1.type === 'activity' ? 'activité' : 'pratique'}) - ${top1.reason}`;
+      }
+
       basePrompt += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions et recommandations. Évite de répéter exactement les mêmes suggestions.`;
     }
 
@@ -909,6 +914,9 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
     availablePracticeNames: string[],
     description: string = "Recommandation personnalisée basée sur l'analyse des besoins de l'utilisateur"
   ): any {
+    const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
+    const allAvailableNames = [...availableActivityNames, ...availablePracticeNames];
+    
     return {
       type: "object",
       properties: {
@@ -939,9 +947,36 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
           type: "array",
           items: { type: "string" },
           description: "Messages destinés à l'utilisateur décrivant les actions concrètes à entreprendre pour progresser dans votre bien-être (formulés en vous parlant directement)"
+        },
+        top1Recommandation: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              enum: allAvailableIds,
+              description: "Identifiant unique de la recommandation prioritaire (activité ou pratique)"
+            },
+            name: {
+              type: "string",
+              enum: allAvailableNames,
+              description: "Nom de la recommandation prioritaire"
+            },
+            type: {
+              type: "string",
+              enum: ["activity", "practice"],
+              description: "Type de la recommandation prioritaire"
+            },
+            reason: {
+              type: "string",
+              description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation est prioritaire pour vous (formulé en vous parlant directement)"
+            }
+          },
+          required: ["id", "name", "type", "reason"],
+          additionalProperties: false,
+          description: "Recommandation prioritaire unique, sélectionnée parmi les activités et pratiques disponibles"
         }
       },
-      required: ["recommendedCategories", "recommendedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "reasoning", "benefits", "nextSteps"],
+      required: ["recommendedCategories", "recommendedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "reasoning", "benefits", "nextSteps", "top1Recommandation"],
       additionalProperties: false,
       description
     };
