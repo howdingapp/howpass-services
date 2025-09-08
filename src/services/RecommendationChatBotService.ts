@@ -603,22 +603,22 @@ IMPORTANT - STRATÉGIE DE CONVERSATION:
                         type: "string",
                         description: "Texte de la suggestion (max 5 mots)"
                       },
-                      textRedirection: {
-                        type: "string",
-                        description: "Texte d'action personnalisé incluant le nom de l'activité/pratique (ex: 'Découvrir <nom pratique>', 'Montre-moi <nom activité>') - max 5 mots"
-                      },
+                        textRedirection: {
+                          type: ["string", "null"],
+                          description: "Texte d'action personnalisé incluant le nom de l'activité/pratique (ex: 'Découvrir <nom pratique>', 'Montre-moi <nom activité>') - max 5 mots. Peut être null si non applicable."
+                        },
                       id: {
-                        type: "string",
-                        enum: allAvailableIds,
-                        description: "ID de l'activité ou pratique référencée (requis si type = 'activity' ou 'practice')"
+                        type: ["string", "null"],
+                        enum: [...allAvailableIds, null],
+                        description: "ID de l'activité ou pratique référencée (requis si type = 'activity' ou 'practice', null sinon)"
                       },
                       name: {
-                        type: "string",
-                        enum: [...availableActivityNames, ...availablePracticeNames],
-                        description: "Nom de l'activité ou pratique référencée (requis si type = 'activity' ou 'practice')"
+                        type: ["string", "null"],
+                        enum: [...availableActivityNames, ...availablePracticeNames, null],
+                        description: "Nom de l'activité ou pratique référencée (requis si type = 'activity' ou 'practice', null sinon)"
                       }
                     },
-                    required: ["type", "text"],
+                    required: ["type", "text", "textRedirection", "id", "name"],
                     additionalProperties: false
                   },
                   description: "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple ou référencer des activités/pratiques spécifiques.",
