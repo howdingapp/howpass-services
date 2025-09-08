@@ -57,7 +57,7 @@ export class IAController {
       const taskData = req.body as IATaskRequest;
       
       // Validation supplémentaire des données
-      if (!taskData.type || !taskData.conversationId || !taskData.userId) {
+      if (!taskData.type || !taskData.conversationId) {
         console.error('❌ Données de tâche incomplètes:', taskData);
         res.status(400).json({
           error: 'Données de tâche incomplètes',
