@@ -10,6 +10,206 @@ import {
 
 export class RecommendationChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
   
+  /**
+   * Règles par défaut pour les recommandations
+   */
+  protected getDefaultRecommendationRules(): string {
+    return `1. [RECOMMANDATION] Expert en recommandations personnalisées: Tu es spécialisée dans l'analyse des besoins 
+    et la recommandation d'activités et de pratiques adaptées au profil de l'utilisateur.
+    
+    OBJECTIFS SPÉCIFIQUES:
+    - Analyser l'état émotionnel et les besoins de l'utilisateur
+    - Recommander les activités et pratiques les plus pertinentes
+    - Fournir une analyse détaillée de l'état de l'utilisateur
+    - Donner des suggestions personnalisées et adaptées
+    
+    STRATÉGIE DE RECOMMANDATION:
+    - Pose des questions ciblées pour comprendre les besoins
+    - Analyse les préférences et contraintes de l'utilisateur
+    - Propose des activités avec un score de pertinence
+    - Explique le raisonnement derrière chaque recommandation
+    - Adapte tes suggestions selon le profil et l'expérience`;
+  }
+
+  /**
+   * Stratégie de conversation pour les recommandations
+   */
+  protected getConversationStrategy(): string {
+    return `IMPORTANT - STRATÉGIE DE CONVERSATION:
+- Ne propose JAMAIS d'activités ou pratiques directement sans avoir d'abord creusé les besoins de l'utilisateur
+- Pose des questions ciblées pour comprendre son état émotionnel, ses contraintes, ses préférences
+- Écoute attentivement ses réponses avant de suggérer quoi que ce soit
+- L'objectif est de créer une vraie conversation, pas de donner des réponses toutes faites
+- Propose des activités/pratiques seulement après avoir bien compris ses besoins spécifiques`;
+  }
+
+  /**
+   * Informations contextuelles du bilan
+   */
+  protected getBilanContextInfo(context: HowanaRecommandationContext & HowanaContext): string {
+    if (!context.lastBilan) return '';
+
+    let bilanInfo = `\n\nCONTEXTE DU DERNIER BILAN COMPLET:`;
+    
+    // Fonction helper pour formater les scores
+    const formatScore = (score: number, label: string) => {
+      if (score === -1) {
+        return `- ${label}: Non renseigné`;
+      }
+      return `- ${label}: ${score}/9`;
+    };
+
+    bilanInfo += `\n${formatScore(context.lastBilan.scores.principaux.niveauEnergie, 'Niveau d\'énergie')}
+    ${formatScore(context.lastBilan.scores.principaux.qualiteSommeil, 'Qualité du sommeil')}
+    ${formatScore(context.lastBilan.scores.principaux.confortPhysique, 'Confort physique')}
+    ${formatScore(context.lastBilan.scores.principaux.equilibreEmotionnel, 'Équilibre émotionnel')}
+    ${formatScore(context.lastBilan.scores.secondaires.scorePeau, 'Score peau')}
+    ${formatScore(context.lastBilan.scores.secondaires.scoreConcentration, 'Score concentration')}
+    ${formatScore(context.lastBilan.scores.secondaires.scoreMemoire, 'Score mémoire')}
+    ${formatScore(context.lastBilan.scores.secondaires.scoreCheveux, 'Score cheveux')}
+    ${formatScore(context.lastBilan.scores.secondaires.scoreOngles, 'Score ongles')}
+    ${formatScore(context.lastBilan.scores.secondaires.scoreDigestion, 'Score digestion')}`;
+
+    if (context.lastBilan.douleurs) {
+      bilanInfo += `\n- Douleurs mentionnées: ${context.lastBilan.douleurs}`;
+    }
+
+    if (context.lastBilan.notesPersonnelles) {
+      bilanInfo += `\n- Notes personnelles: ${context.lastBilan.notesPersonnelles}`;
+    }
+
+    if (context.lastHowanaRecommandation && context.lastHowanaRecommandation.userProfile) {
+      const profile = context.lastHowanaRecommandation.userProfile;
+      if (profile.supposedEmotionalState) {
+        bilanInfo += `\n- État émotionnel précédent: ${profile.supposedEmotionalState}`;
+      }
+      if (profile.supposedCurrentNeeds && profile.supposedCurrentNeeds.length > 0) {
+        bilanInfo += `\n- Besoins précédents: ${profile.supposedCurrentNeeds.join(', ')}`;
+      }
+      if (profile.supposedPreferences && profile.supposedPreferences.length > 0) {
+        bilanInfo += `\n- Préférences précédentes: ${profile.supposedPreferences.join(', ')}`;
+      }
+    }
+
+    return bilanInfo;
+  }
+
+  /**
+   * Analyse des scores du bilan
+   */
+  protected getBilanAnalysis(context: HowanaRecommandationContext & HowanaContext): string {
+    if (!context.lastBilan) return '';
+
+    const analysis = this.analyzeBilanScores(context.lastBilan);
+    let analysisInfo = '';
+
+    if (analysis.availableScores.length > 0) {
+      analysisInfo += `\n\nScores disponibles: ${analysis.availableScores.join(', ')}. Utilise ces informations pour contextualiser tes recommandations.`;
+    }
+    
+    if (analysis.missingScores.length > 0) {
+      analysisInfo += `\n\nInformations manquantes: ${analysis.missingScores.join(', ')}. Pose des questions pour compléter ces informations et mieux comprendre l'utilisateur.`;
+    }
+
+    if (analysis.priorityAreas.length > 0) {
+      analysisInfo += `\n\nZones prioritaires d'amélioration: ${analysis.priorityAreas.join(', ')}. Concentre-toi sur ces aspects dans tes recommandations.`;
+    }
+
+    analysisInfo += `\n\nUtilise ces informations pour contextualiser tes recommandations et adapter tes suggestions selon l'historique de l'utilisateur.`;
+
+    return analysisInfo;
+  }
+
+  /**
+   * Informations contextuelles des conversations précédentes
+   */
+  protected getPreviousConversationContext(context: HowanaRecommandationContext & HowanaContext): string {
+    if (!context.lastHowanaRecommandation) return '';
+
+    let previousContext = `\n\nCONTEXTE DE LA DERNIÈRE RECOMMANDATION HOWANA:`;
+    
+    if (context.lastHowanaRecommandation.userProfile) {
+      const profile = context.lastHowanaRecommandation.userProfile;
+      if (profile.supposedEmotionalState) {
+        previousContext += `\n- État émotionnel précédent: ${profile.supposedEmotionalState}`;
+      }
+      if (profile.supposedCurrentNeeds && profile.supposedCurrentNeeds.length > 0) {
+        previousContext += `\n- Besoins précédents: ${profile.supposedCurrentNeeds.join(', ')}`;
+      }
+      if (profile.supposedPreferences && profile.supposedPreferences.length > 0) {
+        previousContext += `\n- Préférences précédentes: ${profile.supposedPreferences.join(', ')}`;
+      }
+      if (profile.supposedConstraints && profile.supposedConstraints.length > 0) {
+        previousContext += `\n- Contraintes précédentes: ${profile.supposedConstraints.join(', ')}`;
+      }
+    }
+
+    if (context.lastHowanaRecommandation.recommendedCategories && context.lastHowanaRecommandation.recommendedCategories.length > 0) {
+      const categories = context.lastHowanaRecommandation.recommendedCategories.map(cat => cat.name).join(', ');
+      previousContext += `\n- Pratiques recommandées précédemment: ${categories}`;
+    }
+
+    if (context.lastHowanaRecommandation.recommendedActivities && context.lastHowanaRecommandation.recommendedActivities.length > 0) {
+      const activities = context.lastHowanaRecommandation.recommendedActivities.map(act => act.name).join(', ');
+      previousContext += `\n- Activités recommandées précédemment: ${activities}`;
+    }
+
+    if (context.lastHowanaRecommandation.activitiesReasons) {
+      previousContext += `\n- Raisons des activités précédentes: ${context.lastHowanaRecommandation.activitiesReasons}`;
+    }
+
+    if (context.lastHowanaRecommandation.practicesReasons) {
+      previousContext += `\n- Raisons des pratiques précédentes: ${context.lastHowanaRecommandation.practicesReasons}`;
+    }
+
+    if (context.lastHowanaRecommandation.importanteKnowledge && context.lastHowanaRecommandation.importanteKnowledge.length > 0) {
+      previousContext += `\n- Connaissances importantes précédentes: ${context.lastHowanaRecommandation.importanteKnowledge.join(', ')}`;
+    }
+
+    if (context.lastHowanaRecommandation.top1Recommandation) {
+      const top1 = context.lastHowanaRecommandation.top1Recommandation;
+      previousContext += `\n- Recommandation prioritaire précédente: ${top1.name} (${top1.type === 'activity' ? 'activité' : 'pratique'}) - ${top1.reason}`;
+    }
+
+    previousContext += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions et recommandations. Évite de répéter exactement les mêmes suggestions.`;
+
+    return previousContext;
+  }
+
+  /**
+   * Règles de comportement confident
+   */
+  protected getConfidentBehaviorRules(context: HowanaRecommandationContext & HowanaContext): string {
+    if (!context.lastHowanaRecommandation && !context.lastBilan) return '';
+
+    return `\n0. [CONFIANT] Comportement de confident: Tu es comme un confident qui retrouve quelqu'un qu'il connaît bien. 
+    Tu DOIS TOUJOURS faire référence aux conversations précédentes, demander des nouvelles, et montrer que tu te souviens 
+    de vos échanges. Cette règle est PRIORITAIRE sur toutes les autres.`;
+  }
+
+  /**
+   * Règles contextuelles spécifiques aux recommandations
+   */
+  protected getRecommendationSpecificRules(): string {
+    return `
+    - Aide l'utilisateur à identifier ses besoins et ses objectifs
+    - Analyse son état émotionnel et ses préférences
+    - Propose des activités et pratiques avec un score de pertinence
+    - Explique le raisonnement derrière chaque recommandation
+    - Adapte tes suggestions selon son profil et son expérience
+    - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
+    - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement
+    - STRATÉGIE: Commence par des questions ouvertes sur son état actuel, ses défis, ses envies
+    - Ne propose des activités/pratiques qu'après avoir bien cerné ses besoins spécifiques`;
+  }
+
+  /**
+   * Politique d'utilisation des outils
+   */
+  protected getToolsUsagePolicy(): string {
+    return `\n\nUtilisation des outils:\n- Utilise l'outil 'faq' UNIQUEMENT pour des questions informationnelles relevant des thèmes suivants: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, débutants (pratiques/activités), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques).\n- Pour toute autre question (y compris compte/connexion, abonnement/prix, sécurité/données, support/bugs), ne pas utiliser 'faq'.\n- Si la question concerne des recommandations personnalisées d'activités/pratiques, utilise 'activities_and_practices'.`;
+  }
+
   private analyzeBilanScores(lastBilan: any): {
     availableScores: string[];
     missingScores: string[];
@@ -78,213 +278,36 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
     Tu es bienveillant et professionnel. Réponses courtes (maximum 30 mots).
 
-IMPORTANT - STRATÉGIE DE CONVERSATION:
-- Ne propose JAMAIS d'activités ou pratiques directement sans avoir d'abord creusé les besoins de l'utilisateur
-- Pose des questions ciblées pour comprendre son état émotionnel, ses contraintes, ses préférences
-- Écoute attentivement ses réponses avant de suggérer quoi que ce soit
-- L'objectif est de créer une vraie conversation, pas de donner des réponses toutes faites
-- Propose des activités/pratiques seulement après avoir bien compris ses besoins spécifiques`;
+${this.getConversationStrategy()}`;
 
     // Ajouter le contexte du dernier bilan si disponible
-    if (context.lastBilan) {
-      basePrompt += `\n\nCONTEXTE DU DERNIER BILAN COMPLET:`;
-      
-      // Fonction helper pour formater les scores
-      const formatScore = (score: number, label: string) => {
-        if (score === -1) {
-          return `- ${label}: Non renseigné`;
-        }
-        return `- ${label}: ${score}/9`;
-      };
-
-      basePrompt += `\n${formatScore(context.lastBilan.scores.principaux.niveauEnergie, 'Niveau d\'énergie')}
-      ${formatScore(context.lastBilan.scores.principaux.qualiteSommeil, 'Qualité du sommeil')}
-      ${formatScore(context.lastBilan.scores.principaux.confortPhysique, 'Confort physique')}
-      ${formatScore(context.lastBilan.scores.principaux.equilibreEmotionnel, 'Équilibre émotionnel')}
-      ${formatScore(context.lastBilan.scores.secondaires.scorePeau, 'Score peau')}
-      ${formatScore(context.lastBilan.scores.secondaires.scoreConcentration, 'Score concentration')}
-      ${formatScore(context.lastBilan.scores.secondaires.scoreMemoire, 'Score mémoire')}
-      ${formatScore(context.lastBilan.scores.secondaires.scoreCheveux, 'Score cheveux')}
-      ${formatScore(context.lastBilan.scores.secondaires.scoreOngles, 'Score ongles')}
-      ${formatScore(context.lastBilan.scores.secondaires.scoreDigestion, 'Score digestion')}`;
-
-      if (context.lastBilan.douleurs) {
-        basePrompt += `\n- Douleurs mentionnées: ${context.lastBilan.douleurs}`;
-      }
-
-      if (context.lastBilan.notesPersonnelles) {
-        basePrompt += `\n- Notes personnelles: ${context.lastBilan.notesPersonnelles}`;
-      }
-
-      if (context.lastHowanaRecommandation && context.lastHowanaRecommandation.userProfile) {
-        const profile = context.lastHowanaRecommandation.userProfile;
-        if (profile.supposedEmotionalState) {
-          basePrompt += `\n- État émotionnel précédent: ${profile.supposedEmotionalState}`;
-        }
-        if (profile.supposedCurrentNeeds && profile.supposedCurrentNeeds.length > 0) {
-          basePrompt += `\n- Besoins précédents: ${profile.supposedCurrentNeeds.join(', ')}`;
-        }
-        if (profile.supposedPreferences && profile.supposedPreferences.length > 0) {
-          basePrompt += `\n- Préférences précédentes: ${profile.supposedPreferences.join(', ')}`;
-        }
-      }
-
-      // Analyser les scores disponibles et manquants pour guider les recommandations
-      const analysis = this.analyzeBilanScores(context.lastBilan);
-      
-      if (analysis.availableScores.length > 0) {
-        basePrompt += `\n\nScores disponibles: ${analysis.availableScores.join(', ')}. Utilise ces informations pour contextualiser tes recommandations.`;
-      }
-      
-      if (analysis.missingScores.length > 0) {
-        basePrompt += `\n\nInformations manquantes: ${analysis.missingScores.join(', ')}. Pose des questions pour compléter ces informations et mieux comprendre l'utilisateur.`;
-      }
-
-      if (analysis.priorityAreas.length > 0) {
-        basePrompt += `\n\nZones prioritaires d'amélioration: ${analysis.priorityAreas.join(', ')}. Concentre-toi sur ces aspects dans tes recommandations.`;
-      }
-
-      basePrompt += `\n\nUtilise ces informations pour contextualiser tes recommandations et adapter tes suggestions selon l'historique de l'utilisateur.`;
-    }
+    basePrompt += this.getBilanContextInfo(context);
+    basePrompt += this.getBilanAnalysis(context);
 
     // Ajouter le contexte de la dernière recommandation Howana si disponible
-    if (context.lastHowanaRecommandation) {
-      basePrompt += `\n\nCONTEXTE DE LA DERNIÈRE RECOMMANDATION HOWANA:`;
-      
-      if (context.lastHowanaRecommandation.userProfile) {
-        const profile = context.lastHowanaRecommandation.userProfile;
-        if (profile.supposedEmotionalState) {
-          basePrompt += `\n- État émotionnel précédent: ${profile.supposedEmotionalState}`;
-        }
-        if (profile.supposedCurrentNeeds && profile.supposedCurrentNeeds.length > 0) {
-          basePrompt += `\n- Besoins précédents: ${profile.supposedCurrentNeeds.join(', ')}`;
-        }
-        if (profile.supposedPreferences && profile.supposedPreferences.length > 0) {
-          basePrompt += `\n- Préférences précédentes: ${profile.supposedPreferences.join(', ')}`;
-        }
-        if (profile.supposedConstraints && profile.supposedConstraints.length > 0) {
-          basePrompt += `\n- Contraintes précédentes: ${profile.supposedConstraints.join(', ')}`;
-        }
-      }
-
-      if (context.lastHowanaRecommandation.recommendedCategories && context.lastHowanaRecommandation.recommendedCategories.length > 0) {
-        const categories = context.lastHowanaRecommandation.recommendedCategories.map(cat => cat.name).join(', ');
-        basePrompt += `\n- Pratiques recommandées précédemment: ${categories}`;
-      }
-
-      if (context.lastHowanaRecommandation.recommendedActivities && context.lastHowanaRecommandation.recommendedActivities.length > 0) {
-        const activities = context.lastHowanaRecommandation.recommendedActivities.map(act => act.name).join(', ');
-        basePrompt += `\n- Activités recommandées précédemment: ${activities}`;
-      }
-
-      if (context.lastHowanaRecommandation.activitiesReasons) {
-        basePrompt += `\n- Raisons des activités précédentes: ${context.lastHowanaRecommandation.activitiesReasons}`;
-      }
-
-      if (context.lastHowanaRecommandation.practicesReasons) {
-        basePrompt += `\n- Raisons des pratiques précédentes: ${context.lastHowanaRecommandation.practicesReasons}`;
-      }
-
-      if (context.lastHowanaRecommandation.importanteKnowledge && context.lastHowanaRecommandation.importanteKnowledge.length > 0) {
-        basePrompt += `\n- Connaissances importantes précédentes: ${context.lastHowanaRecommandation.importanteKnowledge.join(', ')}`;
-      }
-
-      if (context.lastHowanaRecommandation.top1Recommandation) {
-        const top1 = context.lastHowanaRecommandation.top1Recommandation;
-        basePrompt += `\n- Recommandation prioritaire précédente: ${top1.name} (${top1.type === 'activity' ? 'activité' : 'pratique'}) - ${top1.reason}`;
-      }
-
-      basePrompt += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions et recommandations. Évite de répéter exactement les mêmes suggestions.`;
-    }
+    basePrompt += this.getPreviousConversationContext(context);
 
     // Règles de comportement et d'information spécifiques à respecter
     basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
     // RÈGLE OBLIGATOIRE : Toujours faire référence aux conversations précédentes si disponibles
-    if (context.lastHowanaRecommandation || context.lastBilan) {
-      basePrompt += `\n0. [CONFIANT] Comportement de confident: Tu es comme un confident qui retrouve quelqu'un qu'il connaît bien. 
-      Tu DOIS TOUJOURS faire référence aux conversations précédentes, demander des nouvelles, et montrer que tu te souviens 
-      de vos échanges. Cette règle est PRIORITAIRE sur toutes les autres.`;
-    }
+    basePrompt += this.getConfidentBehaviorRules(context);
 
-    try {
-      const iaRulesResult = await this.supabaseService.getIARules(context.type);
-      if (iaRulesResult.success && iaRulesResult.data && iaRulesResult.data.length > 0) {
-        // Filtrer seulement les règles actives
-        const activeRules = iaRulesResult.data.filter((rule) => rule.isActive);
-        
-        if (activeRules.length > 0) {
-          // Trier les règles par priorité (priorité 1 = plus forte)
-          const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
-          
-          sortedRules.forEach((rule, index) => {
-            basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
-          });
-        }
-      } else {
-        // COMPORTEMENT PAR DÉFAUT : Howana expert en recommandations personnalisées
-        basePrompt += `\n1. [RECOMMANDATION] Expert en recommandations personnalisées: Tu es spécialisée dans l'analyse des besoins 
-        et la recommandation d'activités et de pratiques adaptées au profil de l'utilisateur.
-        
-        OBJECTIFS SPÉCIFIQUES:
-        - Analyser l'état émotionnel et les besoins de l'utilisateur
-        - Recommander les activités et pratiques les plus pertinentes
-        - Fournir une analyse détaillée de l'état de l'utilisateur
-        - Donner des suggestions personnalisées et adaptées
-        
-        STRATÉGIE DE RECOMMANDATION:
-        - Pose des questions ciblées pour comprendre les besoins
-        - Analyse les préférences et contraintes de l'utilisateur
-        - Propose des activités avec un score de pertinence
-        - Explique le raisonnement derrière chaque recommandation
-        - Adapte tes suggestions selon le profil et l'expérience`;
-      }
-    } catch (error) {
-      console.error('❌ Erreur lors de la récupération des règles IA:', error);
-      // COMPORTEMENT PAR DÉFAUT en cas d'erreur
-      basePrompt += `\n1. [RECOMMANDATION] Expert en recommandations personnalisées: Tu es spécialisée dans l'analyse des besoins 
-      et la recommandation d'activités et de pratiques adaptées au profil de l'utilisateur.
-      
-      OBJECTIFS SPÉCIFIQUES:
-      - Analyser l'état émotionnel et les besoins de l'utilisateur
-      - Recommander les activités et pratiques les plus pertinentes
-      - Fournir une analyse détaillée de l'état de l'utilisateur
-      - Donner des suggestions personnalisées et adaptées
-      
-      STRATÉGIE DE RECOMMANDATION:
-      - Pose des questions ciblées pour comprendre les besoins
-      - Analyse les préférences et contraintes de l'utilisateur
-      - Propose des activités avec un score de pertinence
-      - Explique le raisonnement derrière chaque recommandation
-      - Adapte tes suggestions selon le profil et l'expérience`;
-    }
+    basePrompt += await this.getIaRules(context.type, this.getDefaultRecommendationRules());
 
     // Ajouter le contexte spécifique aux recommandations
     basePrompt += `\n\nL'utilisateur cherche des recommandations personnalisées d'activités et de pratiques. 
     Aide-le à identifier ses besoins et propose des solutions adaptées.`;
 
     // Règles générales (toujours présentes)
-    basePrompt += `\n\nRègles importantes:
-    - Réponds toujours en français
-    - Sois concis mais utile
-    - Reste professionnel et bienveillant
-    - Si tu ne sais pas quelque chose, dis-le honnêtement
+    basePrompt += `\n\n${this.getCommonRules()}
     - CRUCIAL: Ne propose des activités/pratiques qu'après avoir posé au moins 3 questions pour comprendre les vrais besoins`;
     
     // Règles contextuelles spécifiques
-    basePrompt += `
-    - Aide l'utilisateur à identifier ses besoins et ses objectifs
-    - Analyse son état émotionnel et ses préférences
-    - Propose des activités et pratiques avec un score de pertinence
-    - Explique le raisonnement derrière chaque recommandation
-    - Adapte tes suggestions selon son profil et son expérience
-    - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
-    - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement
-    - STRATÉGIE: Commence par des questions ouvertes sur son état actuel, ses défis, ses envies
-    - Ne propose des activités/pratiques qu'après avoir bien cerné ses besoins spécifiques`;
+    basePrompt += this.getRecommendationSpecificRules();
 
     // Politique d'utilisation des outils (FAQ limitée à un périmètre précis)
-    basePrompt += `\n\nUtilisation des outils:\n- Utilise l'outil 'faq' UNIQUEMENT pour des questions informationnelles relevant des thèmes suivants: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, débutants (pratiques/activités), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques).\n- Pour toute autre question (y compris compte/connexion, abonnement/prix, sécurité/données, support/bugs), ne pas utiliser 'faq'.\n- Si la question concerne des recommandations personnalisées d'activités/pratiques, utilise 'activities_and_practices'.`;
+    basePrompt += this.getToolsUsagePolicy();
 
     return basePrompt;
   }

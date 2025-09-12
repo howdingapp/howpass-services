@@ -4,188 +4,192 @@ import { IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-ou
 
 export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse> {
   
-  protected async buildSystemPrompt(_context: HowanaContext): Promise<string> {
-    const context:HowanaActivityContext & HowanaContext = _context as HowanaActivityContext & HowanaContext;
-    let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
-    Tu es bienveillant et professionnel.`;
+  /**
+   * Règles par défaut pour les activités
+   */
+  protected getDefaultActivityRules(): string {
+    return `1. [EXPERTISE] Expertise des pratiques: Tu es experte des pratiques de bien-être et de santé. 
+    Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.
+    
+    OBJECTIFS SPÉCIFIQUES POUR LE RÉSUMÉ STRUCTURÉ:
+    Tu dois collecter des informations précises pour générer automatiquement un résumé structuré avec ces 6 éléments:
+    
+    A) TITRE (max 100 caractères): Un titre optimisé et descriptif de l'activité
+    B) DESCRIPTION COURTE (max 200 caractères): Description accrocheuse mettant en avant l'unicité
+    C) DESCRIPTION DÉTAILLÉE (max 500 caractères): Déroulement, approche et expérience des participants
+    D) MOTS-CLÉS: Liste des termes les plus pertinents pour cette activité
+    E) BÉNÉFICES: Liste des bénéfices concrets et mesurables pour les participants
+    F) PROFIL IDÉAL: Description du profil psychologique et situation idéale de l'utilisateur cible
+    
+    STRATÉGIE DE COLLECTE:
+    -Tu n'as le droit de poser qu'une seule question ou demade d'information dans chacune de tes réponses pour ne pas surcharger l'utilisateur.
+    - Pose des questions ciblées pour chaque élément
+    - Demande des exemples concrets et spécifiques
+    - Vérifie la cohérence avec la pratique associée
+    - Collecte des détails qui permettront de remplir automatiquement les formulaires`;
+  }
 
-    // Récupérer les règles IA spécifiques au type de conversation
-    basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
+  /**
+   * Règles par défaut pour les sessions d'amélioration
+   */
+  protected getDefaultEditingRules(): string {
+    return `1. [EXPERTISE] Expertise des pratiques: Tu es experte des pratiques de bien-être et de santé. 
+    Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.
+    
+    OBJECTIFS SPÉCIFIQUES POUR LE RÉSUMÉ STRUCTURÉ:
+    Tu dois collecter des informations précises pour générer automatiquement un résumé structuré avec ces 6 éléments:
+    
+    A) TITRE (max 100 caractères): Un titre optimisé et descriptif de l'activité
+    B) DESCRIPTION COURTE (max 200 caractères): Description accrocheuse mettant en avant l'unicité
+    C) DESCRIPTION DÉTAILLÉE (max 500 caractères): Déroulement, approche et expérience des participants
+    D) MOTS-CLÉS: Liste des termes les plus pertinents pour cette activité
+    E) BÉNÉFICES: Liste des bénéfices concrets et mesurables pour les participants
+    F) PROFIL IDÉAL: Description du profil psychologique et situation idéale de l'utilisateur cible
+    
+    STRATÉGIE DE COLLECTE:
+    -Tu n'as le droit de poser qu'une seule question ou demade d'information dans chacune de tes réponses pour ne pas surcharger l'utilisateur.
+    - Pose des questions ciblées pour chaque élément
+    - Demande des exemples concrets et spécifiques
+    - Vérifie la cohérence avec la pratique associée
+    - Collecte des détails qui permettront de remplir automatiquement les formulaires`;
+  }
 
-    try {
-      const iaRulesResult = await this.supabaseService.getIARules(context.type);
-      if (iaRulesResult.success && iaRulesResult.data && iaRulesResult.data.length > 0) {
-        // Filtrer seulement les règles actives
-        const activeRules = iaRulesResult.data.filter((rule) => rule.isActive);
-        
-        if (activeRules.length > 0) {
-          // Trier les règles par priorité (priorité 1 = plus forte)
-          const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
-          
-          sortedRules.forEach((rule, index) => {
-            basePrompt += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
-          });
-        }
-      } else {
-        // COMPORTEMENT PAR DÉFAUT : Howana experte des pratiques
-        basePrompt += `\n1. [EXPERTISE] Expertise des pratiques: Tu es experte des pratiques de bien-être et de santé. 
-        Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.
-        
-        OBJECTIFS SPÉCIFIQUES POUR LE RÉSUMÉ STRUCTURÉ:
-        Tu dois collecter des informations précises pour générer automatiquement un résumé structuré avec ces 6 éléments:
-        
-        A) TITRE (max 100 caractères): Un titre optimisé et descriptif de l'activité
-        B) DESCRIPTION COURTE (max 200 caractères): Description accrocheuse mettant en avant l'unicité
-        C) DESCRIPTION DÉTAILLÉE (max 500 caractères): Déroulement, approche et expérience des participants
-        D) MOTS-CLÉS: Liste des termes les plus pertinents pour cette activité
-        E) BÉNÉFICES: Liste des bénéfices concrets et mesurables pour les participants
-        F) PROFIL IDÉAL: Description du profil psychologique et situation idéale de l'utilisateur cible
-        
-        STRATÉGIE DE COLLECTE:
-        -Tu n'as le droit de poser qu'une seule question ou demade d'information dans chacune de tes réponses pour ne pas surcharger l'utilisateur.
-        - Pose des questions ciblées pour chaque élément
-        - Demande des exemples concrets et spécifiques
-        - Vérifie la cohérence avec la pratique associée
-        - Collecte des détails qui permettront de remplir automatiquement les formulaires`;
-      }
-    } catch (error) {
-      console.error('❌ Erreur lors de la récupération des règles IA:', error);
-      // COMPORTEMENT PAR DÉFAUT en cas d'erreur
-      basePrompt += `\n1. [EXPERTISE] Expertise des pratiques: Tu es experte des pratiques de bien-être et de santé. 
-      Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.
-      
-      OBJECTIFS SPÉCIFIQUES POUR LE RÉSUMÉ STRUCTURÉ:
-      Tu dois collecter des informations précises pour générer automatiquement un résumé structuré avec ces 6 éléments:
-      
-      A) TITRE (max 100 caractères): Un titre optimisé et descriptif de l'activité
-      B) DESCRIPTION COURTE (max 200 caractères): Description accrocheuse mettant en avant l'unicité
-      C) DESCRIPTION DÉTAILLÉE (max 500 caractères): Déroulement, approche et expérience des participants
-      D) MOTS-CLÉS: Liste des termes les plus pertinents pour cette activité
-      E) BÉNÉFICES: Liste des bénéfices concrets et mesurables pour les participants
-      F) PROFIL IDÉAL: Description du profil psychologique et situation idéale de l'utilisateur cible
-      
-      STRATÉGIE DE COLLECTE:
-      -Tu n'as le droit de poser qu'une seule question ou demade d'information dans chacune de tes réponses pour ne pas surcharger l'utilisateur.
-      - Pose des questions ciblées pour chaque élément
-      - Demande des exemples concrets et spécifiques
-      - Vérifie la cohérence avec la pratique associée
-      - Collecte des détails qui permettront de remplir automatiquement les formulaires`;
+  /**
+   * Informations contextuelles de l'activité
+   */
+  protected getActivityContextInfo(context: HowanaActivityContext & HowanaContext): string {
+    if (!context.activityData) return '';
+
+    let activityInfo = `\n\nINFORMATIONS DE L'ACTIVITÉ (déclarées par le praticien):
+    - Titre: "${context.activityData.title}"`;
+    
+    if (context.activityData.shortDescription) {
+      activityInfo += `\n- Description courte: ${context.activityData.shortDescription}`;
+    }
+    if (context.activityData.longDescription) {
+      activityInfo += `\n- Description détaillée: ${context.activityData.longDescription}`;
     }
 
-    // Ajouter le contexte de l'activité et de la pratique si disponible
-    if (context.activityData) {
-      basePrompt += `\n\nINFORMATIONS DE L'ACTIVITÉ (déclarées par le praticien):
-      - Titre: "${context.activityData.title}"`;
-      
-      if (context.activityData.shortDescription) {
-        basePrompt += `\n- Description courte: ${context.activityData.shortDescription}`;
-      }
-      if (context.activityData.longDescription) {
-        basePrompt += `\n- Description détaillée: ${context.activityData.longDescription}`;
-      }
+    return activityInfo;
+  }
 
-      // Intégrer les informations de la pratique si disponibles
-      if (context.activityData.practice) {
-        const practice = context.activityData.practice;
-        basePrompt += `\n\nPRATIQUE ASSOCIÉE (référentiel certifié):
-        - Nom: ${practice.title}
-        - Description courte: ${practice.shortDescription || 'Non disponible'}
-        - Description détaillée: ${practice.longDescription || 'Non disponible'}`;
-        
-        // Ajouter les informations de catégorie si disponibles
-        if (practice.categoryData) {
-          basePrompt += `\n- Catégorie: ${practice.categoryData.name}
-          - Description de la catégorie: ${practice.categoryData.description || 'Non disponible'}`;
-        }
-        
-        // Ajouter les informations de famille si disponibles
-        if (practice.familyData) {
-          basePrompt += `\n- Famille de pratiques: ${practice.familyData.name}
-          - Description de la famille: ${practice.familyData.description || 'Non disponible'}`;
-        }
-      }
-      
-      // Instructions pour utiliser les données de catégorie et famille
-      if (context.activityData.practice?.categoryData || context.activityData.practice?.familyData) {
-        basePrompt += `\n\nUTILISATION DES DONNÉES DE CATÉGORIE ET FAMILLE:
-        Ces informations te permettent de:
-        - Comprendre le contexte plus large de la pratique
-        - Adapter tes questions selon la spécialisation de la catégorie
-        - Utiliser le vocabulaire et les concepts appropriés à la famille de pratiques
-        - Suggérer des améliorations cohérentes avec le référentiel de la pratique
-        - Guider l'utilisateur vers des formulations plus précises et professionnelles`;
-      }
-      
-      // Ajouter les informations du praticien si disponibles
-      if (context.practicienData) {
-        const practicienData = context.practicienData;
-        if (practicienData.creatorExperience) {
-          basePrompt += `\n\nPROFIL DU PRATICIEN:
-          - Expérience: ${practicienData.creatorExperience}`;
-        }
-      }
-      
-      // Gérer le cas d'édition (session d'amélioration)
-      const isEditing = context.isEditing;
-      if (isEditing) {
-        basePrompt += `\n\n🎯 SESSION D'AMÉLIORATION - INFORMATIONS PRÉEXISTANTES:
-        Cette session fait suite à une conversation précédente où tu as aidé à générer des informations.
-        
-        Données déjà collectées et à améliorer:`;
-        
-        if (context.activityData.selectedKeywords && context.activityData.selectedKeywords.length > 0) {
-          basePrompt += `\n- Mots-clés actuels: ${context.activityData.selectedKeywords.join(', ')}`;
-        }
-        if (context.activityData.benefits && context.activityData.benefits.length > 0) {
-          basePrompt += `\n- Bénéfices actuels: ${context.activityData.benefits.join(', ')}`;
-        }
-        if (context.activityData.typicalSituations) {
-          basePrompt += `\n- Situations typiques actuelles: ${context.activityData.typicalSituations}`;
-        }
-        
-        basePrompt += `\n\nOBJECTIF DE LA SESSION D'AMÉLIORATION:
-        - Analyser la qualité des informations existantes
-        - Identifier les points d'amélioration et les lacunes
-        - Enrichir et affiner chaque élément pour optimiser l'impact
-        - Vérifier la cohérence avec la pratique et les données de catégorie/famille
-        - S'assurer que les informations sont suffisamment détaillées et précises
-        
-        APPROCHE:
-        - Commence par évaluer la qualité des informations existantes
-        - Pose des questions ciblées pour améliorer chaque élément
-        - Utilise les données de catégorie et famille pour enrichir le contexte
-        - Vérifie la cohérence avec l'expérience du praticien
-        - Exploite les informations de catégorie et famille pour suggérer des améliorations pertinentes
-        - Adapte tes conseils selon le niveau d'expérience du praticien`;
-      } else {
-        basePrompt += `\n\nOBJECTIF DE LA CONVERSATION:
-        Collecter les informations manquantes pour générer un résumé structuré complet.
-        Vérifier et enrichir les informations existantes pour optimiser l'auto-remplissage des formulaires.
-        
-        POINTS D'ATTENTION:
-        - Si des informations sont déjà présentes, demande des précisions ou des améliorations
-        - Si des informations manquent, pose des questions ciblées pour les collecter
-        - Assure-toi que chaque élément du résumé sera suffisamment détaillé et précis
-        - Le format de sortie doit etre un texte adapté à un chat sur mobile
-        - Utilise les informations de catégorie et famille pour enrichir le contexte et guider tes suggestions
-        - Adapte tes conseils selon l'expérience du praticien`;
-      }
+  /**
+   * Informations contextuelles de la pratique associée
+   */
+  protected getPracticeContextInfo(context: HowanaActivityContext & HowanaContext): string {
+    if (!context.activityData?.practice) return '';
+
+    const practice = context.activityData.practice;
+    let practiceInfo = `\n\nPRATIQUE ASSOCIÉE (référentiel certifié):
+    - Nom: ${practice.title}
+    - Description courte: ${practice.shortDescription || 'Non disponible'}
+    - Description détaillée: ${practice.longDescription || 'Non disponible'}`;
+    
+    // Ajouter les informations de catégorie si disponibles
+    if (practice.categoryData) {
+      practiceInfo += `\n- Catégorie: ${practice.categoryData.name}
+      - Description de la catégorie: ${practice.categoryData.description || 'Non disponible'}`;
+    }
+    
+    // Ajouter les informations de famille si disponibles
+    if (practice.familyData) {
+      practiceInfo += `\n- Famille de pratiques: ${practice.familyData.name}
+      - Description de la famille: ${practice.familyData.description || 'Non disponible'}`;
     }
 
-    // Règles générales (toujours présentes)
-    basePrompt += `\n\nRègles importantes:
-    - Réponds toujours en français
-    - Sois concis mais utile
-    - Reste professionnel et bienveillant
-    - Si tu ne sais pas quelque chose, dis-le honnêtement
-    - L'échange doit contenir environ 10 questions maximum
-    - Chaque réponse doit TOUJOURS contenir une question pertinente`;
+    return practiceInfo;
+  }
+
+  /**
+   * Instructions pour utiliser les données de catégorie et famille
+   */
+  protected getCategoryFamilyInstructions(context: HowanaActivityContext & HowanaContext): string {
+    if (!context.activityData?.practice?.categoryData && !context.activityData?.practice?.familyData) {
+      return '';
+    }
+
+    return `\n\nUTILISATION DES DONNÉES DE CATÉGORIE ET FAMILLE:
+    Ces informations te permettent de:
+    - Comprendre le contexte plus large de la pratique
+    - Adapter tes questions selon la spécialisation de la catégorie
+    - Utiliser le vocabulaire et les concepts appropriés à la famille de pratiques
+    - Suggérer des améliorations cohérentes avec le référentiel de la pratique
+    - Guider l'utilisateur vers des formulations plus précises et professionnelles`;
+  }
+
+  /**
+   * Informations contextuelles du praticien
+   */
+  protected getPractitionerContextInfo(context: HowanaActivityContext & HowanaContext): string {
+    if (!context.practicienData?.creatorExperience) return '';
+
+    return `\n\nPROFIL DU PRATICIEN:
+    - Expérience: ${context.practicienData.creatorExperience}`;
+  }
+
+  /**
+   * Instructions pour les sessions d'amélioration
+   */
+  protected getEditingSessionInstructions(context: HowanaActivityContext & HowanaContext): string {
+    if (!context.isEditing) return '';
+
+    let editingInfo = `\n\n🎯 SESSION D'AMÉLIORATION - INFORMATIONS PRÉEXISTANTES:
+    Cette session fait suite à une conversation précédente où tu as aidé à générer des informations.
     
-    // Règles contextuelles spécifiques
-    const isEditing = context.isEditing;
+    Données déjà collectées et à améliorer:`;
     
-    if (isEditing) {
-      basePrompt += `
+    if (context.activityData.selectedKeywords && context.activityData.selectedKeywords.length > 0) {
+      editingInfo += `\n- Mots-clés actuels: ${context.activityData.selectedKeywords.join(', ')}`;
+    }
+    if (context.activityData.benefits && context.activityData.benefits.length > 0) {
+      editingInfo += `\n- Bénéfices actuels: ${context.activityData.benefits.join(', ')}`;
+    }
+    if (context.activityData.typicalSituations) {
+      editingInfo += `\n- Situations typiques actuelles: ${context.activityData.typicalSituations}`;
+    }
+    
+    editingInfo += `\n\nOBJECTIF DE LA SESSION D'AMÉLIORATION:
+    - Analyser la qualité des informations existantes
+    - Identifier les points d'amélioration et les lacunes
+    - Enrichir et affiner chaque élément pour optimiser l'impact
+    - Vérifier la cohérence avec la pratique et les données de catégorie/famille
+    - S'assurer que les informations sont suffisamment détaillées et précises
+    
+    APPROCHE:
+    - Commence par évaluer la qualité des informations existantes
+    - Pose des questions ciblées pour améliorer chaque élément
+    - Utilise les données de catégorie et famille pour enrichir le contexte
+    - Vérifie la cohérence avec l'expérience du praticien
+    - Exploite les informations de catégorie et famille pour suggérer des améliorations pertinentes
+    - Adapte tes conseils selon le niveau d'expérience du praticien`;
+
+    return editingInfo;
+  }
+
+  /**
+   * Instructions pour les conversations normales
+   */
+  protected getNormalConversationInstructions(context: HowanaActivityContext & HowanaContext): string {
+    if (context.isEditing) return '';
+
+    return `\n\nOBJECTIF DE LA CONVERSATION:
+    Collecter les informations manquantes pour générer un résumé structuré complet.
+    Vérifier et enrichir les informations existantes pour optimiser l'auto-remplissage des formulaires.
+    
+    POINTS D'ATTENTION:
+    - Si des informations sont déjà présentes, demande des précisions ou des améliorations
+    - Si des informations manquent, pose des questions ciblées pour les collecter
+    - Assure-toi que chaque élément du résumé sera suffisamment détaillé et précis
+    - Le format de sortie doit etre un texte adapté à un chat sur mobile
+    - Utilise les informations de catégorie et famille pour enrichir le contexte et guider tes suggestions
+    - Adapte tes conseils selon l'expérience du praticien`;
+  }
+
+  /**
+   * Instructions spécifiques pour le mode édition
+   */
+  protected getEditingModeInstructions(): string {
+    return `
     - Tu es en mode AMÉLIORATION : l'utilisateur revient pour affiner des informations déjà générées
     - Analyse la qualité des données existantes et propose des améliorations ciblées
     - Utilise les informations de catégorie et famille pour enrichir le contexte
@@ -200,8 +204,13 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     
     - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
-    } else {
-      basePrompt += `
+  }
+
+  /**
+   * Instructions spécifiques pour le mode normal (non-édition)
+   */
+  protected getNormalModeInstructions(): string {
+    return `
     - Ton objectif principal est d'aider le praticien à valider la conformité de son activité avec la pratique associée
     - Pose des questions pertinentes pour mieux comprendre l'activité et établir la conformité
     - Identifie le profil d'utilisateur idéal pour cette activité/pratique
@@ -218,6 +227,37 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     
     - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
+  }
+  
+  protected async buildSystemPrompt(_context: HowanaContext): Promise<string> {
+    const context:HowanaActivityContext & HowanaContext = _context as HowanaActivityContext & HowanaContext;
+    let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
+    Tu es bienveillant et professionnel.`;
+
+    // Récupérer les règles IA spécifiques au type de conversation
+    basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
+    basePrompt += await this.getIaRules(context.type, this.getDefaultActivityRules());
+
+    // Ajouter le contexte de l'activité et de la pratique si disponible
+    if (context.activityData) {
+      basePrompt += this.getActivityContextInfo(context);
+      basePrompt += this.getPracticeContextInfo(context);
+      basePrompt += this.getCategoryFamilyInstructions(context);
+      basePrompt += this.getPractitionerContextInfo(context);
+      basePrompt += this.getEditingSessionInstructions(context);
+      basePrompt += this.getNormalConversationInstructions(context);
+    }
+
+    // Règles générales (toujours présentes)
+    basePrompt += `\n\n${this.getCommonRules()}
+    - L'échange doit contenir environ 10 questions maximum
+    - Chaque réponse doit TOUJOURS contenir une question pertinente`;
+    
+    // Règles contextuelles spécifiques selon le mode
+    if (context.isEditing) {
+      basePrompt += this.getEditingModeInstructions();
+    } else {
+      basePrompt += this.getNormalModeInstructions();
     }
 
     return basePrompt;

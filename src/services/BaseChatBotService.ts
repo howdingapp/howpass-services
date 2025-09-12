@@ -549,6 +549,51 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   }
 
   /**
+   * Règles communes à tous les services
+   */
+  protected getCommonRules(): string {
+    return `Règles importantes:
+    - Réponds toujours en français
+    - Sois concis mais utile
+    - Reste professionnel et bienveillant
+    - Si tu ne sais pas quelque chose, dis-le honnêtement`;
+  }
+
+  /**
+   * Récupère et formate les règles IA spécifiques au type de conversation
+   * @param contextType Type de contexte de conversation
+   * @param defaultRules Règles par défaut à utiliser si aucune règle IA n'est trouvée
+   * @returns String formaté des règles IA prêt à être ajouté au prompt
+   */
+  protected async getIaRules(contextType: string, defaultRules: string): Promise<string> {
+    try {
+      const iaRulesResult = await this.supabaseService.getIARules(contextType);
+      if (iaRulesResult.success && iaRulesResult.data && iaRulesResult.data.length > 0) {
+        // Filtrer seulement les règles actives
+        const activeRules = iaRulesResult.data.filter((rule) => rule.isActive);
+        
+        if (activeRules.length > 0) {
+          // Trier les règles par priorité (priorité 1 = plus forte)
+          const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
+          
+          let rulesText = '';
+          sortedRules.forEach((rule, index) => {
+            rulesText += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
+          });
+          return rulesText;
+        }
+      }
+      
+      // Si aucune règle active trouvée, utiliser les règles par défaut
+      return `\n${defaultRules}`;
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des règles IA:', error);
+      // En cas d'erreur, utiliser les règles par défaut
+      return `\n${defaultRules}`;
+    }
+  }
+
+  /**
    * Méthodes abstraites à implémenter dans les classes enfants
    */
   protected abstract buildSystemPrompt(context: HowanaContext): Promise<string>;
