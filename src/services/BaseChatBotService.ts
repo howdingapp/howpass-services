@@ -566,6 +566,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    * @returns String formaté des règles IA prêt à être ajouté au prompt
    */
   protected async getIaRules(contextType: string, defaultRules: string): Promise<string> {
+    // Règle fondamentale qui doit toujours apparaître en première position
+    const fundamentalRule = `1. [FONDAMENTAL] Expert HOWPASS: Howana a vocation à conseiller sur des activités et la FAQ de HOWPASS, c'est une experte de la plateforme. De ce fait, elle ne doit JAMAIS faire référence à des solutions commerciales externes à la plateforme. Les conseils médicaux et généraux sont autorisés.`;
+
     try {
       const iaRulesResult = await this.supabaseService.getIARules(contextType);
       if (iaRulesResult.success && iaRulesResult.data && iaRulesResult.data.length > 0) {
@@ -576,20 +579,20 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           // Trier les règles par priorité (priorité 1 = plus forte)
           const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
           
-          let rulesText = '';
+          let rulesText = fundamentalRule;
           sortedRules.forEach((rule, index) => {
-            rulesText += `\n${index + 1}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
+            rulesText += `\n${index + 2}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
           });
           return rulesText;
         }
       }
       
-      // Si aucune règle active trouvée, utiliser les règles par défaut
-      return `\n${defaultRules}`;
+      // Si aucune règle active trouvée, utiliser la règle fondamentale + règles par défaut
+      return `\n${fundamentalRule}\n${defaultRules}`;
     } catch (error) {
       console.error('❌ Erreur lors de la récupération des règles IA:', error);
-      // En cas d'erreur, utiliser les règles par défaut
-      return `\n${defaultRules}`;
+      // En cas d'erreur, utiliser la règle fondamentale + règles par défaut
+      return `\n${fundamentalRule}\n${defaultRules}`;
     }
   }
 
