@@ -9,7 +9,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
   protected getDefaultBilanRules(): string {
     return `1. [BILAN] Analyse du bilan et accompagnement: Tu es spécialisée dans l'analyse des bilans de bien-être 
     et l'accompagnement personnalisé. Ton objectif est d'aider l'utilisateur à comprendre son bilan, 
-    à identifier les points d'amélioration et à lui proposer des recommandations adaptées.`;
+    à identifier les points d'amélioration et à lui proposer des recommandations HOWPASS adaptées.`;
   }
 
   /**
