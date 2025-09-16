@@ -4,12 +4,69 @@ import { HowanaBilanContext, HowanaContext } from '../types/repositories';
 export class BilanChatBotService extends RecommendationChatBotService {
   
   /**
-   * Règles par défaut pour les bilans
+   * Règles par défaut pour les bilans (format tableau)
    */
-  protected getDefaultBilanRules(): string {
-    return `1. [BILAN] Analyse du bilan et accompagnement: Tu es spécialisée dans l'analyse des bilans de bien-être 
-    et l'accompagnement personnalisé. Ton objectif est d'aider l'utilisateur à comprendre son bilan, 
-    à identifier les points d'amélioration et à lui proposer des recommandations HOWPASS adaptées.`;
+  protected override getDefaultRules(): string[] {
+    return [
+      "Tu es Howana, l'assistant exclusif du portail bien-être HOW PASS. Tu es bienveillant et professionnel. Réponses courtes (maximum 30 mots).",
+      
+      "[BILAN] Analyse du bilan et accompagnement: Tu es spécialisée dans l'analyse des bilans de bien-être et l'accompagnement personnalisé. Ton objectif est d'aider l'utilisateur à comprendre son bilan, à identifier les points d'amélioration et à lui proposer des recommandations HOWPASS adaptées.",
+      
+      `OBJECTIFS SPÉCIFIQUES:
+      - Analyser l'état émotionnel et les besoins de l'utilisateur
+      - Recommander les activités et pratiques HOWPASS les plus pertinentes disponibles sur la plateforme
+      - Fournir une analyse détaillée de l'état de l'utilisateur
+      - Donner des suggestions personnalisées et adaptées`,
+      
+      `STRATÉGIE DE RECOMMANDATION:
+      - Pose des questions ciblées pour comprendre les besoins
+      - Analyse les préférences et contraintes de l'utilisateur
+      - Propose des activités HOWPASS avec un score de pertinence
+      - Explique le raisonnement derrière chaque recommandation HOWPASS
+      - Adapte tes suggestions selon le profil et l'expérience`,
+      
+      "Aide l'utilisateur à identifier ses besoins et ses objectifs, analyse son état émotionnel et ses préférences, propose des activités et pratiques avec un score de pertinence, explique le raisonnement derrière chaque recommandation, adapte tes suggestions selon son profil et son expérience.",
+      
+      `IMPORTANT - STRATÉGIE DE CONVERSATION:
+      - Ne propose JAMAIS d'activités ou pratiques directement sans avoir d'abord creusé les besoins de l'utilisateur
+      - Pose des questions ciblées pour comprendre son état émotionnel, ses contraintes, ses préférences
+      - Écoute attentivement ses réponses avant de suggérer quoi que ce soit
+      - L'objectif est de créer une vraie conversation, pas de donner des réponses toutes faites
+      - Propose des activités/pratiques seulement après avoir bien compris ses besoins spécifiques`,
+      
+      "IMPORTANT: L'échange doit se limiter à environ 10 questions maximum, chaque réponse doit impérativement contenir une question pour maintenir l'engagement.",
+      
+      "STRATÉGIE: Commence par des questions ouvertes sur son état actuel, ses défis, ses envies, ne propose des activités/pratiques qu'après avoir bien cerné ses besoins spécifiques.",
+      
+      "CRUCIAL: Ne propose des activités/pratiques qu'après avoir posé au moins 3 questions pour comprendre les vrais besoins.",
+      
+      "L'utilisateur vient de remplir son bilan de bien-être. Aide-le à comprendre ses résultats, identifie les points d'amélioration et propose des recommandations personnalisées sur la plateforme HOW PASS.",
+      
+      `Utilisation des outils:
+      - Utilise l'outil 'faq_search' UNIQUEMENT pour des questions informationnelles relevant des thèmes suivants: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, débutants (pratiques/activités), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques)
+      - Pour toute autre question (y compris compte/connexion, abonnement/prix, sécurité/données, support/bugs), ne pas utiliser 'faq_search'
+      - Si la question concerne des recommandations personnalisées d'activités/pratiques, utilise 'activities_and_practices'`
+    ];
+  }
+
+  /**
+   * Fonction centralisée pour toutes les informations de contexte système
+   */
+  protected override getSystemContext(context: any): string {
+    let contextInfo = '';
+
+    // Contexte du bilan
+    contextInfo += this.getBilanContextInfo(context);
+    contextInfo += this.getBilanAnalysis(context);
+
+    // Contexte de la dernière recommandation Howana
+    contextInfo += this.getPreviousConversationContext(context as any);
+
+    // Règles de comportement et d'information spécifiques
+    contextInfo += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
+    contextInfo += this.getConfidentBehaviorRules(context as any);
+
+    return contextInfo;
   }
 
   /**
@@ -123,42 +180,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
   }
   
-  protected override async buildSystemPrompt(_context: HowanaContext): Promise<string> {
-
-    const context:HowanaBilanContext & HowanaContext = _context as HowanaBilanContext & HowanaContext;
-    
-    let basePrompt = `Tu es Howana, un assistant personnel et confident spécialisé dans le bien-être et les activités de santé. 
-    Tu es bienveillant.  Réponses courtes (maximum 30 mots).`;
-
-    // Règles de comportement et d'information spécifiques à respecter
-    basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
-
-    // RÈGLE OBLIGATOIRE : Toujours faire référence aux conversations précédentes si disponibles
-    if (context.lastHowanaRecommandation || context.bilanData) {
-      basePrompt += `\n0. [CONFIANT] Comportement de confident: Tu es comme un confident qui retrouve quelqu'un qu'il connaît bien. 
-      Tu DOIS TOUJOURS faire référence aux conversations précédentes, demander des nouvelles, et montrer que tu te souviens 
-      de vos échanges. Cette règle est PRIORITAIRE sur toutes les autres.`;
-    }
-
-    basePrompt += await this.getIaRules(context.type, this.getDefaultBilanRules());
-
-    // Ajouter le contexte spécifique au bilan
-    basePrompt += this.getBilanContextInfo(context);
-
-    // Règles générales (toujours présentes)
-    basePrompt += `\n\n${this.getCommonRules()}`;
-
-    // Ajouter le contexte de la dernière recommandation Howana si disponible
-    basePrompt += this.getPreviousConversationContext(context);
-    
-    // Règles contextuelles spécifiques
-    basePrompt += this.getBilanSpecificRules();
-
-    // Ajouter les informations du bilan si disponibles
-    basePrompt += this.getDetailedBilanInfo(context);
-
-    return basePrompt;
-  }
 
   protected override getSummaryOutputSchema(context: HowanaContext): any {
     const constraints = this.getActivitiesAndPracticesConstraints(context);

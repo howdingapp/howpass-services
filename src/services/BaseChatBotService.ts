@@ -180,7 +180,6 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     }
   }
 
-
   /**
    * Générer une réponse IA basée sur le contexte de la conversation
    */
@@ -563,12 +562,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    * Récupère et formate les règles IA spécifiques au type de conversation
    * @param contextType Type de contexte de conversation
    * @param defaultRules Règles par défaut à utiliser si aucune règle IA n'est trouvée
-   * @returns String formaté des règles IA prêt à être ajouté au prompt
+   * @returns Tableau de règles IA prêt à être ajouté au prompt
    */
-  protected async getIaRules(contextType: string, defaultRules: string): Promise<string> {
-    // Règle fondamentale qui doit toujours apparaître en première position
-    const fundamentalRule = `1. [FONDAMENTAL] Expert HOWPASS: Howana a vocation à conseiller sur des activités et la FAQ de HOWPASS, c'est une experte de la plateforme. De ce fait, elle ne doit JAMAIS faire référence à des solutions commerciales externes à la plateforme. Les conseils médicaux et généraux sont autorisés.`;
-
+  protected async getIaRules(contextType: string, defaultRules: string[]): Promise<string[]> {
     try {
       const iaRulesResult = await this.supabaseService.getIARules(contextType);
       if (iaRulesResult.success && iaRulesResult.data && iaRulesResult.data.length > 0) {
@@ -579,27 +575,42 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           // Trier les règles par priorité (priorité 1 = plus forte)
           const sortedRules = activeRules.sort((a, b) => a.priority - b.priority);
           
-          let rulesText = fundamentalRule;
-          sortedRules.forEach((rule, index) => {
-            rulesText += `\n${index + 2}. [${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`;
+          const rulesArray: string[] = [];
+          sortedRules.forEach((rule) => {
+            rulesArray.push(`[${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`);
           });
-          return rulesText;
+          return rulesArray;
         }
       }
       
-      // Si aucune règle active trouvée, utiliser la règle fondamentale + règles par défaut
-      return `\n${fundamentalRule}\n${defaultRules}`;
+      // Si aucune règle active trouvée, utiliser les règles par défaut
+      return defaultRules;
     } catch (error) {
       console.error('❌ Erreur lors de la récupération des règles IA:', error);
-      // En cas d'erreur, utiliser la règle fondamentale + règles par défaut
-      return `\n${fundamentalRule}\n${defaultRules}`;
+      // En cas d'erreur, utiliser les règles par défaut
+      return defaultRules;
     }
+  }
+
+  /**
+   * Méthode généralisée pour construire le prompt système
+   */
+  protected async buildSystemPrompt(context: HowanaContext): Promise<string> {
+    // Récupérer les règles IA (format tableau)
+    const rules = await this.getIaRules(context.type, this.getDefaultRules());
+    
+    // Récupérer le contexte système
+    const systemContext = this.getSystemContext(context);
+    
+    // Combiner les règles et le contexte
+    return rules.join('\n\n') + '\n\n' + systemContext;
   }
 
   /**
    * Méthodes abstraites à implémenter dans les classes enfants
    */
-  protected abstract buildSystemPrompt(context: HowanaContext): Promise<string>;
+  protected abstract getDefaultRules(): string[];
+  protected abstract getSystemContext(context: HowanaContext): string;
   protected abstract buildFirstUserPrompt(context: HowanaContext): string;
   protected abstract buildSummarySystemPrompt(context: HowanaContext): string;
   protected abstract getSummaryOutputSchema(context: HowanaContext): ChatBotOutputSchema;

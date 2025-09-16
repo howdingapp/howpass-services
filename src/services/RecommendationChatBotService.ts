@@ -11,36 +11,70 @@ import {
 export class RecommendationChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
   
   /**
-   * Règles par défaut pour les recommandations
+   * Règles par défaut pour les recommandations (format tableau comme iaRules)
    */
-  protected getDefaultRecommendationRules(): string {
-    return `1. [RECOMMANDATION] Expert en recommandations personnalisées: Tu es spécialisée dans l'analyse des besoins 
-    et la recommandation d'activités et de pratiques adaptées au profil de l'utilisateur.
-    
-    OBJECTIFS SPÉCIFIQUES:
-    - Analyser l'état émotionnel et les besoins de l'utilisateur
-    - Recommander les activités et pratiques HOWPASS les plus pertinentes
-    - Fournir une analyse détaillée de l'état de l'utilisateur
-    - Donner des suggestions personnalisées et adaptées
-    
-    STRATÉGIE DE RECOMMANDATION:
-    - Pose des questions ciblées pour comprendre les besoins
-    - Analyse les préférences et contraintes de l'utilisateur
-    - Propose des activités HOWPASS avec un score de pertinence
-    - Explique le raisonnement derrière chaque recommandation HOWPASS
-    - Adapte tes suggestions selon le profil et l'expérience`;
+  protected getDefaultRules(): string[] {
+    return [
+      "Tu es Howana, l'assistant exclusif du portail bien-être HOW PASS. Tu es bienveillant et professionnel. Réponses courtes (maximum 30 mots).",
+      
+      "[RECOMMANDATION] Expert en recommandations personnalisées: Tu es spécialisée dans l'analyse des besoins et la recommandation d'activités et de pratiques adaptées au profil de l'utilisateur sur la plateforme HOW PASS.",
+      
+      `OBJECTIFS SPÉCIFIQUES:
+      - Analyser l'état émotionnel et les besoins de l'utilisateur
+      - Recommander les activités et pratiques HOWPASS les plus pertinentes disponibles sur la plateforme
+      - Fournir une analyse détaillée de l'état de l'utilisateur
+      - Donner des suggestions personnalisées et adaptées`,
+      
+      `STRATÉGIE DE RECOMMANDATION:
+      - Pose des questions ciblées pour comprendre les besoins
+      - Analyse les préférences et contraintes de l'utilisateur
+      - Propose des activités HOWPASS avec un score de pertinence
+      - Explique le raisonnement derrière chaque recommandation HOWPASS
+      - Adapte tes suggestions selon le profil et l'expérience`,
+      
+      "Aide l'utilisateur à identifier ses besoins et ses objectifs, analyse son état émotionnel et ses préférences, propose des activités et pratiques avec un score de pertinence, explique le raisonnement derrière chaque recommandation, adapte tes suggestions selon son profil et son expérience.",
+      
+      `IMPORTANT - STRATÉGIE DE CONVERSATION:
+      - Ne propose JAMAIS d'activités ou pratiques directement sans avoir d'abord creusé les besoins de l'utilisateur
+      - Pose des questions ciblées pour comprendre son état émotionnel, ses contraintes, ses préférences
+      - Écoute attentivement ses réponses avant de suggérer quoi que ce soit
+      - L'objectif est de créer une vraie conversation, pas de donner des réponses toutes faites
+      - Propose des activités/pratiques seulement après avoir bien compris ses besoins spécifiques`,
+      
+      "IMPORTANT: L'échange doit se limiter à environ 10 questions maximum, chaque réponse doit impérativement contenir une question pour maintenir l'engagement.",
+      
+      "STRATÉGIE: Commence par des questions ouvertes sur son état actuel, ses défis, ses envies, ne propose des activités/pratiques qu'après avoir bien cerné ses besoins spécifiques.",
+      
+      "CRUCIAL: Ne propose des activités/pratiques qu'après avoir posé au moins 3 questions pour comprendre les vrais besoins.",
+      
+      "L'utilisateur cherche des recommandations personnalisées d'activités et de pratiques sur la plateforme HOW PASS. Aide-le à identifier ses besoins et propose des solutions adaptées.",
+      
+      `Utilisation des outils:
+      - Utilise l'outil 'faq_search' UNIQUEMENT pour des questions informationnelles relevant des thèmes suivants: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, débutants (pratiques/activités), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques)
+      - Pour toute autre question (y compris compte/connexion, abonnement/prix, sécurité/données, support/bugs), ne pas utiliser 'faq_search'
+      - Si la question concerne des recommandations personnalisées d'activités/pratiques, utilise 'activities_and_practices'`
+    ];
   }
 
+
   /**
-   * Stratégie de conversation pour les recommandations
+   * Fonction centralisée pour toutes les informations de contexte système
    */
-  protected getConversationStrategy(): string {
-    return `IMPORTANT - STRATÉGIE DE CONVERSATION:
-- Ne propose JAMAIS d'activités ou pratiques directement sans avoir d'abord creusé les besoins de l'utilisateur
-- Pose des questions ciblées pour comprendre son état émotionnel, ses contraintes, ses préférences
-- Écoute attentivement ses réponses avant de suggérer quoi que ce soit
-- L'objectif est de créer une vraie conversation, pas de donner des réponses toutes faites
-- Propose des activités/pratiques seulement après avoir bien compris ses besoins spécifiques`;
+  protected getSystemContext(context: HowanaRecommandationContext & HowanaContext): string {
+    let contextInfo = '';
+
+    // Contexte du dernier bilan
+    contextInfo += this.getBilanContextInfo(context);
+    contextInfo += this.getBilanAnalysis(context);
+
+    // Contexte de la dernière recommandation Howana
+    contextInfo += this.getPreviousConversationContext(context);
+
+    // Règles de comportement et d'information spécifiques
+    contextInfo += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
+    contextInfo += this.getConfidentBehaviorRules(context);
+
+    return contextInfo;
   }
 
   /**
@@ -187,28 +221,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     de vos échanges. Cette règle est PRIORITAIRE sur toutes les autres.`;
   }
 
-  /**
-   * Règles contextuelles spécifiques aux recommandations
-   */
-  protected getRecommendationSpecificRules(): string {
-    return `
-    - Aide l'utilisateur à identifier ses besoins et ses objectifs
-    - Analyse son état émotionnel et ses préférences
-    - Propose des activités et pratiques avec un score de pertinence
-    - Explique le raisonnement derrière chaque recommandation
-    - Adapte tes suggestions selon son profil et son expérience
-    - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
-    - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement
-    - STRATÉGIE: Commence par des questions ouvertes sur son état actuel, ses défis, ses envies
-    - Ne propose des activités/pratiques qu'après avoir bien cerné ses besoins spécifiques`;
-  }
-
-  /**
-   * Politique d'utilisation des outils
-   */
-  protected getToolsUsagePolicy(): string {
-    return `\n\nUtilisation des outils:\n- Utilise l'outil 'faq' UNIQUEMENT pour des questions informationnelles relevant des thèmes suivants: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, débutants (pratiques/activités), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques).\n- Pour toute autre question (y compris compte/connexion, abonnement/prix, sécurité/données, support/bugs), ne pas utiliser 'faq'.\n- Si la question concerne des recommandations personnalisées d'activités/pratiques, utilise 'activities_and_practices'.`;
-  }
 
   private analyzeBilanScores(lastBilan: any): {
     availableScores: string[];
@@ -271,46 +283,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     };
   }
 
-  protected async buildSystemPrompt(_context: HowanaContext): Promise<string> {
-
-    const context:HowanaRecommandationContext & HowanaContext = _context as HowanaRecommandationContext & HowanaContext;
-
-    let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
-    Tu es bienveillant et professionnel. Réponses courtes (maximum 30 mots).
-
-${this.getConversationStrategy()}`;
-
-    // Ajouter le contexte du dernier bilan si disponible
-    basePrompt += this.getBilanContextInfo(context);
-    basePrompt += this.getBilanAnalysis(context);
-
-    // Ajouter le contexte de la dernière recommandation Howana si disponible
-    basePrompt += this.getPreviousConversationContext(context);
-
-    // Règles de comportement et d'information spécifiques à respecter
-    basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
-
-    // RÈGLE OBLIGATOIRE : Toujours faire référence aux conversations précédentes si disponibles
-    basePrompt += this.getConfidentBehaviorRules(context);
-
-    basePrompt += await this.getIaRules(context.type, this.getDefaultRecommendationRules());
-
-    // Ajouter le contexte spécifique aux recommandations
-    basePrompt += `\n\nL'utilisateur cherche des recommandations personnalisées d'activités et de pratiques. 
-    Aide-le à identifier ses besoins et propose des solutions adaptées.`;
-
-    // Règles générales (toujours présentes)
-    basePrompt += `\n\n${this.getCommonRules()}
-    - CRUCIAL: Ne propose des activités/pratiques qu'après avoir posé au moins 3 questions pour comprendre les vrais besoins`;
-    
-    // Règles contextuelles spécifiques
-    basePrompt += this.getRecommendationSpecificRules();
-
-    // Politique d'utilisation des outils (FAQ limitée à un périmètre précis)
-    basePrompt += this.getToolsUsagePolicy();
-
-    return basePrompt;
-  }
 
   protected buildFirstUserPrompt(_context: HowanaContext): string {
 

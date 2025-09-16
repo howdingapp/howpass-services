@@ -5,28 +5,30 @@ import { IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-ou
 export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse> {
   
   /**
-   * Règles par défaut pour les activités
+   * Règles par défaut pour les activités (format tableau)
    */
-  protected getDefaultActivityRules(): string {
-    return `1. [EXPERTISE] Expertise des pratiques: Tu es experte des pratiques de bien-être et de santé. 
-    Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.
-    
-    OBJECTIFS SPÉCIFIQUES POUR LE RÉSUMÉ STRUCTURÉ:
-    Tu dois collecter des informations précises pour générer automatiquement un résumé structuré avec ces 6 éléments:
-    
-    A) TITRE (max 100 caractères): Un titre optimisé et descriptif de l'activité
-    B) DESCRIPTION COURTE (max 200 caractères): Description accrocheuse mettant en avant l'unicité
-    C) DESCRIPTION DÉTAILLÉE (max 500 caractères): Déroulement, approche et expérience des participants
-    D) MOTS-CLÉS: Liste des termes les plus pertinents pour cette activité
-    E) BÉNÉFICES: Liste des bénéfices concrets et mesurables pour les participants
-    F) PROFIL IDÉAL: Description du profil psychologique et situation idéale de l'utilisateur cible
-    
-    STRATÉGIE DE COLLECTE:
-    -Tu n'as le droit de poser qu'une seule question ou demade d'information dans chacune de tes réponses pour ne pas surcharger l'utilisateur.
-    - Pose des questions ciblées pour chaque élément
-    - Demande des exemples concrets et spécifiques
-    - Vérifie la cohérence avec la pratique associée
-    - Collecte des détails qui permettront de remplir automatiquement les formulaires`;
+  protected getDefaultRules(): string[] {
+    return [
+      "Tu es Howana, l'assistant exclusif du portail bien-être HOW PASS. Tu es bienveillant et professionnel. Réponses courtes (maximum 30 mots).",
+      
+      "[EXPERTISE] Expertise des pratiques: Tu es experte des pratiques de bien-être et de santé. Ton objectif est d'aider à valider la cohérence entre l'activité et la pratique qui lui est associée.",
+      
+      `OBJECTIFS SPÉCIFIQUES POUR LE RÉSUMÉ STRUCTURÉ: Tu dois collecter des informations précises pour générer automatiquement un résumé structuré avec ces 6 éléments:
+      
+      A) TITRE (max 100 caractères): Un titre optimisé et descriptif de l'activité
+      B) DESCRIPTION COURTE (max 200 caractères): Description accrocheuse mettant en avant l'unicité
+      C) DESCRIPTION DÉTAILLÉE (max 500 caractères): Déroulement, approche et expérience des participants
+      D) MOTS-CLÉS: Liste des termes les plus pertinents pour cette activité
+      E) BÉNÉFICES: Liste des bénéfices concrets et mesurables pour les participants
+      F) PROFIL IDÉAL: Description du profil psychologique et situation idéale de l'utilisateur cible`,
+      
+      `STRATÉGIE DE COLLECTE:
+      - Tu n'as le droit de poser qu'une seule question ou demande d'information dans chacune de tes réponses pour ne pas surcharger l'utilisateur
+      - Pose des questions ciblées pour chaque élément
+      - Demande des exemples concrets et spécifiques
+      - Vérifie la cohérence avec la pratique associée
+      - Collecte des détails qui permettront de remplir automatiquement les formulaires`
+    ];
   }
 
   /**
@@ -229,38 +231,38 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
   }
   
-  protected async buildSystemPrompt(_context: HowanaContext): Promise<string> {
-    const context:HowanaActivityContext & HowanaContext = _context as HowanaActivityContext & HowanaContext;
-    let basePrompt = `Tu es Howana, un assistant personnel spécialisé dans le bien-être et les activités de santé. 
-    Tu es bienveillant et professionnel.`;
+  /**
+   * Fonction centralisée pour toutes les informations de contexte système
+   */
+  protected getSystemContext(context: HowanaActivityContext & HowanaContext): string {
+    let contextInfo = '';
 
-    // Récupérer les règles IA spécifiques au type de conversation
-    basePrompt += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
-    basePrompt += await this.getIaRules(context.type, this.getDefaultActivityRules());
+    // Règles de comportement et d'information spécifiques à respecter
+    contextInfo += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
 
     // Ajouter le contexte de l'activité et de la pratique si disponible
     if (context.activityData) {
-      basePrompt += this.getActivityContextInfo(context);
-      basePrompt += this.getPracticeContextInfo(context);
-      basePrompt += this.getCategoryFamilyInstructions(context);
-      basePrompt += this.getPractitionerContextInfo(context);
-      basePrompt += this.getEditingSessionInstructions(context);
-      basePrompt += this.getNormalConversationInstructions(context);
+      contextInfo += this.getActivityContextInfo(context);
+      contextInfo += this.getPracticeContextInfo(context);
+      contextInfo += this.getCategoryFamilyInstructions(context);
+      contextInfo += this.getPractitionerContextInfo(context);
+      contextInfo += this.getEditingSessionInstructions(context);
+      contextInfo += this.getNormalConversationInstructions(context);
     }
 
     // Règles générales (toujours présentes)
-    basePrompt += `\n\n${this.getCommonRules()}
+    contextInfo += `\n\n${this.getCommonRules()}
     - L'échange doit contenir environ 10 questions maximum
     - Chaque réponse doit TOUJOURS contenir une question pertinente`;
     
     // Règles contextuelles spécifiques selon le mode
     if (context.isEditing) {
-      basePrompt += this.getEditingModeInstructions();
+      contextInfo += this.getEditingModeInstructions();
     } else {
-      basePrompt += this.getNormalModeInstructions();
+      contextInfo += this.getNormalModeInstructions();
     }
 
-    return basePrompt;
+    return contextInfo;
   }
 
   protected buildFirstUserPrompt(_context: HowanaContext): string {
