@@ -669,23 +669,36 @@ ${this.getConversationStrategy()}`;
 
   protected getToolsDescription(_context: HowanaContext, forceSummaryToolCall:boolean): OpenAIToolsDescription | null {
     
-    const activitiesAndPracticesAndFAQTool:OpenAITool = {
+    const activitiesAndPracticesTool:OpenAITool = {
       type: 'function',
-      name: 'activities_and_practices_and_faq',
-      description: 'Rechercher des activités et pratiques pertinentes pour l\'utilisateur et chercher dans la FAQ des informations',
+      name: 'activities_and_practices',
+      description: 'Rechercher des activités et pratiques pertinentes pour l\'utilisateur',
       parameters: {
         type: 'object',
         properties: {
           searchTerm: {
             type: 'string',
             description: 'Description de l\'état émotionnel et des besoins de l\'utilisateur, formulée de son point de vue avec des expressions comme "Je me sens...", "J\'ai besoin de...", "Je voudrais...". Ce format facilite la recherche vectorielle en alignant la formulation des besoins avec celle des descriptions d\'activités.'
-          },
-          faqSearchTerm: {
-            type: 'string',
-            description: 'Question ou sujet à rechercher dans la FAQ, formulé du point de vue de l\'utilisateur (ex: "Comment gérer le stress?", "Qu\'est-ce que la méditation?", "Améliorer mon sommeil")'
           }
         },
-        required: ['searchTerm', 'faqSearchTerm']
+        required: ['searchTerm']
+      },
+      strict: false
+    };
+
+    const faqTool:OpenAITool = {
+      type: 'function',
+      name: 'faq_search',
+      description: 'Rechercher des informations dans la FAQ HOW PASS pour répondre aux questions de l\'utilisateur',
+      parameters: {
+        type: 'object',
+        properties: {
+          faqSearchTerm: {
+            type: 'string',
+            description: 'Question ou sujet à rechercher dans la FAQ HOWPASS, formulé du point de vue de l\'utilisateur (ex: "Comment gérer le stress?", "Qu\'est-ce que la méditation?", "Améliorer mon sommeil")'
+          }
+        },
+        required: ['faqSearchTerm']
       },
       strict: false
     };
@@ -704,13 +717,14 @@ ${this.getConversationStrategy()}`;
 
     if (forceSummaryToolCall) {
       return {
-        tools: [activitiesAndPracticesAndFAQTool]
+        tools: [activitiesAndPracticesTool]
       };
     }
 
     return {
       tools: [
-        activitiesAndPracticesAndFAQTool,
+        activitiesAndPracticesTool,
+        faqTool,
         lastUserActivitiesTool,
       ]
     };
@@ -719,11 +733,11 @@ ${this.getConversationStrategy()}`;
 
   protected async callTool(toolName: string, toolArgs: any, context: HowanaContext): Promise<any> {
     switch (toolName) {
-      case 'activities_and_practices_and_faq':
-        return await this.searchActivitiesAndPracticesAndFAQ(
-          toolArgs.searchTerm,
-          toolArgs.faqSearchTerm
-        );
+      case 'activities_and_practices':
+        return await this.searchActivitiesAndPractices(toolArgs.searchTerm);
+      
+      case 'faq_search':
+        return await this.searchFAQ(toolArgs.faqSearchTerm);
       
       case 'last_user_activities':
         return await this.getLastUserActivities(context.userId);
@@ -733,20 +747,15 @@ ${this.getConversationStrategy()}`;
     }
   }
 
-  private async searchActivitiesAndPracticesAndFAQ(
-    searchTerm: string,
-    faqSearchTerm: string
-  ): Promise<any> {
+  private async searchActivitiesAndPractices(searchTerm: string): Promise<any> {
     try {
-      console.log(`🔍 Recherche combinée - Activités/Pratiques: ${searchTerm}, FAQ: ${faqSearchTerm}`);
+      console.log(`🔍 Recherche d'activités et pratiques: ${searchTerm}`);
       
       const results: any = {
         activities: [],
-        practices: [],
-        faq: []
+        practices: []
       };
 
-      // Recherche d'activités et pratiques si searchTerm est fourni
       if (searchTerm && searchTerm.trim()) {
         try {
           const activitiesResults = await this.supabaseService.searchActivitiesAndPractices(searchTerm);
@@ -757,7 +766,25 @@ ${this.getConversationStrategy()}`;
         }
       }
 
-      // Recherche FAQ si faqSearchTerm est fourni
+      return results;
+    } catch (error) {
+      console.error('❌ Erreur lors de la recherche d\'activités et pratiques:', error);
+      return {
+        activities: [],
+        practices: [],
+        error: 'Erreur lors de la recherche d\'activités et pratiques'
+      };
+    }
+  }
+
+  private async searchFAQ(faqSearchTerm: string): Promise<any> {
+    try {
+      console.log(`🔍 Recherche FAQ: ${faqSearchTerm}`);
+      
+      const results: any = {
+        faq: []
+      };
+
       if (faqSearchTerm && faqSearchTerm.trim()) {
         try {
           const faqResults = await this.supabaseService.searchFAQ(faqSearchTerm, 2);
@@ -769,12 +796,10 @@ ${this.getConversationStrategy()}`;
 
       return results;
     } catch (error) {
-      console.error('❌ Erreur lors de la recherche combinée:', error);
+      console.error('❌ Erreur lors de la recherche FAQ:', error);
       return {
-        activities: [],
-        practices: [],
         faq: [],
-        error: 'Erreur lors de la recherche'
+        error: 'Erreur lors de la recherche FAQ'
       };
     }
   }
@@ -818,8 +843,8 @@ ${this.getConversationStrategy()}`;
     const activities: ExtractedRecommandations['activities'] = [];
     const practices: ExtractedRecommandations['practices'] = [];
 
-    // Pour l'outil activities_and_practices_and_faq, extraire depuis les résultats
-    if (toolId === 'activities_and_practices_and_faq' && response) {
+    // Pour l'outil activities_and_practices, extraire depuis les résultats
+    if (toolId === 'activities_and_practices' && response) {
       // Extraire les activités
       if (response.activities && Array.isArray(response.activities)) {
         response.activities.forEach((result: any) => {
@@ -837,6 +862,11 @@ ${this.getConversationStrategy()}`;
           }
         });
       }
+    }
+
+    // Pour l'outil faq_search, pas d'extraction de recommandations (seulement des informations)
+    if (toolId === 'faq_search') {
+      console.log(`🔧 Outil FAQ - pas d'extraction de recommandations`);
     }
 
     console.log(`🔧 Extraction terminée: ${activities.length} activités, ${practices.length} pratiques`);
