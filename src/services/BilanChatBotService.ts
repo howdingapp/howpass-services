@@ -62,10 +62,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
     // Contexte de la dernière recommandation Howana
     contextInfo += this.getPreviousConversationContext(context as any);
 
-    // Règles de comportement et d'information spécifiques
-    contextInfo += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
-    contextInfo += this.getConfidentBehaviorRules(context as any);
-
     return contextInfo;
   }
 

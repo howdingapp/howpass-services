@@ -70,10 +70,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     // Contexte de la dernière recommandation Howana
     contextInfo += this.getPreviousConversationContext(context);
 
-    // Règles de comportement et d'information spécifiques
-    contextInfo += `\n\nRègles de comportement et d'information spécifiques à respecter :`;
-    contextInfo += this.getConfidentBehaviorRules(context);
-
     return contextInfo;
   }
 
@@ -209,18 +205,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
     return previousContext;
   }
-
-  /**
-   * Règles de comportement confident
-   */
-  protected getConfidentBehaviorRules(context: HowanaRecommandationContext & HowanaContext): string {
-    if (!context.lastHowanaRecommandation && !context.lastBilan) return '';
-
-    return `\n0. [CONFIANT] Comportement de confident: Tu es comme un confident qui retrouve quelqu'un qu'il connaît bien. 
-    Tu DOIS TOUJOURS faire référence aux conversations précédentes, demander des nouvelles, et montrer que tu te souviens 
-    de vos échanges. Cette règle est PRIORITAIRE sur toutes les autres.`;
-  }
-
 
   private analyzeBilanScores(lastBilan: any): {
     availableScores: string[];
