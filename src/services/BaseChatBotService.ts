@@ -577,7 +577,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           
           const rulesArray: string[] = [];
           sortedRules.forEach((rule) => {
-            rulesArray.push(`[${rule.type.toUpperCase()}] ${rule.name}: ${rule.description}`);
+            rulesArray.push(`${rule.description}`);
           });
           return rulesArray;
         }
