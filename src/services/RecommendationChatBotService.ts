@@ -237,28 +237,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       }
     });
 
-    // Analyser les scores secondaires
-    const secondaryScores = [
-      { key: 'scorePeau', label: 'score peau', score: lastBilan.scores.secondaires.scorePeau },
-      { key: 'scoreConcentration', label: 'score concentration', score: lastBilan.scores.secondaires.scoreConcentration },
-      { key: 'scoreMemoire', label: 'score mémoire', score: lastBilan.scores.secondaires.scoreMemoire },
-      { key: 'scoreCheveux', label: 'score cheveux', score: lastBilan.scores.secondaires.scoreCheveux },
-      { key: 'scoreOngles', label: 'score ongles', score: lastBilan.scores.secondaires.scoreOngles },
-      { key: 'scoreDigestion', label: 'score digestion', score: lastBilan.scores.secondaires.scoreDigestion }
-    ];
-
-    secondaryScores.forEach(({ label, score }) => {
-      if (score === -1) {
-        missingScores.push(label);
-      } else {
-        availableScores.push(label);
-        if (score <= 4) {
-          lowScores.push(label);
-          priorityAreas.push(label);
-        }
-      }
-    });
-
     return {
       availableScores,
       missingScores,

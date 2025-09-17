@@ -67,16 +67,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
   }
 
   /**
-   * Informations contextuelles du bilan
-   */
-  protected override getBilanContextInfo(context: any): string {
-    if (!context.bilanData) return '';
-
-    return `\n\nL'utilisateur vient de remplir son bilan de bien-être. 
-    Aide-le à comprendre ses résultats, identifie les points d'amélioration et propose des recommandations personnalisées.`;
-  }
-
-  /**
    * Informations contextuelles des conversations précédentes
    */
   protected override getPreviousConversationContext(context: any): string {
