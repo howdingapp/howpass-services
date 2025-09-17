@@ -359,6 +359,13 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    * @param context Le contexte de conversation contenant les métadonnées
    * @returns Un objet contenant les IDs et noms contraints pour les activités et pratiques
    */
+  private cleanNameForSchema(name: string): string {
+    return name
+      .replace(/[^\w\s\-]/g, '') // Supprime tous les caractères spéciaux sauf lettres, chiffres, espaces et tirets
+      .replace(/\s+/g, ' ') // Remplace les espaces multiples par un seul espace
+      .trim(); // Supprime les espaces en début/fin
+  }
+
   protected getActivitiesAndPracticesConstraints(context: HowanaContext): {
     availableActivityIds: string[];
     availablePracticeIds: string[];
@@ -372,11 +379,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     // Extraire les IDs et noms disponibles pour créer les enums
     const availableActivities = recommendations.activities?.map((item: any) => ({
       id: item.id,
-      name: item.title || item.name || 'Activité sans nom'
+      name: this.cleanNameForSchema(item.title || item.name || 'Activité sans nom')
     })) || [];
     const availablePractices = recommendations.practices?.map((item: any) => ({
       id: item.id,
-      name: item.title || item.name || 'Pratique sans nom'
+      name: this.cleanNameForSchema(item.title || item.name || 'Pratique sans nom')
     })) || [];
     
     const availableActivityIds = availableActivities.map((item: any) => item.id);
