@@ -57,7 +57,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
     let contextInfo = '';
 
     // Contexte du bilan
-    contextInfo += this.getBilanAnalysis(context);
+    contextInfo += this.getDetailedBilanInfo(context);
     
     contextInfo += this.getLastBilanContextInfo(context);
 
@@ -65,147 +65,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
     contextInfo += this.getPreviousConversationContext(context as any);
 
     return contextInfo;
-  }
-
-  /**
-   * Analyse des scores du bilan
-   */
-  protected getBilanAnalysis(context: HowanaBilanContext & HowanaContext): string {
-    if (!context.bilanData) return '';
-
-    const analysis = this.analyzeBilanScores(context.bilanData);
-    let analysisInfo = '';
-
-    if (analysis.availableScores.length > 0) {
-      analysisInfo += `\n\nScores disponibles: ${analysis.availableScores.join(', ')}. Utilise ces informations pour contextualiser tes recommandations.`;
-    }
-    
-    if (analysis.missingScores.length > 0) {
-      analysisInfo += `\n\nInformations manquantes: ${analysis.missingScores.join(', ')}. Pose des questions pour compléter ces informations et mieux comprendre l'utilisateur.`;
-    }
-
-    if (analysis.priorityAreas.length > 0) {
-      analysisInfo += `\n\nZones prioritaires d'amélioration: ${analysis.priorityAreas.join(', ')}. Concentre-toi sur ces aspects dans tes recommandations.`;
-    }
-
-    analysisInfo += `\n\nUtilise ces informations pour contextualiser tes recommandations et adapter tes suggestions selon l'historique de l'utilisateur.`;
-
-    return analysisInfo;
-  }
-
-  private analyzeBilanScores(bilanData: HowanaBilanContext["bilanData"]): {
-    availableScores: string[];
-    missingScores: string[];
-    lowScores: string[];
-    priorityAreas: string[];
-  } {
-    const availableScores: string[] = [];
-    const missingScores: string[] = [];
-    const lowScores: string[] = [];
-    const priorityAreas: string[] = [];
-
-    // Analyser les scores principaux
-    const principalScores = [
-      { key: 'niveauEnergie', label: 'niveau d\'énergie', score: bilanData.scores.principaux.niveauEnergie },
-      { key: 'qualiteSommeil', label: 'qualité du sommeil', score: bilanData.scores.principaux.qualiteSommeil },
-      { key: 'confortPhysique', label: 'confort physique', score: bilanData.scores.principaux.confortPhysique },
-      { key: 'equilibreEmotionnel', label: 'équilibre émotionnel', score: bilanData.scores.principaux.equilibreEmotionnel }
-    ];
-
-    principalScores.forEach(({ label, score }) => {
-      if (score === -1) {
-        missingScores.push(label);
-      } else {
-        availableScores.push(label);
-        if (score <= 4) {
-          lowScores.push(label);
-          priorityAreas.push(label);
-        }
-      }
-    });
-
-    // Analyser les scores secondaires de manière dynamique
-    if (bilanData.scores.secondaires) {
-      Object.values(bilanData.scores.secondaires).forEach((scoreData: any) => {
-        if (scoreData && typeof scoreData === 'object' && scoreData.label && typeof scoreData.score === 'number') {
-          const label = scoreData.label;
-          const score = scoreData.score;
-          
-          if (score === -1) {
-            missingScores.push(label);
-          } else {
-            availableScores.push(label);
-            if (score <= 4) {
-              lowScores.push(label);
-              priorityAreas.push(label);
-            }
-          }
-        }
-      });
-    }
-
-    return {
-      availableScores,
-      missingScores,
-      lowScores,
-      priorityAreas
-    };
-  }
-
-  /**
-   * Informations contextuelles des conversations précédentes
-   */
-  protected override getPreviousConversationContext(context: any): string {
-    if (!context.lastHowanaRecommandation) return '';
-
-    let previousContext = `\n\nCONTEXTE DES DERNIERS ECHANGES:`;
-    
-    if (context.lastHowanaRecommandation.userProfile) {
-      const profile = context.lastHowanaRecommandation.userProfile;
-      if (profile.supposedEmotionalState) {
-        previousContext += `\n- État émotionnel précédent: ${profile.supposedEmotionalState}`;
-      }
-      if (profile.supposedCurrentNeeds && profile.supposedCurrentNeeds.length > 0) {
-        previousContext += `\n- Besoins précédents: ${profile.supposedCurrentNeeds.join(', ')}`;
-      }
-      if (profile.supposedPreferences && profile.supposedPreferences.length > 0) {
-        previousContext += `\n- Préférences précédentes: ${profile.supposedPreferences.join(', ')}`;
-      }
-      if (profile.supposedConstraints && profile.supposedConstraints.length > 0) {
-        previousContext += `\n- Contraintes précédentes: ${profile.supposedConstraints.join(', ')}`;
-      }
-    }
-
-    if (context.lastHowanaRecommandation.recommendedCategories && context.lastHowanaRecommandation.recommendedCategories.length > 0) {
-      const categories = context.lastHowanaRecommandation.recommendedCategories.map((cat: any) => cat.name).join(', ');
-      previousContext += `\n- Pratiques recommandées précédemment: ${categories}`;
-    }
-
-    if (context.lastHowanaRecommandation.recommendedActivities && context.lastHowanaRecommandation.recommendedActivities.length > 0) {
-      const activities = context.lastHowanaRecommandation.recommendedActivities.map((act: any) => act.name).join(', ');
-      previousContext += `\n- Activités recommandées précédemment: ${activities}`;
-    }
-
-    if (context.lastHowanaRecommandation.activitiesReasons) {
-      previousContext += `\n- Raisons des activités précédentes: ${context.lastHowanaRecommandation.activitiesReasons}`;
-    }
-
-    if (context.lastHowanaRecommandation.practicesReasons) {
-      previousContext += `\n- Raisons des pratiques précédentes: ${context.lastHowanaRecommandation.practicesReasons}`;
-    }
-
-    if (context.lastHowanaRecommandation.importanteKnowledge && context.lastHowanaRecommandation.importanteKnowledge.length > 0) {
-      previousContext += `\n- Connaissances importantes précédentes: ${context.lastHowanaRecommandation.importanteKnowledge.join(', ')}`;
-    }
-
-    if (context.lastHowanaRecommandation.top1Recommandation) {
-      const top1 = context.lastHowanaRecommandation.top1Recommandation;
-      previousContext += `\n- Recommandation prioritaire précédente: ${top1.name} (${top1.type === 'activity' ? 'activité' : 'pratique'}) - ${top1.reason}`;
-    }
-
-    previousContext += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions. Évite de répéter exactement les mêmes suggestions.`;
-
-    return previousContext;
   }
 
   /**
@@ -223,36 +82,10 @@ export class BilanChatBotService extends RecommendationChatBotService {
     if (context.bilanData.douleurs) {
       bilanInfo += `\n- Douleurs: ${context.bilanData.douleurs}`;
     }
-    if (context.bilanData.notesPersonnelles) {
-      bilanInfo += `\n- Notes personnelles: ${context.bilanData.notesPersonnelles}`;
-    }
     
-    bilanInfo += `\n\nNote: Les scores vont de 1 (très déséquilibré) à 9 (très équilibré). Utilise ces informations pour adapter tes recommandations.
-    
-    DÉCOUVERTE DE CATÉGORIES PERSONNALISÉES:
-    - Pose des questions pour identifier d'autres aspects du bien-être importants pour l'utilisateur
-    - Demande des scores de 1 à 9 pour ces nouvelles catégories
-    - Exemples: relations sociales, créativité, spiritualité, équilibre travail-vie, etc.
-    - Ces informations enrichiront le bilan et permettront des recommandations plus personnalisées.`;
-
     return bilanInfo;
-  }
-
-  /**
-   * Règles contextuelles spécifiques aux bilans
-   */
-  protected getBilanSpecificRules(): string {
-    return `
-    - Analyse les données du bilan pour comprendre l'état actuel de l'utilisateur
-    - Identifie les points d'amélioration et les forces
-    - Propose des activités et pratiques adaptées aux scores du bilan
-    - Accompagne l'utilisateur dans la compréhension de ses résultats
-    - DÉCOUVRE DES SCORES PERSONNALISÉS: Pose des questions pour identifier d'autres aspects du bien-être non couverts par le bilan standard
-    - Demande des scores de 1 à 9 pour ces nouvelles catégories (1 = très déséquilibré, 9 = très équilibré)
-    - IMPORTANT: L'échange doit se limiter à environ 10 questions maximum
-    - Chaque réponse doit impérativement contenir une question pour maintenir l'engagement`;
-  }
   
+  }
 
   protected override getSummaryOutputSchema(context: HowanaContext): any {
     const constraints = this.getActivitiesAndPracticesConstraints(context);
@@ -336,41 +169,13 @@ export class BilanChatBotService extends RecommendationChatBotService {
 
   protected override buildFirstUserPrompt(_context: HowanaContext): string {
     const context: HowanaBilanContext & HowanaContext = _context as HowanaBilanContext & HowanaContext;
-    
-    let prompt = `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans l'analyse des bilans de bien-être.
-    
-    Indique que tu es là pour l'aider à comprendre son bilan, identifier les points d'amélioration et lui proposer des recommandations personnalisées.`;
-
-    // Vérifier s'il y a des informations de conversations précédentes
     const hasPreviousContext = context.lastHowanaRecommandation || context.bilanData;
     
-    if (hasPreviousContext) {
-      prompt += `\n\nIMPORTANT - COMPORTEMENT DE CONFIANT:
-      Tu es comme un confident qui retrouve quelqu'un qu'il connaît bien. Tu DOIS absolument:
-      - Demander des nouvelles de manière chaleureuse et personnelle
-      - Faire référence aux conversations précédentes de manière naturelle
-      - Montrer que tu te souviens de vos échanges précédents
-      - Adopter un ton de confident qui s'intéresse sincèrement à l'évolution de la personne
-      - Ne jamais ignorer ou omettre ces éléments contextuels`;
-    }
+    let prompt = hasPreviousContext 
+      ? `Dis bonjour et fais référence au contexte précédent pour personnaliser ta première réponse.`
+      : `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans l'analyse des bilans de bien-être. Indique que tu es là pour l'aider à comprendre son bilan et identifier les points d'amélioration.`;
 
-    if (context.bilanData) {
-      prompt += `\n\nTu as accès à son bilan de bien-être. Utilise ces informations pour:
-      - Faire référence à ses scores de manière bienveillante et confidente
-      - Montrer que tu connais déjà son état de bien-être
-      - Adapter ton approche selon les résultats de son bilan
-      - Poser des questions ciblées basées sur ses scores`;
-    }
-
-    if (context.lastHowanaRecommandation) {
-      prompt += `\n\nTu as également accès à nos échanges précédents. Utilise ces informations pour:
-      - Demander des nouvelles des recommandations précédentes
-      - Montrer que tu te souviens de ses préférences et besoins passés
-      - Adapter ton approche selon l'évolution de sa situation
-      - Créer une continuité dans votre relation de confiance`;
-    }
-
-    prompt += `\n\nCommence par un accueil chaleureux de confident qui demande des nouvelles, fait référence à vos échanges précédents (si disponibles) et pose une première question engageante pour l'accompagner dans l'analyse de son bilan.`;
+    prompt += `\n\nCommence par un accueil chaleureux et pose une question engageante pour l'accompagner dans l'analyse de son bilan.`;
 
     return prompt;
   }
@@ -379,6 +184,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
    * Détermine le schéma de sortie approprié selon l'outil utilisé
    */
    protected override getSchemaByUsedTool(_toolName: string, context: HowanaContext, forceSummaryToolCall:boolean = false): ChatBotOutputSchema {
-        return this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+      return this.getAddMessageOutputSchema(context, forceSummaryToolCall);
    }
 }
