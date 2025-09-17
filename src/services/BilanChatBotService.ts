@@ -210,6 +210,10 @@ export class BilanChatBotService extends RecommendationChatBotService {
                   items: {
                     type: "object",
                     properties: {
+                      categoryKey: {
+                        type: "string",
+                        description: "Identifiant unique de la catégorie personnalisée"
+                      },
                       categoryName: {
                         type: "string",
                         description: "Nom de la catégorie personnalisée identifiée"
@@ -223,10 +227,10 @@ export class BilanChatBotService extends RecommendationChatBotService {
                         description: "Message destiné à l'utilisateur décrivant cette catégorie et pourquoi elle est importante pour vous (formulé en vous parlant directement l'un a l'autre)"
                       }
                     },
-                    required: ["categoryName", "score", "description"],
+                    required: ["categoryKey", "categoryName", "score", "description"],
                     additionalProperties: false
                   },
-                  description: "Catégories personnalisées identifiées lors de votre conversation avec leurs scores"
+                  description: "Catégories personnalisées identifiées lors de votre conversation avec leurs scores. Soit le score a été explicitement donné par l'utilisateur, soit analysé à partir de l'échange"
                 }
               },
               required: ["scoresAnalysis", "customCategories"],

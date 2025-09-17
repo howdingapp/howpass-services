@@ -188,7 +188,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     userMessage: string, 
     forceSummaryToolCall:boolean = false, 
     toolsAllowed: boolean = true, 
-    recursionAllowed: boolean = false, 
+    recursionAllowed: boolean = true, 
     toolResults?: Array<{ tool_call_id: string; tool_name?: string; output: any }>,
     useSchemaWithToolResults: boolean = true,
   ): Promise<T> {
