@@ -183,7 +183,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer une réponse IA basée sur le contexte de la conversation
    */
-  protected async generateAIResponse(context: HowanaContext, userMessage: string, forceSummaryToolCall:boolean = false): Promise<T> {
+  protected async generateAIResponse(context: HowanaContext, userMessage: string, forceSummaryToolCall:boolean = false, toolsAllowed: boolean = true, recursionAllowed: boolean = false, toolResults?: Array<{ tool_call_id: string; tool_name?: string; output: any }>): Promise<T> {
     try {
       console.log('🔍 Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
       console.log('Dernier message de l\'utilisateur:', userMessage);
@@ -199,13 +199,24 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       console.log('🔍 Utilisation de l\'API responses avec callID:', previousCallId);
       
       const outputSchema = this.getAddMessageOutputSchema(context, forceSummaryToolCall);
-      const toolsDescription = this.getToolsDescription(context, forceSummaryToolCall);
-      const toolUseGuidance = this.buildToolUseSystemPrompt(context);
+      const toolsDescription = toolsAllowed ? this.getToolsDescription(context, forceSummaryToolCall) : null;
+      const toolUseGuidance = toolsAllowed ? this.buildToolUseSystemPrompt(context) : null;
       
-      const result = await this.openai.responses.create({
-        model: this.AI_MODEL,
-        previous_response_id: previousCallId,
-        input: [
+      // Déterminer les paramètres d'appel à l'IA selon le contexte
+      let apiCallParams: any;
+      
+      if (toolResults && toolResults.length > 0) {
+        // Enchaînement : utiliser uniquement les résultats d'outils
+        const toolResultInputs = this.transformToolResultsToMessage(toolResults);
+        apiCallParams = {
+          model: this.AI_MODEL,
+          previous_response_id: previousCallId,
+          input: toolResultInputs,
+          ...(outputSchema && { text: outputSchema })
+        };
+      } else {
+        // Comportement normal : message utilisateur + consignes système + outils
+        const baseInputs = [
           {
             role: "user",
             content: [{ type: "input_text", text: userMessage }],
@@ -218,58 +229,31 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
                 status: "completed",
               } as any]
             : []),
-        ],
-        ...(outputSchema && { text: outputSchema }),
-        ...(toolsDescription && { tools: toolsDescription.tools })
-      });
+        ];
+
+        apiCallParams = {
+          model: this.AI_MODEL,
+          previous_response_id: previousCallId,
+          input: baseInputs,
+          ...(outputSchema && { text: outputSchema }),
+          ...(toolsDescription && { tools: toolsDescription.tools })
+        };
+      }
+
+      // Appel unifié à l'API
+      const result = await this.openai.responses.create(apiCallParams);
       const messageId = result.id;
 
-      // Vérifier si l'IA demande l'exécution d'un outil
-      const toolCalls = result.output.filter(output => output.type === "function_call");
+      // Vérifier si l'IA demande l'exécution d'un outil (seulement si les outils sont autorisés)
+      const toolCalls = toolsAllowed ? result.output.filter(output => output.type === "function_call") : [];
       let extractedData:ExtractedRecommandations|undefined = undefined;
 
-      if (toolCalls.length > 0) {
+      if (toolCalls.length > 0 && toolsAllowed) {
         console.log('🔧 Outils demandés par l\'IA:', toolCalls);
 
-        // Exécuter chaque outil demandé
-        const toolResults = [];
-        for (const toolCall of toolCalls) {
-          if (toolCall.type === "function_call") {
-            console.log("Find tool to call: ", toolCall.id, toolCall.call_id, toolCall.name);
-            context.metadata['requestedTools'] = [...(context.metadata['requestedTools'] ?? []), toolCall.name];
-        
-            try {
-              // Extraire les arguments de l'appel d'outil
-              let toolArgs = {};
-              if (toolCall.arguments && typeof toolCall.arguments === 'string') {
-                try {
-                  toolArgs = JSON.parse(toolCall.arguments);
-                } catch (parseError) {
-                  console.warn(`⚠️ Erreur de parsing des arguments de l'outil ${toolCall.name}:`, parseError);
-                  toolArgs = {};
-                }
-              }
-              
-              const toolResult = await this.callTool(toolCall.name, toolArgs, context);
-              // Extraire les activités et pratiques du résultat de l'outil
-              extractedData = this.extractFromToolResult(toolCall.call_id, toolCall.name, toolResult);
-              
-              // Stocker les données extraites dans le résultat pour utilisation ultérieure
-              toolResults.push({
-                tool_call_id: toolCall.call_id,
-                tool_name: toolCall.name, // Stocker le nom de l'outil pour faciliter l'accès
-                output: toolResult
-              });
-            } catch (toolError) {
-              console.error(`❌ Erreur lors de l'exécution de l'outil ${toolCall.name}:`, toolError);
-              toolResults.push({
-                tool_call_id: toolCall.call_id,
-                tool_name: toolCall.name,
-                output: `Erreur lors de l'exécution de l'outil: ${toolError instanceof Error ? toolError.message : 'Erreur inconnue'}`
-              });
-            }
-          }
-        }
+        // Exécuter les outils et extraire les résultats
+        const { toolResults, extractedData: extractedDataFromTools } = await this.executeToolsAndExtractResults(toolCalls, context);
+        extractedData = extractedDataFromTools;
 
         // Si des outils ont été exécutés, faire un nouvel appel à l'IA avec les résultats
         if (toolResults.length > 0) {
@@ -287,150 +271,42 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             console.log("validToolResults", JSON.stringify(validToolResults))
 
           if (validToolResults.length > 0) {
-            // Générer une nouvelle réponse IA avec les résultats des outils
-            const finalResponse = await this.generateIAResponseAfterTools(messageId, validToolResults, context);
+            // Mettre à jour le contexte avec le nouveau messageId
+            context.previousCallId = messageId;
+            
+            // Appel récursif avec les résultats des outils
+            const finalResponse = (
+              await this.generateAIResponse(
+                context, 
+                "", 
+                false, 
+                recursionAllowed && toolsAllowed, 
+                recursionAllowed, 
+                validToolResults
+              )
+            );
             
             console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
             console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
 
-            return { ...finalResponse, extractedData, updatedContext: context } as T;
+            return {
+              ...finalResponse,
+              response: finalResponse.response,
+              messageId: finalResponse.messageId,
+              extractedData: this.mergeExtractedData(extractedData, finalResponse.extractedData),
+              updatedContext: finalResponse.updatedContext
+            } as T;
+
           }
         }
       }
 
-      // Si aucun outil n'a été exécuté, traiter la réponse normale
-      const messageOutput = result.output.find(output => output.type === "message");
-      
-      if (!messageOutput) {
-        throw new Error('Aucun message de réponse trouvé dans la sortie de l\'API');
-      }
-
-      // Extraire le texte de la réponse
-      let resultText = "Je n'ai pas pu générer de réponse.";
-      if (messageOutput?.content?.[0]) {
-        const content = messageOutput.content[0];
-        if ('text' in content) {
-          resultText = content.text;
-        }
-      }
-
-      if (!resultText || resultText === "Je n'ai pas pu générer de réponse.") {
-        throw new Error('Aucune réponse générée par l\'API responses');
-      }
-
-      // Parser le JSON de la réponse (contient forcément le champ response)
-      let parsedResponse: any;
-      try {
-        parsedResponse = JSON.parse(resultText);
-        if (!parsedResponse.response) {
-          throw new Error('La réponse JSON ne contient pas le champ "response" requis');
-        }
-      } catch (parseError) {
-        throw new Error(`Erreur de parsing JSON de la réponse IA: ${parseError instanceof Error ? parseError.message : 'Format JSON invalide'}`);
-      }
-
-      console.log('🔍 Réponse IA via API responses:', parsedResponse);
-      console.log('🔍 OutputID OpenAI:', messageId);
-
-      // Retourner la réponse parsée avec le messageId
-      return {
-        ...parsedResponse,
-        extractedData,
-        messageId,
-        updatedContext: context,
-      } as T;
+      // Traitement unifié de la réponse (avec ou sans outils exécutés)
+      return this.processAIResponse(result, messageId, extractedData, context);
 
     } catch (error) {
       console.error('❌ Erreur lors de la génération de la réponse IA:', error);
       throw new Error(`Erreur lors de la génération de la réponse IA: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
-    }
-  }
-
-
-  /**
-   * Générer une réponse IA après l'exécution des outils
-   */
-  protected async generateIAResponseAfterTools(
-    previousResponseId: string, 
-    toolResults: Array<{ tool_call_id: string; tool_name?: string; output: any }>, 
-    context: HowanaContext
-  ): Promise<T> {
-    try {
-      console.log('🔧 Génération d\'une réponse IA avec les résultats des outils');
-
-      // Déterminer le schéma de sortie approprié selon l'outil utilisé
-      const firstToolName = toolResults.length > 0 ? 
-        (toolResults[0]?.tool_name || this.extractToolNameFromCallId(toolResults[0]?.tool_call_id || '')) : 
-        null;
-      const outputSchema = firstToolName ? this.getSchemaByUsedTool(firstToolName, context) : this.getAddMessageOutputSchema(context);
-
-      console.log(`🔧 Soumission des tool_outputs pour: ${firstToolName || 'inconnu'}`);
-
-      // Préparer les tool_outputs dans le format attendu par l'API Responses
-      const toolOutputsPayload = toolResults
-        .filter(r => !!r.tool_call_id)
-        .map(r => ({
-          tool_call_id: r.tool_call_id,
-          output: typeof r.output === 'string' ? r.output : JSON.stringify(r.output)
-        }));
-
-      if (!toolOutputsPayload.length) {
-        throw new Error('Aucun tool_output valide à soumettre');
-      }
-
-      // Construire la liste d'inputs avec les sorties des outils
-      const inputList = toolResults
-        .filter(r => !!r.tool_call_id)
-        .map(r => ({
-          type: "function_call_output",
-          call_id: r.tool_call_id,
-          output: typeof r.output === 'string' ? r.output : JSON.stringify(r.output)
-        }));
-
-      const result = await this.openai.responses.create({
-        model: this.AI_MODEL,
-        previous_response_id: previousResponseId,
-        input: inputList,
-        ...(outputSchema && { text: outputSchema })
-      } as any);
-
-      const messageId = result.id;
-      const messageOutput = result.output.find(output => output.type === "message");
-      
-      // Extraire le texte de la réponse
-      let resultText = "Je n'ai pas pu générer de réponse finale.";
-      if (messageOutput?.content?.[0]) {
-        const content = messageOutput.content[0];
-        if ('text' in content) {
-          resultText = content.text;
-        }
-      }
-
-      if (!resultText || resultText === "Je n'ai pas pu générer de réponse finale.") {
-        throw new Error('Aucune réponse finale générée par l\'API responses');
-      }
-
-      // Parser le JSON de la réponse finale (contient forcément le champ response)
-      let parsedResponse: any;
-      try {
-        parsedResponse = JSON.parse(resultText);
-        if (!parsedResponse.response) {
-          throw new Error('La réponse JSON finale ne contient pas le champ "response" requis');
-        }
-      } catch (parseError) {
-        throw new Error(`Erreur de parsing JSON de la réponse finale IA: ${parseError instanceof Error ? parseError.message : 'Format JSON invalide'}`);
-      }
-
-      console.log('🔍 Réponse finale IA générée avec succès:', parsedResponse);
-      return { 
-        ...parsedResponse,
-        messageId,
-        updatedContext: context,
-      } as T;
-
-    } catch (error) {
-      console.error('❌ Erreur lors de la génération de la réponse finale IA:', error);
-      throw new Error(`Erreur lors de la génération de la réponse finale IA: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
     }
   }
 
@@ -805,6 +681,173 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       console.warn('⚠️ Impossible d\'extraire le nom de l\'outil depuis l\'ID:', toolCallId, error);
       return null;
     }
+  }
+
+  /**
+   * Transforme les résultats d'outils en format de message pour l'API OpenAI
+   * @param toolResults Résultats des outils à transformer
+   * @returns Liste d'inputs formatés pour l'API responses
+   */
+  protected transformToolResultsToMessage(toolResults: Array<{ tool_call_id: string; tool_name?: string; output: any }>): Array<{ type: "function_call_output"; call_id: string; output: string }> {
+    return toolResults
+      .filter(r => !!r.tool_call_id)
+      .map(r => ({
+        type: "function_call_output" as const,
+        call_id: r.tool_call_id,
+        output: typeof r.output === 'string' ? r.output : JSON.stringify(r.output)
+      }));
+  }
+
+  /**
+   * Fusionne les données extraites en évitant les doublons basés sur l'ID
+   * @param extractedData1 Première source de données extraites
+   * @param extractedData2 Deuxième source de données extraites
+   * @returns Données extraites fusionnées sans doublons
+   */
+  protected mergeExtractedData(
+    extractedData1: ExtractedRecommandations | undefined,
+    extractedData2: ExtractedRecommandations | undefined
+  ): ExtractedRecommandations {
+    const mergeItems = (items1: any[], items2: any[]) => {
+      const merged = [...items1];
+      const existingIds = new Set(items1.map(item => item.id));
+      
+      items2.forEach(item => {
+        if (!existingIds.has(item.id)) {
+          merged.push(item);
+        }
+      });
+      
+      return merged;
+    };
+
+    return {
+      activities: mergeItems(
+        extractedData1?.activities ?? [],
+        extractedData2?.activities ?? []
+      ),
+      practices: mergeItems(
+        extractedData1?.practices ?? [],
+        extractedData2?.practices ?? []
+      )
+    };
+  }
+
+  /**
+   * Exécute les outils demandés et extrait les résultats
+   * @param toolCalls Liste des appels d'outils à exécuter
+   * @param context Contexte de la conversation
+   * @returns Résultats des outils et données extraites
+   */
+  protected async executeToolsAndExtractResults(
+    toolCalls: any[],
+    context: HowanaContext
+  ): Promise<{
+    toolResults: Array<{ tool_call_id: string; tool_name: string; output: any }>;
+    extractedData: ExtractedRecommandations | undefined;
+  }> {
+    const toolResults = [];
+    let extractedData: ExtractedRecommandations | undefined = undefined;
+
+    for (const toolCall of toolCalls) {
+      if (toolCall.type === "function_call") {
+        console.log("Find tool to call: ", toolCall.id, toolCall.call_id, toolCall.name);
+        context.metadata['requestedTools'] = [...(context.metadata['requestedTools'] ?? []), toolCall.name];
+      
+        try {
+          // Extraire les arguments de l'appel d'outil
+          let toolArgs = {};
+          if (toolCall.arguments && typeof toolCall.arguments === 'string') {
+            try {
+              toolArgs = JSON.parse(toolCall.arguments);
+            } catch (parseError) {
+              console.warn(`⚠️ Erreur de parsing des arguments de l'outil ${toolCall.name}:`, parseError);
+              toolArgs = {};
+            }
+          }
+          
+          const toolResult = await this.callTool(toolCall.name, toolArgs, context);
+          
+          // Extraire les activités et pratiques du résultat de l'outil
+          const currentExtractedData = this.extractFromToolResult(toolCall.call_id, toolCall.name, toolResult);
+          
+          // Fusionner les données extraites
+          extractedData = this.mergeExtractedData(extractedData, currentExtractedData);
+          
+          // Stocker les données extraites dans le résultat pour utilisation ultérieure
+          toolResults.push({
+            tool_call_id: toolCall.call_id,
+            tool_name: toolCall.name,
+            output: toolResult
+          });
+        } catch (toolError) {
+          console.error(`❌ Erreur lors de l'exécution de l'outil ${toolCall.name}:`, toolError);
+          toolResults.push({
+            tool_call_id: toolCall.call_id,
+            tool_name: toolCall.name,
+            output: `Erreur lors de l'exécution de l'outil: ${toolError instanceof Error ? toolError.message : 'Erreur inconnue'}`
+          });
+        }
+      }
+    }
+
+    return { toolResults, extractedData };
+  }
+
+  /**
+   * Traitement unifié de la réponse IA
+   * @param result Résultat de l'API OpenAI
+   * @param messageId ID du message
+   * @param extractedData Données extraites des outils
+   * @param context Contexte de la conversation
+   * @returns Réponse IA formatée
+   */
+  protected processAIResponse(
+    result: any, 
+    messageId: string, 
+    extractedData: ExtractedRecommandations | undefined, 
+    context: HowanaContext
+  ): T {
+    const messageOutput = result.output.find((output: any) => output.type === "message");
+    
+    if (!messageOutput) {
+      throw new Error('Aucun message de réponse trouvé dans la sortie de l\'API');
+    }
+
+    // Extraire le texte de la réponse
+    let resultText = "Je n'ai pas pu générer de réponse.";
+    if (messageOutput?.content?.[0]) {
+      const content = messageOutput.content[0];
+      if ('text' in content) {
+        resultText = content.text;
+      }
+    }
+
+    if (!resultText || resultText === "Je n'ai pas pu générer de réponse.") {
+      throw new Error('Aucune réponse générée par l\'API responses');
+    }
+
+    // Parser le JSON de la réponse (contient forcément le champ response)
+    let parsedResponse: any;
+    try {
+      parsedResponse = JSON.parse(resultText);
+      if (!parsedResponse.response) {
+        throw new Error('La réponse JSON ne contient pas le champ "response" requis');
+      }
+    } catch (parseError) {
+      throw new Error(`Erreur de parsing JSON de la réponse IA: ${parseError instanceof Error ? parseError.message : 'Format JSON invalide'}`);
+    }
+
+    console.log('🔍 Réponse IA via API responses:', parsedResponse);
+    console.log('🔍 OutputID OpenAI:', messageId);
+
+    // Retourner la réponse parsée avec le messageId
+    return {
+      ...parsedResponse,
+      extractedData,
+      messageId,
+      updatedContext: context,
+    } as T;
   }
 
   /**
