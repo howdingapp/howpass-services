@@ -183,7 +183,15 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer une réponse IA basée sur le contexte de la conversation
    */
-  protected async generateAIResponse(context: HowanaContext, userMessage: string, forceSummaryToolCall:boolean = false, toolsAllowed: boolean = true, recursionAllowed: boolean = false, toolResults?: Array<{ tool_call_id: string; tool_name?: string; output: any }>): Promise<T> {
+  protected async generateAIResponse(
+    context: HowanaContext, 
+    userMessage: string, 
+    forceSummaryToolCall:boolean = false, 
+    toolsAllowed: boolean = true, 
+    recursionAllowed: boolean = false, 
+    toolResults?: Array<{ tool_call_id: string; tool_name?: string; output: any }>,
+    useSchemaWithToolResults: boolean = false,
+  ): Promise<T> {
     try {
       console.log('🔍 Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
       console.log('Dernier message de l\'utilisateur:', userMessage);
@@ -198,7 +206,17 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       // Utiliser exclusivement l'API responses pour référencer l'appel précédent
       console.log('🔍 Utilisation de l\'API responses avec callID:', previousCallId);
       
-      const outputSchema = this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+      // Déterminer le schéma de sortie approprié
+      let outputSchema: ChatBotOutputSchema;
+      if (useSchemaWithToolResults && toolResults && toolResults.length > 0) {
+        // Utiliser le schéma basé sur l'outil utilisé
+        const firstToolName = toolResults[0]?.tool_name || this.extractToolNameFromCallId(toolResults[0]?.tool_call_id || '');
+        outputSchema = firstToolName ? this.getSchemaByUsedTool(firstToolName, context) : this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+      } else {
+        // Utiliser le schéma par défaut
+        outputSchema = this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+      }
+      
       const toolsDescription = toolsAllowed ? this.getToolsDescription(context, forceSummaryToolCall) : null;
       const toolUseGuidance = toolsAllowed ? this.buildToolUseSystemPrompt(context) : null;
       
