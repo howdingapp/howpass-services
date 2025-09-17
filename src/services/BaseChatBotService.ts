@@ -190,7 +190,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     toolsAllowed: boolean = true, 
     recursionAllowed: boolean = false, 
     toolResults?: Array<{ tool_call_id: string; tool_name?: string; output: any }>,
-    useSchemaWithToolResults: boolean = false,
+    useSchemaWithToolResults: boolean = true,
   ): Promise<T> {
     try {
       console.log('🔍 Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
