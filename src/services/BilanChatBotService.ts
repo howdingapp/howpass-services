@@ -1,5 +1,6 @@
 import { RecommendationChatBotService } from './RecommendationChatBotService';
 import { HowanaBilanContext, HowanaContext } from '../types/repositories';
+import { ChatBotOutputSchema } from '../types';
 
 export class BilanChatBotService extends RecommendationChatBotService {
   
@@ -304,4 +305,10 @@ export class BilanChatBotService extends RecommendationChatBotService {
     Note: Les suggestions de réponses courtes (quickReplies) sont optionnelles et servent à faciliter l'interaction utilisateur.`;
   }
 
+   /**
+   * Détermine le schéma de sortie approprié selon l'outil utilisé
+   */
+   protected override getSchemaByUsedTool(_toolName: string, context: HowanaContext, forceSummaryToolCall:boolean = false): ChatBotOutputSchema {
+        return this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+   }
 }
