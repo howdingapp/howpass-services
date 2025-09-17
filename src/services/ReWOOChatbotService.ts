@@ -86,7 +86,7 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
    * Générer une réponse IA basée sur le contexte de la conversation
    * Redéfini pour gérer la logique toolsCallIn
    */
-  protected override async generateAIResponse(context: HowanaContext, userMessage: string, forceSummaryToolCall: boolean = false): Promise<IAMessageResponse> {
+  protected override async _generateAIResponse(context: HowanaContext, userMessage: string, forceSummaryToolCall: boolean = false): Promise<IAMessageResponse> {
     try {
       console.log('🔍 ReWOO: Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
       console.log('Dernier message de l\'utilisateur:', userMessage);
@@ -112,7 +112,7 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
         // Comportement normal - utiliser la méthode parente avec tools_allowed: false
         console.log('🔧 ReWOO: Utilisation du comportement normal (outils désactivés)');
         // Appeler la méthode parente avec tools_allowed: false
-        response = await super.generateAIResponse(context, userMessage, forceSummaryToolCall, false);
+        response = await super._generateAIResponse(context, userMessage, forceSummaryToolCall, false);
       }
 
       // Mise à jour unifiée du contexte après récupération de la réponse
@@ -163,7 +163,7 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
       const toolsDescription = this.getToolsDescription(context, false);
       if (!toolsDescription || toolsDescription.tools.length === 0) {
         console.log('⚠️ ReWOO: Aucun outil disponible, utilisation du comportement normal');
-        return await super.generateAIResponse(context, userMessage, false, false);
+        return await super._generateAIResponse(context, userMessage, false, false);
       }
 
       // Demander à l'IA de générer les meilleurs paramètres pour tous les outils
@@ -171,7 +171,7 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
       
       if (!optimalParams || optimalParams.length === 0) {
         console.log('⚠️ ReWOO: Aucun paramètre optimal généré, utilisation du comportement normal');
-        return await super.generateAIResponse(context, userMessage, false, false);
+        return await super._generateAIResponse(context, userMessage, false, false);
       }
 
       // Exécuter tous les outils en parallèle avec les paramètres optimaux
@@ -181,7 +181,7 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
       const enrichedUserMessage = this.buildEnrichedUserMessage(userMessage, toolResults);
 
       // Utiliser la méthode parente avec le message enrichi et les outils désactivés
-      const finalResponse = await super.generateAIResponse(context, enrichedUserMessage, false, false, false);
+      const finalResponse = await super._generateAIResponse(context, enrichedUserMessage, false, false, false);
       
       console.log('🔍 ReWOO: Réponse finale générée avec tous les outils:', finalResponse.response);
       

@@ -94,7 +94,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer une première réponse IA basée sur le contexte de la conversation
    */
-  protected async generateFirstResponse(context: HowanaContext): Promise<T> {
+  public async generateFirstResponse(context: HowanaContext): Promise<T> {
     try {
       console.log('🔍 Génération de la première réponse IA pour la conversation:', context.id);
 
@@ -183,7 +183,17 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer une réponse IA basée sur le contexte de la conversation
    */
-  protected async generateAIResponse(
+    public async generateAIResponse(
+      context: HowanaContext, 
+      userMessage: string,
+    ): Promise<T> {
+      return this._generateAIResponse(context, userMessage, false, true, false, undefined, true);
+  }
+
+  /**
+   * Générer une réponse IA basée sur le contexte de la conversation
+   */
+  protected async _generateAIResponse(
     context: HowanaContext, 
     userMessage: string, 
     forceSummaryToolCall:boolean = false, 
@@ -294,7 +304,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             
             // Appel récursif avec les résultats des outils
             const finalResponse = (
-              await this.generateAIResponse(
+              await this._generateAIResponse(
                 context, 
                 "", 
                 false, 
@@ -350,7 +360,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
         try {
           // Appeler generateIAResponse avec la demande explicite
-          recommendationResponse = await this.generateAIResponse(context, explicitRequest, true);
+          recommendationResponse = await this._generateAIResponse(context, explicitRequest, true);
           extractedData = recommendationResponse?.extractedData;
           console.log('🔧 Réponse IA avec recommandations générée (we will only use tool data):', recommendationResponse);
           

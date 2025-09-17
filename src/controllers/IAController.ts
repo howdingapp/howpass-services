@@ -207,7 +207,7 @@ export class IAController {
     const chatBotService = this.getChatBotService(context);
     
     // Générer la réponse IA
-    const aiResponse = await chatBotService['generateAIResponse'](context, taskData.userMessage);
+    const aiResponse = await chatBotService.generateAIResponse(context, taskData.userMessage);
     const updatedContext = aiResponse.updatedContext;
     
     // Utiliser le messageId d'OpenAI si disponible, sinon créer un messageId local
@@ -252,7 +252,7 @@ export class IAController {
     // Obtenir le service de chatbot approprié
     const chatBotService = this.getChatBotService(context);
     
-    const summary = await chatBotService['generateConversationSummary'](context);
+    const summary = await chatBotService.generateConversationSummary(context);
     
     // Récupérer les extractedData depuis la réponse du résumé si disponible
     const extractedData = summary.extractedData;
@@ -290,7 +290,7 @@ export class IAController {
     // Obtenir le service de chatbot approprié
     const chatBotService = this.getChatBotService(context);
     
-    const firstResponseResult = await chatBotService['generateFirstResponse'](context);
+    const firstResponseResult = await chatBotService.generateFirstResponse(context);
     
     // Mettre à jour le contexte avec les nouvelles informations
     const updatedContext = { ...context };
