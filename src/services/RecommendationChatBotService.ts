@@ -551,9 +551,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    */
   protected override getSchemaByUsedTool(toolName: string, context: HowanaContext, forceSummaryToolCall:boolean = false): ChatBotOutputSchema {
     switch (toolName) {
-      case 'activities_and_practices_and_faq':
-        // Schéma pour les réponses après utilisation de l'outil combiné
-        // Inclut les contraintes d'activités et pratiques comme dans le résumé
+      case 'activities_and_practices':
+        // Schéma pour les réponses après utilisation de l'outil de recherche d'activités et pratiques
         const constraints = this.getActivitiesAndPracticesConstraints(context);
         const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
 
@@ -568,7 +567,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         return {
           format: { 
             type: "json_schema",
-            name: "CombinedResponse",
+            name: "ActivitiesAndPracticesResponse",
             schema: {
               type: "object",
               properties: {
@@ -589,7 +588,81 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               },
               required: ["response", "quickReplies"],
               additionalProperties: false,
-              description: `Réponse après utilisation de l'outil combiné. Les quickReplies peuvent référencer les ${allAvailableIds.length} éléments disponibles dans le contexte.`
+              description: `Réponse après utilisation de l'outil activities_and_practices. Les quickReplies peuvent référencer les ${allAvailableIds.length} éléments disponibles dans le contexte.`
+            },
+            strict: true
+          }
+        };
+
+      case 'faq_search':
+        // Schéma pour les réponses après utilisation de l'outil FAQ
+        return {
+          format: { 
+            type: "json_schema",
+            name: "FAQResponse",
+            schema: {
+              type: "object",
+              properties: {
+                response: {
+                  type: "string",
+                  description: "Réponse principale de l'assistant Howana basée sur la FAQ. Maximum 30 mots."
+                },
+                quickReplies: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: { type: "string", enum: ["text"] },
+                      text: { type: "string", maxLength: 5 }
+                    },
+                    required: ["type", "text"],
+                    additionalProperties: false
+                  },
+                  minItems: 1,
+                  maxItems: 3,
+                  description: "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur."
+                }
+              },
+              required: ["response", "quickReplies"],
+              additionalProperties: false,
+              description: "Réponse après utilisation de l'outil faq_search."
+            },
+            strict: true
+          }
+        };
+
+      case 'last_user_activities':
+        // Schéma pour les réponses après utilisation de l'outil d'historique des activités
+        return {
+          format: { 
+            type: "json_schema",
+            name: "LastUserActivitiesResponse",
+            schema: {
+              type: "object",
+              properties: {
+                response: {
+                  type: "string",
+                  description: "Réponse principale de l'assistant Howana basée sur l'historique de l'utilisateur. Maximum 30 mots."
+                },
+                quickReplies: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: { type: "string", enum: ["text"] },
+                      text: { type: "string", maxLength: 5 }
+                    },
+                    required: ["type", "text"],
+                    additionalProperties: false
+                  },
+                  minItems: 1,
+                  maxItems: 3,
+                  description: "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur."
+                }
+              },
+              required: ["response", "quickReplies"],
+              additionalProperties: false,
+              description: "Réponse après utilisation de l'outil last_user_activities."
             },
             strict: true
           }
@@ -597,7 +670,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
       default:
         // Schéma par défaut pour les autres outils ou cas non spécifiés
-        return this.getAddMessageOutputSchema(context, false);
+        return this.getAddMessageOutputSchema(context, forceSummaryToolCall);
     }
   }
 
