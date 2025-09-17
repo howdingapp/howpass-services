@@ -57,13 +57,99 @@ export class BilanChatBotService extends RecommendationChatBotService {
     let contextInfo = '';
 
     // Contexte du bilan
-    contextInfo += this.getBilanContextInfo(context);
     contextInfo += this.getBilanAnalysis(context);
+    
+    contextInfo += this.getLastBilanContextInfo(context);
 
     // Contexte de la dernière recommandation Howana
     contextInfo += this.getPreviousConversationContext(context as any);
 
     return contextInfo;
+  }
+
+  /**
+   * Analyse des scores du bilan
+   */
+  protected getBilanAnalysis(context: HowanaBilanContext & HowanaContext): string {
+    if (!context.bilanData) return '';
+
+    const analysis = this.analyzeBilanScores(context.bilanData);
+    let analysisInfo = '';
+
+    if (analysis.availableScores.length > 0) {
+      analysisInfo += `\n\nScores disponibles: ${analysis.availableScores.join(', ')}. Utilise ces informations pour contextualiser tes recommandations.`;
+    }
+    
+    if (analysis.missingScores.length > 0) {
+      analysisInfo += `\n\nInformations manquantes: ${analysis.missingScores.join(', ')}. Pose des questions pour compléter ces informations et mieux comprendre l'utilisateur.`;
+    }
+
+    if (analysis.priorityAreas.length > 0) {
+      analysisInfo += `\n\nZones prioritaires d'amélioration: ${analysis.priorityAreas.join(', ')}. Concentre-toi sur ces aspects dans tes recommandations.`;
+    }
+
+    analysisInfo += `\n\nUtilise ces informations pour contextualiser tes recommandations et adapter tes suggestions selon l'historique de l'utilisateur.`;
+
+    return analysisInfo;
+  }
+
+  private analyzeBilanScores(bilanData: HowanaBilanContext["bilanData"]): {
+    availableScores: string[];
+    missingScores: string[];
+    lowScores: string[];
+    priorityAreas: string[];
+  } {
+    const availableScores: string[] = [];
+    const missingScores: string[] = [];
+    const lowScores: string[] = [];
+    const priorityAreas: string[] = [];
+
+    // Analyser les scores principaux
+    const principalScores = [
+      { key: 'niveauEnergie', label: 'niveau d\'énergie', score: bilanData.scores.principaux.niveauEnergie },
+      { key: 'qualiteSommeil', label: 'qualité du sommeil', score: bilanData.scores.principaux.qualiteSommeil },
+      { key: 'confortPhysique', label: 'confort physique', score: bilanData.scores.principaux.confortPhysique },
+      { key: 'equilibreEmotionnel', label: 'équilibre émotionnel', score: bilanData.scores.principaux.equilibreEmotionnel }
+    ];
+
+    principalScores.forEach(({ label, score }) => {
+      if (score === -1) {
+        missingScores.push(label);
+      } else {
+        availableScores.push(label);
+        if (score <= 4) {
+          lowScores.push(label);
+          priorityAreas.push(label);
+        }
+      }
+    });
+
+    // Analyser les scores secondaires de manière dynamique
+    if (bilanData.scores.secondaires) {
+      Object.values(bilanData.scores.secondaires).forEach((scoreData: any) => {
+        if (scoreData && typeof scoreData === 'object' && scoreData.label && typeof scoreData.score === 'number') {
+          const label = scoreData.label;
+          const score = scoreData.score;
+          
+          if (score === -1) {
+            missingScores.push(label);
+          } else {
+            availableScores.push(label);
+            if (score <= 4) {
+              lowScores.push(label);
+              priorityAreas.push(label);
+            }
+          }
+        }
+      });
+    }
+
+    return {
+      availableScores,
+      missingScores,
+      lowScores,
+      priorityAreas
+    };
   }
 
   /**
@@ -287,16 +373,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
     prompt += `\n\nCommence par un accueil chaleureux de confident qui demande des nouvelles, fait référence à vos échanges précédents (si disponibles) et pose une première question engageante pour l'accompagner dans l'analyse de son bilan.`;
 
     return prompt;
-  }
-
-  protected override buildSummarySystemPrompt(_context: HowanaContext): string {
-    return `Tu es un assistant spécialisé dans l'analyse de conversations de bilan de bien-être. 
-    Analyse la conversation et génère un résumé structuré qui permettra de comprendre l'état de l'utilisateur, 
-    l'analyse de son bilan et les recommandations proposées.
-    
-    IMPORTANT: Pour l'état émotionnel et les besoins, analyse-les du point de vue de l'utilisateur en utilisant des formulations comme "Je me sens...", "J'ai besoin de...", "Je ressens...". Cela facilitera le matching sémantique avec les activités et pratiques.
-    
-    Note: Les suggestions de réponses courtes (quickReplies) sont optionnelles et servent à faciliter l'interaction utilisateur.`;
   }
 
    /**

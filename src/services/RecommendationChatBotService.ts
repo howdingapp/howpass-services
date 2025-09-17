@@ -64,8 +64,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     let contextInfo = '';
 
     // Contexte du dernier bilan
-    contextInfo += this.getBilanContextInfo(context);
-    contextInfo += this.getBilanAnalysis(context);
+    contextInfo += this.getLastBilanContextInfo(context);
 
     // Contexte de la dernière recommandation Howana
     contextInfo += this.getPreviousConversationContext(context);
@@ -76,7 +75,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
   /**
    * Informations contextuelles du bilan
    */
-  protected getBilanContextInfo(context: HowanaRecommandationContext & HowanaContext): string {
+  protected getLastBilanContextInfo(context: HowanaRecommandationContext & HowanaContext): string {
     if (!context.lastBilan) return '';
 
     let bilanInfo = `\n\nCONTEXTE DU DERNIER BILAN COMPLET:`;
@@ -92,13 +91,16 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     bilanInfo += `\n${formatScore(context.lastBilan.scores.principaux.niveauEnergie, 'Niveau d\'énergie')}
     ${formatScore(context.lastBilan.scores.principaux.qualiteSommeil, 'Qualité du sommeil')}
     ${formatScore(context.lastBilan.scores.principaux.confortPhysique, 'Confort physique')}
-    ${formatScore(context.lastBilan.scores.principaux.equilibreEmotionnel, 'Équilibre émotionnel')}
-    ${formatScore(context.lastBilan.scores.secondaires.scorePeau, 'Score peau')}
-    ${formatScore(context.lastBilan.scores.secondaires.scoreConcentration, 'Score concentration')}
-    ${formatScore(context.lastBilan.scores.secondaires.scoreMemoire, 'Score mémoire')}
-    ${formatScore(context.lastBilan.scores.secondaires.scoreCheveux, 'Score cheveux')}
-    ${formatScore(context.lastBilan.scores.secondaires.scoreOngles, 'Score ongles')}
-    ${formatScore(context.lastBilan.scores.secondaires.scoreDigestion, 'Score digestion')}`;
+    ${formatScore(context.lastBilan.scores.principaux.equilibreEmotionnel, 'Équilibre émotionnel')}`;
+
+    // Afficher les scores secondaires de manière dynamique
+    if (context.lastBilan.scores.secondaires) {
+      Object.values(context.lastBilan.scores.secondaires).forEach((scoreData: any) => {
+        if (scoreData && typeof scoreData === 'object' && scoreData.label && typeof scoreData.score === 'number') {
+          bilanInfo += `\n    ${formatScore(scoreData.score, scoreData.label)}`;
+        }
+      });
+    }
 
     if (context.lastBilan.douleurs) {
       bilanInfo += `\n- Douleurs mentionnées: ${context.lastBilan.douleurs}`;
@@ -123,33 +125,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
     return bilanInfo;
   }
-
-  /**
-   * Analyse des scores du bilan
-   */
-  protected getBilanAnalysis(context: HowanaRecommandationContext & HowanaContext): string {
-    if (!context.lastBilan) return '';
-
-    const analysis = this.analyzeBilanScores(context.lastBilan);
-    let analysisInfo = '';
-
-    if (analysis.availableScores.length > 0) {
-      analysisInfo += `\n\nScores disponibles: ${analysis.availableScores.join(', ')}. Utilise ces informations pour contextualiser tes recommandations.`;
-    }
-    
-    if (analysis.missingScores.length > 0) {
-      analysisInfo += `\n\nInformations manquantes: ${analysis.missingScores.join(', ')}. Pose des questions pour compléter ces informations et mieux comprendre l'utilisateur.`;
-    }
-
-    if (analysis.priorityAreas.length > 0) {
-      analysisInfo += `\n\nZones prioritaires d'amélioration: ${analysis.priorityAreas.join(', ')}. Concentre-toi sur ces aspects dans tes recommandations.`;
-    }
-
-    analysisInfo += `\n\nUtilise ces informations pour contextualiser tes recommandations et adapter tes suggestions selon l'historique de l'utilisateur.`;
-
-    return analysisInfo;
-  }
-
+  
   /**
    * Informations contextuelles des conversations précédentes
    */
@@ -206,130 +182,22 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     return previousContext;
   }
 
-  private analyzeBilanScores(lastBilan: any): {
-    availableScores: string[];
-    missingScores: string[];
-    lowScores: string[];
-    priorityAreas: string[];
-  } {
-    const availableScores: string[] = [];
-    const missingScores: string[] = [];
-    const lowScores: string[] = [];
-    const priorityAreas: string[] = [];
-
-    // Analyser les scores principaux
-    const principalScores = [
-      { key: 'niveauEnergie', label: 'niveau d\'énergie', score: lastBilan.scores.principaux.niveauEnergie },
-      { key: 'qualiteSommeil', label: 'qualité du sommeil', score: lastBilan.scores.principaux.qualiteSommeil },
-      { key: 'confortPhysique', label: 'confort physique', score: lastBilan.scores.principaux.confortPhysique },
-      { key: 'equilibreEmotionnel', label: 'équilibre émotionnel', score: lastBilan.scores.principaux.equilibreEmotionnel }
-    ];
-
-    principalScores.forEach(({ label, score }) => {
-      if (score === -1) {
-        missingScores.push(label);
-      } else {
-        availableScores.push(label);
-        if (score <= 4) {
-          lowScores.push(label);
-          priorityAreas.push(label);
-        }
-      }
-    });
-
-    return {
-      availableScores,
-      missingScores,
-      lowScores,
-      priorityAreas
-    };
-  }
-
-
   protected buildFirstUserPrompt(_context: HowanaContext): string {
 
     const context:HowanaRecommandationContext & HowanaContext = _context as HowanaRecommandationContext & HowanaContext;
-    let prompt = `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans les recommandations personnalisées.
-    
-    Indique que tu es là pour l'aider à identifier ses besoins et lui recommander des activités et pratiques adaptées.`;
-
-    // Vérifier s'il y a des informations de conversations précédentes
     const hasPreviousContext = context.lastHowanaRecommandation || context.lastBilan;
     
-    if (hasPreviousContext) {
-      prompt += `\n\nIMPORTANT - RÉFÉRENCE AUX CONVERSATIONS PRÉCÉDENTES:
-      Tu as accès à des informations de conversations précédentes avec cet utilisateur. Tu DOIS absolument:
-      - Faire référence à ces informations de manière naturelle et confidente
-      - Montrer que tu te souviens de vos échanges précédents
-      - Utiliser ces informations pour personnaliser ton accueil
-      - Ne jamais ignorer ou omettre ces éléments contextuels`;
-    }
+    let prompt = hasPreviousContext 
+      ? `Dis bonjour et fais référence au contexte précédent (bilan ou recommandations) pour personnaliser ta première réponse.`
+      : `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans les recommandations personnalisées. Indique que tu es là pour l'aider à identifier ses besoins et lui recommander des activités et pratiques adaptées.`;
 
-    if (context.lastBilan) {
-      const analysis = this.analyzeBilanScores(context.lastBilan);
-      
-      prompt += `\n\nTu as accès à son dernier bilan complet. Utilise ces informations pour:`;
-      
-      if (analysis.availableScores.length > 0) {
-        prompt += `\n- Faire référence à ses scores disponibles (${analysis.availableScores.join(', ')}) de manière bienveillante et confidente`;
-        prompt += `\n- Proposer des améliorations ciblées selon ses points faibles`;
-        if (analysis.lowScores.length > 0) {
-          prompt += `\n- Suggérer des activités qui peuvent aider à améliorer ses scores les plus bas (${analysis.lowScores.join(', ')})`;
-        }
-      }
-      
-      if (analysis.missingScores.length > 0) {
-        prompt += `\n- Compléter les informations manquantes (${analysis.missingScores.join(', ')}) en posant des questions ciblées`;
-        prompt += `\n- Aider l'utilisateur à évaluer ces aspects pour un bilan plus complet`;
-      }
-      
-      prompt += `\n- Adapter tes recommandations selon son profil établi`;
-    }
-
-    if (context.lastHowanaRecommandation) {
-      prompt += `\n\nTu as également accès à nos échanges précédents. Utilise ces informations pour:
-      - Faire référence aux recommandations précédentes de manière naturelle
-      - Montrer que tu te souviens de ses préférences et besoins passés
-      - Adapter ton approche selon l'évolution de sa situation
-      - Éviter de répéter exactement les mêmes suggestions`;
-    }
-
-    prompt += `\n\nCommence par un accueil chaleureux et confident qui fait référence à vos échanges précédents (si disponibles) et pose une première question engageante pour comprendre ses objectifs et ses besoins actuels.`;
+    prompt += `\n\nCommence par un accueil chaleureux et pose une question engageante pour comprendre ses objectifs actuels.`;
 
     return prompt;
   }
 
   protected buildSummarySystemPrompt(_context: HowanaContext): string {
-
-    const context:HowanaRecommandationContext & HowanaContext = _context as HowanaRecommandationContext & HowanaContext;
-    let prompt = `Tu es un assistant spécialisé dans l'analyse de conversations de recommandation. 
-    Analyse la conversation et génère un résumé structuré qui permettra de comprendre les besoins de l'utilisateur et les recommandations proposées.`;
-
-    if (context.lastBilan) {
-      const analysis = this.analyzeBilanScores(context.lastBilan);
-      
-      prompt += `\n\nCONTEXTE DU BILAN PRÉCÉDENT:
-      Tu as accès au dernier bilan complet de l'utilisateur. Utilise ces informations pour:`;
-      
-      if (analysis.availableScores.length > 0) {
-        prompt += `\n- Comparer l'évolution des besoins et de l'état émotionnel selon les scores disponibles (${analysis.availableScores.join(', ')})`;
-        prompt += `\n- Identifier les améliorations ou détériorations`;
-        if (analysis.lowScores.length > 0) {
-          prompt += `\n- Proposer des activités qui peuvent aider à améliorer ses scores les plus bas (${analysis.lowScores.join(', ')})`;
-        }
-      }
-      
-      if (analysis.missingScores.length > 0) {
-        prompt += `\n- Noter les informations manquantes (${analysis.missingScores.join(', ')}) qui pourraient être utiles pour des recommandations plus précises`;
-        prompt += `\n- Suggérer des questions pour compléter ces informations dans de futures conversations`;
-      }
-      
-      prompt += `\n- Adapter tes recommandations selon l'historique disponible`;
-    }
-
-    prompt += `\n\nIMPORTANT: Pour l'état émotionnel et les besoins, analyse-les du point de vue de l'utilisateur en utilisant des formulations comme "Je me sens...", "J'ai besoin de...", "Je ressens...". Cela facilitera le matching sémantique avec les activités et pratiques.`;
-
-    return prompt;
+    return "A partir des informations contextuelles, génère un résumé structuré détaillé qui permettra de comprendre les besoins de l'utilisateur et les recommandations proposées.";
   }
 
   /**

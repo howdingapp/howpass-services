@@ -76,7 +76,7 @@ export interface HowanaActivityContext {
   isEditing?: boolean;
 }
 
-export interface HowanaBilanContext {
+export interface HowanaBilanContext extends Omit<HowanaRecommandationContext, 'type' | 'lastBilan'> {
   type: 'bilan';
   bilanData: {
     id: string;
@@ -88,12 +88,11 @@ export interface HowanaBilanContext {
         niveauEnergie: number;
       };
       secondaires: {
-        scorePeau: number;
-        scoreConcentration: number;
-        scoreMemoire: number;
-        scoreCheveux: number;
-        scoreOngles: number;
-        scoreDigestion: number;
+        [key: string]: {
+          key: string;
+          label: string;
+          score: number;
+        }
       };
     };
     douleurs?: any;
@@ -103,13 +102,6 @@ export interface HowanaBilanContext {
     status: string;
     updatedAt: string;
   };
-  userData: {
-    firstName?: string;
-    lastName?: string;
-    age?: number;
-    experience?: string;
-  };
-  lastHowanaRecommandation?: HowanaRecommandation | null;
 }
 
 export interface HowanaRecommandationContext {
@@ -124,12 +116,11 @@ export interface HowanaRecommandationContext {
         niveauEnergie: number;
       };
       secondaires: {
-        scorePeau: number;
-        scoreConcentration: number;
-        scoreMemoire: number;
-        scoreCheveux: number;
-        scoreOngles: number;
-        scoreDigestion: number;
+        [key: string]: {
+          key: string;
+          label: string;
+          score: number;
+        }
       };
     };
     douleurs?: any;
