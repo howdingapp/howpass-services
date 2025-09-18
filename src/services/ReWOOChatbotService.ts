@@ -90,17 +90,17 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
     context: HowanaContext, 
     userMessage: string, 
     forceSummaryToolCall: boolean = false, 
-    toolsAllowed: boolean = true, 
-    recursionAllowed: boolean = true, 
-    toolResults?: Array<{ tool_call_id: string; tool_name?: string; output: any }>,
-    useSchemaWithToolResults: boolean = true,
+    _toolsAllowed: boolean = true, 
+    _recursionAllowed: boolean = true, 
+    _toolResults?: Array<{ tool_call_id: string; tool_name?: string; output: any }>,
+    _useSchemaWithToolResults: boolean = true,
   ): Promise<T> {
     try {
       console.log('🔍 ReWOO: Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
       console.log('Dernier message de l\'utilisateur:', userMessage);
 
       // Récupérer le compteur toolsCallIn depuis le contexte
-      const toolsCallIn = context.metadata["toolsCallIn"] || 2;
+      const toolsCallIn = context.metadata["toolsCallIn"] || 3;
       console.log(`🔧 ReWOO: toolsCallIn actuel: ${toolsCallIn}`);
 
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
@@ -133,7 +133,7 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
         
         // Mettre à jour le contexte avant d'appeler la méthode parente
         updatedContext.metadata = updatedContext.metadata || {};
-        updatedContext.metadata["toolsCallIn"] = ((toolsCallIn - 1) % 3);
+        updatedContext.metadata["toolsCallIn"] = ((toolsCallIn - 1) % 4);
         console.log(`🔧 ReWOO: toolsCallIn décrémenté à ${updatedContext.metadata["toolsCallIn"]}`);
         
         // Mettre à jour le contexte avec les données extraites si disponibles
