@@ -120,7 +120,7 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
         // Comportement normal - utiliser la méthode parente
         console.log('🔧 ReWOO: Utilisation du comportement normal');
         // Appeler la méthode parente avec les paramètres appropriés
-        response = await super._generateAIResponse(context, userMessage, forceSummaryToolCall, toolsAllowed, recursionAllowed, toolResults, useSchemaWithToolResults);
+        response = await super._generateAIResponse(context, userMessage, forceSummaryToolCall, false, false, undefined, false);
       }
 
       // Mise à jour unifiée du contexte après récupération de la réponse
