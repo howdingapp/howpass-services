@@ -321,7 +321,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
                 false, 
                 recursionAllowed && toolsAllowed, 
                 recursionAllowed, 
-                validToolResults
+                validToolResults,
+                false,
               )
             );
             
