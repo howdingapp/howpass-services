@@ -187,7 +187,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       context: HowanaContext, 
       userMessage: string,
     ): Promise<T> {
-      return this._generateAIResponse(context, userMessage, false, true, false, undefined, false);
+      return this._generateAIResponse(context, userMessage, false, true, false, undefined, true);
   }
 
   /**
