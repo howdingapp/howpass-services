@@ -322,7 +322,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
                 recursionAllowed && toolsAllowed, 
                 recursionAllowed, 
                 validToolResults,
-                false,
+                true,
               )
             );
             
@@ -850,8 +850,6 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   ): T {
     const messageOutput = result.output.find((output: any) => output.type === "message");
     
-    console.log("messageOutput => ", messageOutput)
-
     if (!messageOutput) {
       throw new Error('Aucun message de réponse trouvé dans la sortie de l\'API');
     }
