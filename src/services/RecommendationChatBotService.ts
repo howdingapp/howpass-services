@@ -229,16 +229,17 @@ ${practicesList}`;
   }
 
   protected buildFirstUserPrompt(_context: HowanaContext): string {
-
-    const context:HowanaRecommandationContext & HowanaContext = _context as HowanaRecommandationContext & HowanaContext;
-    const hasPreviousContext = context.lastHowanaRecommandation || context.lastBilan;
-    
-    let prompt = hasPreviousContext 
-      ? `Dis bonjour et fais référence au contexte précédent (bilan ou recommandations) pour personnaliser ta première réponse.`
-      : `Salue l'utilisateur et présente-toi en tant qu'assistant Howana spécialisé dans les recommandations personnalisées. Indique que tu es là pour l'aider à identifier ses besoins et lui recommander des activités et pratiques adaptées.`;
-
-    prompt += `\n\nCommence par un accueil chaleureux et pose une question engageante pour comprendre ses objectifs actuels.`;
-
+    const context = _context as HowanaRecommandationContext & HowanaContext;
+    const hasPreviousContext = !!(context.lastHowanaRecommandation || context.lastBilan);
+  
+    let prompt = hasPreviousContext
+      ? `Dis bonjour chaleureusement en faisant référence au dernier bilan/recommandation.
+  Propose quelqes pistes adaptées avec une micro-explication chacune.
+  Ajoute aussi une option alternative qui exprime que l’utilisateur peut se laisser guider (ex. "Surprends-moi", "Choisis pour moi", "Je me laisse guider").`
+      : `Salue chaleureusement et présente-toi comme Howana, assistant bien-être.
+  Propose 2–3 portes d’entrée génériques (ex. "Détente immédiate", "Énergie douce", "Clarté mentale") avec micro-explications.
+  Ajoute aussi une option alternative qui exprime que l’utilisateur peut se laisser guider (ex. "Surprends-moi", "Choisis pour moi", "Comme tu veux", "Je me laisse guider").`;
+  
     return prompt;
   }
 
