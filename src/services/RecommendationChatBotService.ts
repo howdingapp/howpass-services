@@ -684,7 +684,6 @@ ${practicesList}`;
         tools: [
           { description: activitiesAndPracticesTool, usage: "context" },
           { description: faqTool, usage: "context" },
-          { description: getAllAvailablePracticesTool, usage: "context" },
           { description: lastUserActivitiesTool, usage: "context" },
           { description: howerAngelByUserSituationTool, usage: "context" },
         ]
