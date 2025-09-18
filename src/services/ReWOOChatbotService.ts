@@ -5,6 +5,9 @@ import { IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-ou
 
 export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends BaseChatBotService<T> {
   
+  // Constante pour le cycle de rafraîchissement du contexte
+  private static readonly CONTEXT_REFRESH_CYCLE = 3;
+  
   /**
    * Démarrer une nouvelle conversation avec l'IA
    * Redéfini pour initialiser toolsCallIn à 2
@@ -20,11 +23,11 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
       // Démarrer la conversation via le service local
       const result = await this.conversationService.startConversation(request);
 
-      // Initialiser toolsCallIn à 2 dans le contexte
+      // Initialiser toolsCallIn dans le contexte
       if (result.context) {
         result.context.metadata = result.context.metadata || {};
-        result.context.metadata["toolsCallIn"] = 2;
-        console.log('🔧 ReWOO: toolsCallIn initialisé à 2');
+        result.context.metadata["toolsCallIn"] = ReWOOChatbotService.CONTEXT_REFRESH_CYCLE;
+        console.log(`🔧 ReWOO: toolsCallIn initialisé à ${ReWOOChatbotService.CONTEXT_REFRESH_CYCLE}`);
       }
 
       // Générer automatiquement une première réponse IA basée sur le contexte
@@ -100,7 +103,7 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
       console.log('Dernier message de l\'utilisateur:', userMessage);
 
       // Récupérer le compteur toolsCallIn depuis le contexte
-      const toolsCallIn = context.metadata["toolsCallIn"] || 3;
+      const toolsCallIn = context.metadata["toolsCallIn"] || ReWOOChatbotService.CONTEXT_REFRESH_CYCLE;
       console.log(`🔧 ReWOO: toolsCallIn actuel: ${toolsCallIn}`);
 
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
@@ -117,10 +120,14 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
         console.log('🔧 ReWOO: toolsCallIn atteint 0, utilisation du comportement spécial');
         response = await this.generateResponseWithAllTools(context, userMessage, previousCallId) as T;
       } else {
-        // Comportement normal - utiliser la méthode parente
+        // Comportement normal - enrichir le message avec les infos de contexte
         console.log('🔧 ReWOO: Utilisation du comportement normal');
-        // Appeler la méthode parente avec les paramètres appropriés
-        response = await super._generateAIResponse(context, userMessage, forceSummaryToolCall, false, false, undefined, false);
+        
+        // Enrichir le message utilisateur avec les informations de contexte
+        const enrichedUserMessage = this.buildEnrichedUserMessageWithContextInfo(userMessage, toolsCallIn);
+        
+        // Appeler la méthode parente avec le message enrichi
+        response = await super._generateAIResponse(context, enrichedUserMessage, forceSummaryToolCall, false, false, undefined, false);
       }
 
       // Mise à jour unifiée du contexte après récupération de la réponse
@@ -133,7 +140,7 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
         
         // Mettre à jour le contexte avant d'appeler la méthode parente
         updatedContext.metadata = updatedContext.metadata || {};
-        updatedContext.metadata["toolsCallIn"] = ((toolsCallIn - 1) % 4);
+        updatedContext.metadata["toolsCallIn"] = ((toolsCallIn - 1) % (ReWOOChatbotService.CONTEXT_REFRESH_CYCLE + 1));
         console.log(`🔧 ReWOO: toolsCallIn décrémenté à ${updatedContext.metadata["toolsCallIn"]}`);
         
         // Mettre à jour le contexte avec les données extraites si disponibles
@@ -249,6 +256,17 @@ ${contextHints}
   }
 
   /**
+   * Construit un message utilisateur enrichi avec les informations de contexte ReWOO
+   */
+  private buildEnrichedUserMessageWithContextInfo(userMessage: string, toolsCallIn: number): string {
+    const contextInfo = `Nombre d'échanges avant rafraîchissement: ${toolsCallIn}`;
+
+    return `${userMessage}
+
+${contextInfo}`;
+  }
+
+  /**
    * Exécute tous les outils en parallèle avec les paramètres optimaux
    */
   private async executeToolsInParallel(
@@ -303,6 +321,20 @@ ${contextHints}
     }
 
     return { toolResults, extractedData };
+  }
+
+  /**
+   * Redéfinit getIaRules pour ajouter la règle de provision de contexte en dernière position
+   */
+  protected override async getIaRules(contextType: string, defaultRules: string[]): Promise<string[]> {
+    // Appeler la méthode parente pour obtenir les règles de base
+    const baseRules = await super.getIaRules(contextType, defaultRules);
+    
+    // Ajouter la règle spécifique à ReWOO en dernière position
+    const contextProvisionRule = `PROVISION DE CONTEXTE:
+Tous les ${ReWOOChatbotService.CONTEXT_REFRESH_CYCLE} échanges, les informations contextuelles sont rafraîchies et pourront être utilisées pour mieux répondre à l'utilisateur. Dans l'attente, il faut temporiser en essayant de récupérer un maximum d'informations du client pour mieux comprendre ses besoins et ses préférences.`;
+
+    return [...baseRules, contextProvisionRule];
   }
 
   /**
