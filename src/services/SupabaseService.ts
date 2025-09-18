@@ -1283,8 +1283,7 @@ export class SupabaseService {
           id,
           title
         `)
-        .eq('active', true)
-        .order('title');
+        .eq('is_active', true);
 
       if (error) {
         console.error('❌ Erreur lors de la récupération des pratiques:', error);
