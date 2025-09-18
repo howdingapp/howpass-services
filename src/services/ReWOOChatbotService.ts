@@ -398,7 +398,7 @@ Pour chaque outil pertinent, fournis des paramètres qui maximiseront la pertine
       // Générer le schéma de sortie basé sur toolsDescription
       const outputSchema = this.generateToolParametersOutputSchema(toolsDescription);
 
-      console.log('🔧 ReWOO: Schéma de sortie:', outputSchema);
+      console.log('🔧 ReWOO: Schéma de sortie:', JSON.stringify(outputSchema, null, 2));
 
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
