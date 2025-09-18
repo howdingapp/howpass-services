@@ -103,7 +103,7 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
       console.log('Dernier message de l\'utilisateur:', userMessage);
 
       // Récupérer le compteur toolsCallIn depuis le contexte
-      const toolsCallIn = context.metadata["toolsCallIn"] || ReWOOChatbotService.CONTEXT_REFRESH_CYCLE;
+      const toolsCallIn = context.metadata["toolsCallIn"] != undefined ? context.metadata["toolsCallIn"] : ReWOOChatbotService.CONTEXT_REFRESH_CYCLE;
       console.log(`🔧 ReWOO: toolsCallIn actuel: ${toolsCallIn}`);
 
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
