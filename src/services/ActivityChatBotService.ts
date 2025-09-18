@@ -360,7 +360,7 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
   }
 
 
-  protected getToolsDescription(_context: HowanaContext, _forceSummaryToolCall:boolean): any | null {
+  protected getToolsDescription(_context: HowanaContext, _forceSummaryToolCall:boolean, _forWoo:boolean = false): any | null {
     return null;
   }
 

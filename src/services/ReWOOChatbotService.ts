@@ -160,7 +160,7 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
       console.log('🔧 ReWOO: Génération de réponse avec outils optimaux');
 
       // Récupérer la description des outils disponibles
-      const toolsDescription = this.getToolsDescription(context, false);
+      const toolsDescription = this.getToolsDescription(context, false, true);
       if (!toolsDescription || toolsDescription.tools.length === 0) {
         console.log('⚠️ ReWOO: Aucun outil disponible, utilisation du comportement normal');
         return await super._generateAIResponse(context, userMessage, false, false);

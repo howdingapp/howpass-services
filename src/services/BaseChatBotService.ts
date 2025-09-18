@@ -233,7 +233,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
       }
       
-      const toolsDescription = toolsAllowed ? this.getToolsDescription(context, forceSummaryToolCall) : null;
+      const toolsDescription = toolsAllowed ? this.getToolsDescription(context, forceSummaryToolCall, false) : null;
       const toolUseGuidance = toolsAllowed ? this.buildToolUseSystemPrompt(context) : null;
       
       // Déterminer les paramètres d'appel à l'IA selon le contexte
@@ -618,7 +618,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Description des outils disponibles pour l'IA (null si pas d'outils)
    */
-  protected abstract getToolsDescription(context: HowanaContext, forceSummaryToolCall:boolean): OpenAIToolsDescription | null;
+  protected abstract getToolsDescription(context: HowanaContext, forceSummaryToolCall:boolean, forWoo:boolean): OpenAIToolsDescription | null;
 
   /**
    * Exécuter un outil spécifique

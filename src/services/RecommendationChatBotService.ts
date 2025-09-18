@@ -550,7 +550,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     return !hasRecommendations;
   }
 
-  protected getToolsDescription(_context: HowanaContext, forceSummaryToolCall:boolean): OpenAIToolsDescription | null {
+  protected getToolsDescription(_context: HowanaContext, forceSummaryToolCall:boolean, forWoo:boolean = false): OpenAIToolsDescription | null {
     
     const activitiesAndPracticesTool:OpenAITool = {
       type: 'function',
@@ -630,6 +630,17 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     if (forceSummaryToolCall) {
       return {
         tools: [activitiesAndPracticesTool]
+      };
+    }
+
+    if (forWoo) {
+      return {
+        tools: [
+          activitiesAndPracticesTool,
+          faqTool,
+          lastUserActivitiesTool,
+          howerAngelByUserSituationTool,
+        ]
       };
     }
 
