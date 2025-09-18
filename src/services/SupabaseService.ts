@@ -1367,7 +1367,7 @@ export class SupabaseService {
           experience: user.experience,
           typicalSituations: user.typical_situations,
           profile: user.profil,
-          relevanceScore: user.similarity ?? 0.7
+          relevanceScore: user.similarity
         }));
 
       // Trier par score de pertinence
