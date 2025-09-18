@@ -187,7 +187,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       context: HowanaContext, 
       userMessage: string,
     ): Promise<T> {
-      return this._generateAIResponse(context, userMessage, false, true, false, undefined, true);
+      return this._generateAIResponse(context, userMessage, false, true, false, undefined, false);
   }
 
   /**
@@ -217,14 +217,19 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       console.log('🔍 Utilisation de l\'API responses avec callID:', previousCallId);
       
       // Déterminer le schéma de sortie approprié
-      let outputSchema: ChatBotOutputSchema;
-      if (useSchemaWithToolResults && toolResults && toolResults.length > 0) {
-        // Utiliser le schéma basé sur l'outil utilisé
-        const firstToolName = toolResults[0]?.tool_name || this.extractToolNameFromCallId(toolResults[0]?.tool_call_id || '');
-        outputSchema = firstToolName ? this.getSchemaByUsedTool(firstToolName, context) : this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+      let outputSchema: ChatBotOutputSchema | null = null;
+
+      if(toolResults && toolResults.length > 0) {
+      
+        if(useSchemaWithToolResults) {
+          const firstToolName = toolResults[0]?.tool_name || this.extractToolNameFromCallId(toolResults[0]?.tool_call_id || '');
+          outputSchema = firstToolName ? this.getSchemaByUsedTool(firstToolName, context) : this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+        }
+
       } else {
-        // Utiliser le schéma par défaut
+
         outputSchema = this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+
       }
       
       const toolsDescription = toolsAllowed ? this.getToolsDescription(context, forceSummaryToolCall) : null;
