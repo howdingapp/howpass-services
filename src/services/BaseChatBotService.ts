@@ -259,8 +259,6 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           ...(outputSchema && { text: outputSchema })
         };
 
-        console.log("return tools call to ia => ", toolResultInputs.length);
-
       } else {
         // Comportement normal : message utilisateur + consignes système + outils
         const baseInputs = [
