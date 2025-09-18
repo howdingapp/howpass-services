@@ -283,7 +283,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           previous_response_id: previousCallId,
           input: baseInputs,
           ...(outputSchema && { text: outputSchema }),
-          ...(toolsDescription && { tools: toolsDescription.tools.map(tool => tool.description), tool_choice: 'required' })
+          ...(toolsDescription && { tools: toolsDescription.tools.map(tool => tool.description), tool_choice: 'auto' })
         };
       }
 
