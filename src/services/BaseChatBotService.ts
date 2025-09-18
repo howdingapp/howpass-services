@@ -248,6 +248,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           input: toolResultInputs,
           ...(outputSchema && { text: outputSchema })
         };
+
+        console.log("return tools call to ia => ", toolResultInputs.length);
+
       } else {
         // Comportement normal : message utilisateur + consignes système + outils
         const baseInputs = [
@@ -265,8 +268,6 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             : []),
         ];
 
-        console.log("outputSchema => ", outputSchema);
-
         apiCallParams = {
           model: this.AI_MODEL,
           previous_response_id: previousCallId,
@@ -275,6 +276,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           ...(toolsDescription && { tools: toolsDescription.tools, tool_choice: 'required' })
         };
       }
+
+      console.log("outputSchema => ", outputSchema);
 
       // Appel unifié à l'API
       const result = await this.openai.responses.create(apiCallParams);
