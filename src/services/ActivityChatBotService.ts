@@ -234,7 +234,7 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
   /**
    * Fonction centralisée pour toutes les informations de contexte système
    */
-  protected getSystemContext(context: HowanaActivityContext & HowanaContext): string {
+  protected async getSystemContext(context: HowanaActivityContext & HowanaContext): Promise<string> {
     let contextInfo = '';
 
     // Règles de comportement et d'information spécifiques à respecter

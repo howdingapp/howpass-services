@@ -64,14 +64,11 @@ export class RecommendationChatBotService extends ReWOOChatbotService<Recommenda
     // Récupérer les règles IA (format tableau)
     const rules = await this.getIaRules(context.type, this.getDefaultRules());
     
-    // Récupérer le contexte système de base
-    const baseSystemContext = this.getSystemContext(context as HowanaRecommandationContext & HowanaContext);
+    // Récupérer le contexte système de base (qui inclut maintenant les pratiques)
+    const baseSystemContext = await this.getSystemContext(context as HowanaRecommandationContext & HowanaContext);
     
-    // Ajouter les pratiques HOW PASS existantes
-    const practicesContext = await this.getAvailablePracticesContext();
-    
-    // Combiner les règles, le contexte de base et les pratiques
-    return rules.join('\n\n') + '\n\n' + baseSystemContext + '\n\n' + practicesContext;
+    // Combiner les règles et le contexte de base
+    return rules.join('\n\n') + '\n\n' + baseSystemContext;
   }
 
   /**
@@ -105,7 +102,7 @@ ${practicesList}`;
   /**
    * Fonction centralisée pour toutes les informations de contexte système
    */
-  protected override getSystemContext(context: HowanaRecommandationContext & HowanaContext): string {
+  protected override async getSystemContext(context: HowanaRecommandationContext & HowanaContext): Promise<string> {
     let contextInfo = '';
 
     // Contexte du dernier bilan
@@ -113,6 +110,9 @@ ${practicesList}`;
 
     // Contexte de la dernière recommandation Howana
     contextInfo += this.getPreviousConversationContext(context);
+
+    // Ajouter les pratiques HOW PASS existantes
+    contextInfo += (await this.getAvailablePracticesContext());
 
     return contextInfo;
   }

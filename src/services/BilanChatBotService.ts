@@ -53,7 +53,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
   /**
    * Fonction centralisée pour toutes les informations de contexte système
    */
-  protected override getSystemContext(context: any): string {
+  protected override async getSystemContext(context: any): Promise<string> {
     let contextInfo = '';
 
     // Contexte du bilan
@@ -63,6 +63,9 @@ export class BilanChatBotService extends RecommendationChatBotService {
 
     // Contexte de la dernière recommandation Howana
     contextInfo += this.getPreviousConversationContext(context as any);
+
+    // Ajouter les pratiques HOW PASS existantes
+    contextInfo += (await this.getAvailablePracticesContext());
 
     return contextInfo;
   }

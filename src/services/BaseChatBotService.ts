@@ -560,7 +560,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     const rules = await this.getIaRules(context.type, this.getDefaultRules());
     
     // Récupérer le contexte système
-    const systemContext = this.getSystemContext(context);
+    const systemContext = await this.getSystemContext(context);
     
     // Combiner les règles et le contexte
     return rules.join('\n\n') + '\n\n' + systemContext;
@@ -570,7 +570,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    * Méthodes abstraites à implémenter dans les classes enfants
    */
   protected abstract getDefaultRules(): string[];
-  protected abstract getSystemContext(context: HowanaContext): string;
+  protected abstract getSystemContext(context: HowanaContext): Promise<string>;
   protected abstract buildFirstUserPrompt(context: HowanaContext): string;
   protected abstract buildSummarySystemPrompt(context: HowanaContext): string;
   protected abstract getSummaryOutputSchema(context: HowanaContext): ChatBotOutputSchema;
