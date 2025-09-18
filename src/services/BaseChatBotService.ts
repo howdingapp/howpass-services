@@ -223,8 +223,18 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       if(toolResults && toolResults.length > 0) {
       
         if(useSchemaWithToolResults) {
-          const firstToolName = toolResults[0]?.tool_name || this.extractToolNameFromCallId(toolResults[0]?.tool_call_id || '');
-          outputSchema = firstToolName ? this.getSchemaByUsedTool(firstToolName, context) : this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+          // Chercher le premier outil de type "response"
+          const firstResponseToolName = this.findFirstResponseTool(toolResults, context);
+          
+          if (firstResponseToolName) {
+            // Utiliser le schéma de l'outil de type "response"
+            outputSchema = this.getSchemaByUsedTool(firstResponseToolName, context, forceSummaryToolCall);
+            console.log(`🔧 Utilisation du schéma de l'outil "response": ${firstResponseToolName}`);
+          } else {
+            // Fallback vers le schéma par défaut
+            outputSchema = this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+            console.log('🔧 Aucun outil "response" trouvé, utilisation du schéma par défaut');
+          }
         }
 
       } else {
@@ -273,11 +283,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           previous_response_id: previousCallId,
           input: baseInputs,
           ...(outputSchema && { text: outputSchema }),
-          ...(toolsDescription && { tools: toolsDescription.tools, tool_choice: 'required' })
+          ...(toolsDescription && { tools: toolsDescription.tools.map(tool => tool.description), tool_choice: 'required' })
         };
       }
-
-      console.log("outputSchema => ", outputSchema);
 
       // Appel unifié à l'API
       const result = await this.openai.responses.create(apiCallParams);
@@ -310,33 +318,71 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             console.log("validToolResults", JSON.stringify(validToolResults))
 
           if (validToolResults.length > 0) {
-            // Mettre à jour le contexte avec le nouveau messageId
-            context.previousCallId = messageId;
+            // Vérifier s'il y a un outil de type "response"
+            const firstResponseToolName = this.findFirstResponseTool(validToolResults, context);
             
-            // Appel récursif avec les résultats des outils
-            const finalResponse = (
-              await this._generateAIResponse(
+            if (firstResponseToolName) {
+              // Il y a un outil de type "response" - faire un appel récursif
+              console.log(`🔧 Outil "response" trouvé: ${firstResponseToolName}, appel récursif`);
+              
+              // Mettre à jour le contexte avec le nouveau messageId
+              context.previousCallId = messageId;
+              
+              // Appel récursif avec les résultats des outils
+              const finalResponse = (
+                await this._generateAIResponse(
+                  context, 
+                  "", 
+                  false, 
+                  recursionAllowed && toolsAllowed, 
+                  recursionAllowed, 
+                  validToolResults,
+                  useSchemaWithToolResults,
+                )
+              );
+              
+              console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
+              console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
+
+              return {
+                ...finalResponse,
+                response: finalResponse.response,
+                messageId: finalResponse.messageId,
+                extractedData: this.mergeExtractedData(extractedData, finalResponse.extractedData),
+                updatedContext: finalResponse.updatedContext
+              } as T;
+            } else {
+              // Aucun outil de type "response" - refaire un appel avec le contexte enrichi
+              console.log('🔧 Aucun outil "response" trouvé, refaire un appel avec contexte enrichi');
+              
+              // Formater les résultats d'outils en contexte
+              const contextHints = this.formatToolResultsAsContext(validToolResults, context);
+              
+              // Construire le message utilisateur enrichi
+              const enrichedUserMessage = userMessage + (contextHints ? `\n\n${contextHints}` : '');
+              
+              // Faire un nouvel appel sans changer le previousCallId
+              const finalResponse = await this._generateAIResponse(
                 context, 
-                "", 
+                enrichedUserMessage, 
                 false, 
                 recursionAllowed && toolsAllowed, 
                 recursionAllowed, 
-                validToolResults,
-                true,
-              )
-            );
-            
-            console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
-            console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
+                undefined, // Pas de toolResults
+                useSchemaWithToolResults // Pas de schéma avec toolResults
+              );
+              
+              console.log('🔍 Réponse finale IA avec contexte enrichi:', finalResponse.response);
+              console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
 
-            return {
-              ...finalResponse,
-              response: finalResponse.response,
-              messageId: finalResponse.messageId,
-              extractedData: this.mergeExtractedData(extractedData, finalResponse.extractedData),
-              updatedContext: finalResponse.updatedContext
-            } as T;
-
+              return {
+                ...finalResponse,
+                response: finalResponse.response,
+                messageId: finalResponse.messageId,
+                extractedData: this.mergeExtractedData(extractedData, finalResponse.extractedData),
+                updatedContext: finalResponse.updatedContext
+              } as T;
+            }
           }
         }
       }
@@ -611,6 +657,100 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   protected getSchemaByUsedTool(_toolName: string, context: HowanaContext, _forceSummaryToolCall:boolean = false): ChatBotOutputSchema {
     // Par défaut, utiliser le schéma de base
     return this.getAddMessageOutputSchema(context);
+  }
+
+  /**
+   * Trouve le premier outil de type "response" dans les résultats d'outils
+   * @param toolResults Liste des résultats d'outils
+   * @param context Contexte de la conversation
+   * @returns Le nom du premier outil de type "response" ou null si aucun trouvé
+   */
+  protected findFirstResponseTool(toolResults: Array<{ tool_call_id: string; tool_name?: string; output: any }>, context: HowanaContext): string | null {
+    if (!toolResults || toolResults.length === 0) {
+      return null;
+    }
+
+    // Récupérer la description des outils pour connaître leur type d'usage
+    const toolsDescription = this.getToolsDescription(context, false, false);
+    if (!toolsDescription || !toolsDescription.tools) {
+      return null;
+    }
+
+    // Créer un map des noms d'outils vers leur type d'usage
+    const toolUsageMap = new Map<string, "context" | "response">();
+    toolsDescription.tools.forEach(tool => {
+      const toolName = tool.description.name;
+      if (toolName) {
+        toolUsageMap.set(toolName, tool.usage);
+      }
+    });
+
+    // Chercher le premier outil de type "response" dans les résultats
+    for (const toolResult of toolResults) {
+      const toolName = toolResult.tool_name || this.extractToolNameFromCallId(toolResult.tool_call_id || '');
+      if (toolName && toolUsageMap.get(toolName) === "response") {
+        console.log(`🔧 Premier outil de type "response" trouvé: ${toolName}`);
+        return toolName;
+      }
+    }
+
+    console.log('🔧 Aucun outil de type "response" trouvé dans les résultats');
+    return null;
+  }
+
+  /**
+   * Formate les résultats d'outils en contexte structuré pour l'IA
+   * @param toolResults Liste des résultats d'outils
+   * @param context Contexte de la conversation
+   * @returns Contexte structuré sous forme de string
+   */
+  protected formatToolResultsAsContext(toolResults: Array<{ tool_call_id: string; tool_name?: string; output: any }>, context: HowanaContext): string {
+    if (!toolResults || toolResults.length === 0) {
+      return '';
+    }
+
+    // Récupérer la description des outils pour avoir les noms complets
+    const toolsDescription = this.getToolsDescription(context, false, false);
+    const toolNameMap = new Map<string, string>();
+    if (toolsDescription && toolsDescription.tools) {
+      toolsDescription.tools.forEach(tool => {
+        const toolName = tool.description.name;
+        const toolDescription = tool.description.description;
+        if (toolName) {
+          toolNameMap.set(toolName, toolDescription);
+        }
+      });
+    }
+
+    let contextHints = 'CONTEXT HINTS from HOW PASS:\n\n';
+    
+    toolResults.forEach((toolResult, index) => {
+      const toolName = toolResult.tool_name || this.extractToolNameFromCallId(toolResult.tool_call_id || '');
+      const toolDescription = toolName ? toolNameMap.get(toolName) : 'Outil inconnu';
+      
+      contextHints += `--- Résultat ${index + 1}: ${toolName || 'Outil inconnu'} ---\n`;
+      if (toolDescription) {
+        contextHints += `Description: ${toolDescription}\n`;
+      }
+      
+      // Formater la sortie de l'outil
+      let formattedOutput = '';
+      if (typeof toolResult.output === 'string') {
+        formattedOutput = toolResult.output;
+      } else if (typeof toolResult.output === 'object') {
+        try {
+          formattedOutput = JSON.stringify(toolResult.output, null, 2);
+        } catch (error) {
+          formattedOutput = String(toolResult.output);
+        }
+      } else {
+        formattedOutput = String(toolResult.output);
+      }
+      
+      contextHints += `Données: ${formattedOutput}\n\n`;
+    });
+
+    return contextHints.trim();
   }
 
 

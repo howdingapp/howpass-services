@@ -629,28 +629,28 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
     if (forceSummaryToolCall) {
       return {
-        tools: [activitiesAndPracticesTool]
+        tools: [{ description: activitiesAndPracticesTool, usage: "response" }]
       };
     }
 
     if (forWoo) {
       return {
         tools: [
-          activitiesAndPracticesTool,
-          faqTool,
-          lastUserActivitiesTool,
-          howerAngelByUserSituationTool,
+          { description: activitiesAndPracticesTool, usage: "context" },
+          { description: faqTool, usage: "context" },
+          { description: lastUserActivitiesTool, usage: "context" },
+          { description: howerAngelByUserSituationTool, usage: "context" },
         ]
       };
     }
 
     return {
       tools: [
-        activitiesAndPracticesTool,
-        faqTool,
-        lastUserActivitiesTool,
-        getAllAvailablePracticesTool,
-        howerAngelByUserSituationTool,
+        { description: activitiesAndPracticesTool, usage: "context" },
+        { description: faqTool, usage: "context" },
+        { description: lastUserActivitiesTool, usage: "context" },
+        { description: getAllAvailablePracticesTool, usage: "context" },
+        { description: howerAngelByUserSituationTool, usage: "context" },
       ]
     };
     

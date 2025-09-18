@@ -321,7 +321,7 @@ Message utilisateur: "${userMessage}"
 Type de conversation: ${context.type}
 
 Outils disponibles:
-${toolsDescription.tools.map(tool => `- ${tool.name}: ${tool.description}`).join('\n')}
+${toolsDescription.tools.map(tool => `- ${tool.description.name}: ${tool.description.description}`).join('\n')}
 
 Réponds UNIQUEMENT avec un JSON valide au format suivant:
 {

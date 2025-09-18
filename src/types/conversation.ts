@@ -206,5 +206,5 @@ export interface OpenAITool {
 }
 
 export interface OpenAIToolsDescription {
-  tools: OpenAITool[];
+  tools: { description:OpenAITool, usage:"context" | "response" } [];
 }
