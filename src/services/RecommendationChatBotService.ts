@@ -348,7 +348,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     };
   }
 
-  protected override getAddMessageOutputSchema(_context: HowanaContext, forceSummaryToolCall: boolean = false, isAfterToolCall: boolean = false): ChatBotOutputSchema {
+  protected override getAddMessageOutputSchema(_context: HowanaContext, forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
     if (forceSummaryToolCall) {
       // Si on force un summaryToolCall, utiliser le format idsOnly sans contraintes
       const activitiesAndPracticesSchema = this.getActivitiesAndPracticesResponseSchema(
@@ -373,34 +373,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       };
     }
 
-    if (isAfterToolCall) {
-      // Après utilisation d'un outil, réponse conversationnelle sans listing
-      return {
-        format: { 
-          type: "json_schema",
-          name: "AfterToolResponse",
-          schema: {
-            type: "object",
-            properties: {
-              response: {
-                type: "string",
-                description: "Réponse conversationnelle de l'assistant Howana basée sur les résultats de l'outil. Ne pas lister les résultats, mais donner une réponse personnalisée et engageante. Maximum 30 mots."
-              },
-              quickReplies: this.getSimpleQuickRepliesSchema(
-                "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple.",
-                1,
-                3
-              )
-            },
-            required: ["response", "quickReplies"],
-            additionalProperties: false
-          },
-          strict: true
-        }
-      };
-    }
-
-    // Pour les conversations normales, utiliser des quickReplies simples
     return {
       format: { 
         type: "json_schema",
@@ -410,10 +382,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           properties: {
             response: {
               type: "string",
-              description: "Réponse principale de l'assistant Howana, maximum 25 mots."
+              description:
+                "Message court (≤ 30 mots), conversationnel, adressé à l'utilisateur. Réponse personnalisée, contextualisée par l'échange et les derniers résultats d'outils si présents (ne jamais afficher une simple liste de résultat)."
             },
             quickReplies: this.getSimpleQuickRepliesSchema(
-              "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple.",
+              "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur",
               0,
               3
             )
@@ -424,6 +397,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         strict: true
       }
     };
+
   }
 
   /**
@@ -550,7 +524,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
       default:
         // Schéma par défaut pour les autres outils ou cas non spécifiés
-        return this.getAddMessageOutputSchema(context, forceSummaryToolCall, true);
+        return this.getAddMessageOutputSchema(context, forceSummaryToolCall);
     }
   }
 
