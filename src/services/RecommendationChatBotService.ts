@@ -1,4 +1,3 @@
-import { BaseChatBotService } from './BaseChatBotService';
 import { OpenAITool, OpenAIToolsDescription } from '../types/conversation';
 import { HowanaContext, HowanaRecommandationContext } from '../types/repositories';
 import { 
@@ -7,8 +6,9 @@ import {
   RecommendationMessageResponse,
   ExtractedRecommandations,
 } from '../types/chatbot-output';
+import { ReWOOChatbotService } from './ReWOOChatbotService';
 
-export class RecommendationChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
+export class RecommendationChatBotService extends ReWOOChatbotService<RecommendationMessageResponse> {
   
   /**
    * Règles par défaut pour les recommandations (format tableau comme iaRules)
@@ -638,6 +638,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         tools: [
           { description: activitiesAndPracticesTool, usage: "context" },
           { description: faqTool, usage: "context" },
+          { description: getAllAvailablePracticesTool, usage: "context" },
           { description: lastUserActivitiesTool, usage: "context" },
           { description: howerAngelByUserSituationTool, usage: "context" },
         ]

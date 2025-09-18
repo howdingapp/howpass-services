@@ -3,7 +3,7 @@ import { StartConversationRequest, OpenAIToolsDescription } from '../types/conve
 import { HowanaContext } from '../types/repositories';
 import { IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
 
-export abstract class ReWOOChatbotService extends BaseChatBotService {
+export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends BaseChatBotService<T> {
   
   /**
    * Démarrer une nouvelle conversation avec l'IA
@@ -86,7 +86,15 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
    * Générer une réponse IA basée sur le contexte de la conversation
    * Redéfini pour gérer la logique toolsCallIn
    */
-  protected override async _generateAIResponse(context: HowanaContext, userMessage: string, forceSummaryToolCall: boolean = false): Promise<IAMessageResponse> {
+  protected override async _generateAIResponse(
+    context: HowanaContext, 
+    userMessage: string, 
+    forceSummaryToolCall: boolean = false, 
+    toolsAllowed: boolean = true, 
+    recursionAllowed: boolean = true, 
+    toolResults?: Array<{ tool_call_id: string; tool_name?: string; output: any }>,
+    useSchemaWithToolResults: boolean = true,
+  ): Promise<T> {
     try {
       console.log('🔍 ReWOO: Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
       console.log('Dernier message de l\'utilisateur:', userMessage);
@@ -102,17 +110,17 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
         throw new Error('Aucun previousCallId trouvé dans le contexte. Impossible de générer une réponse sans référence à la conversation précédente.');
       }
 
-      let response:IAMessageResponse|null = null;
+      let response:T|null = null;
 
       // Si toolsCallIn atteint 0, utiliser le comportement spécial
       if (toolsCallIn <= 0) {
         console.log('🔧 ReWOO: toolsCallIn atteint 0, utilisation du comportement spécial');
-        response = await this.generateResponseWithAllTools(context, userMessage, previousCallId);
+        response = await this.generateResponseWithAllTools(context, userMessage, previousCallId) as T;
       } else {
-        // Comportement normal - utiliser la méthode parente avec tools_allowed: false
-        console.log('🔧 ReWOO: Utilisation du comportement normal (outils désactivés)');
-        // Appeler la méthode parente avec tools_allowed: false
-        response = await super._generateAIResponse(context, userMessage, forceSummaryToolCall, false);
+        // Comportement normal - utiliser la méthode parente
+        console.log('🔧 ReWOO: Utilisation du comportement normal');
+        // Appeler la méthode parente avec les paramètres appropriés
+        response = await super._generateAIResponse(context, userMessage, forceSummaryToolCall, toolsAllowed, recursionAllowed, toolResults, useSchemaWithToolResults);
       }
 
       // Mise à jour unifiée du contexte après récupération de la réponse
@@ -163,7 +171,7 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
       const toolsDescription = this.getToolsDescription(context, false, true);
       if (!toolsDescription || toolsDescription.tools.length === 0) {
         console.log('⚠️ ReWOO: Aucun outil disponible, utilisation du comportement normal');
-        return await super._generateAIResponse(context, userMessage, false, false);
+        return await super._generateAIResponse(context, userMessage, false, false, true, undefined, false);
       }
 
       // Demander à l'IA de générer les meilleurs paramètres pour tous les outils
@@ -171,17 +179,17 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
       
       if (!optimalParams || optimalParams.length === 0) {
         console.log('⚠️ ReWOO: Aucun paramètre optimal généré, utilisation du comportement normal');
-        return await super._generateAIResponse(context, userMessage, false, false);
+        return await super._generateAIResponse(context, userMessage, false, false, true, undefined, false);
       }
 
       // Exécuter tous les outils en parallèle avec les paramètres optimaux
       const { toolResults, extractedData } = await this.executeToolsInParallel(optimalParams, context);
 
       // Enrichir le message utilisateur avec le contexte des résultats d'outils
-      const enrichedUserMessage = this.buildEnrichedUserMessage(userMessage, toolResults);
+      const enrichedUserMessage = this.buildEnrichedUserMessage(userMessage, toolResults, context);
 
       // Utiliser la méthode parente avec le message enrichi et les outils désactivés
-      const finalResponse = await super._generateAIResponse(context, enrichedUserMessage, false, false, false);
+      const finalResponse = await super._generateAIResponse(context, enrichedUserMessage, false, false, false, undefined, false);
       
       console.log('🔍 ReWOO: Réponse finale générée avec tous les outils:', finalResponse.response);
       
@@ -223,25 +231,19 @@ export abstract class ReWOOChatbotService extends BaseChatBotService {
    */
   private buildEnrichedUserMessage(
     userMessage: string,
-    toolResults: Array<{ tool_call_id: string; tool_name?: string; output: any }>
+    toolResults: Array<{ tool_call_id: string; tool_name?: string; output: any }>,
+    context: HowanaContext
   ): string {
     if (toolResults.length === 0) {
       return userMessage;
     }
 
-    // Construire le contexte des résultats d'outils
-    const toolsContext = toolResults
-      .filter(r => !!r.tool_call_id)
-      .map(r => `**${r.tool_name}**:\n${typeof r.output === 'string' ? r.output : JSON.stringify(r.output, null, 2)}`)
-      .join('\n\n');
-
+    // Utiliser la fonction formatToolResultsAsContext de la classe parente
+    const contextHints = this.formatToolResultsAsContext(toolResults, context);
+    
     return `${userMessage}
 
----
-
-Résultats des outils exécutés:
-
-${toolsContext}
+${contextHints}
 
 Utilise ces informations pour fournir une réponse complète et pertinente.`;
   }
