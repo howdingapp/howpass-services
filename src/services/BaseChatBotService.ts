@@ -131,10 +131,6 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       const messageOutput = result.output.find(output => output.type === "message");
       const messageId = result.id;
       
-      if(outputSchema == null) {
-        console.log("messageOutput => ", messageOutput);
-      }
-
       // Extraire le texte de la réponse
        let resultText = "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
        if (messageOutput?.content?.[0]) {
@@ -854,6 +850,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   ): T {
     const messageOutput = result.output.find((output: any) => output.type === "message");
     
+    console.log("messageOutput => ", messageOutput)
+
     if (!messageOutput) {
       throw new Error('Aucun message de réponse trouvé dans la sortie de l\'API');
     }
