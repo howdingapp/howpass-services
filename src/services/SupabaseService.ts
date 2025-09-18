@@ -1262,4 +1262,136 @@ export class SupabaseService {
       };
     }
   }
+
+  /**
+   * Récupérer toutes les pratiques disponibles
+   */
+  async getAllAvailablePractices(): Promise<{
+    success: boolean;
+    data?: Array<{
+      id: string;
+      title: string;
+    }>;
+    error?: string;
+  }> {
+    try {
+      console.log(`🔍 Récupération de toutes les pratiques disponibles`);
+
+      const { data, error } = await this.supabase
+        .from('practices')
+        .select(`
+          id,
+          title,
+        `)
+        .eq('active', true)
+        .order('title');
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des pratiques:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      const practices = (data || []).map((practice: any) => ({
+        id: practice.id,
+        title: practice.title,
+      }));
+
+      console.log(`✅ ${practices.length} pratiques récupérées`);
+      return {
+        success: true,
+        data: practices
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des pratiques:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Recherche vectorielle des hower angels par situation utilisateur
+   */
+  async searchHowerAngelsByUserSituation(
+    searchTerm: string,
+    limit: number = 2
+  ): Promise<{
+    success: boolean;
+    data?: Array<{
+      id: string;
+      userId: string;
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      specialties?: {
+        choice: Array<{
+          id: string;
+          name: string;
+        }>;
+      };
+      experience?: string;
+      typicalSituations?: string;
+      profile: string;
+      relevanceScore: number;
+    }>;
+    searchTerm: string;
+    total: number;
+    error?: string;
+  }> {
+    try {
+      console.log(`🔍 Recherche de hower angels pour la situation: "${searchTerm}"`);
+
+      // Recherche vectorielle sur le champ typical_situations de la table user_data
+      const howerAngelsResults = await this.searchVectorSimilarity(
+        'user_data',
+        'vector_summary',
+        searchTerm,
+        limit
+      );
+
+      // Filtrer les résultats pour ne garder que les hower angels
+      const howerAngels = (howerAngelsResults || [])
+        .filter((user: any) => user.profil === 'hower_angel')
+        .map((user: any) => ({
+          id: user.id,
+          userId: user.user_id,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          email: user.email,
+          specialties: user.specialties, // Maintenant avec les noms des pratiques
+          experience: user.experience,
+          typicalSituations: user.typical_situations,
+          profile: user.profil,
+          relevanceScore: user.similarity ?? 0.7
+        }));
+
+      // Trier par score de pertinence
+      howerAngels.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+      console.log(`✅ ${howerAngels.length} hower angels trouvés`);
+      console.log(`📋 Exemple de spécialités avec noms:`, howerAngels[0]?.specialties);
+      
+      return {
+        success: true,
+        data: howerAngels,
+        searchTerm,
+        total: howerAngels.length
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur lors de la recherche de hower angels:', error);
+      return {
+        success: false,
+        data: [],
+        searchTerm,
+        total: 0,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
 } 

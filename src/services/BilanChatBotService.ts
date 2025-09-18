@@ -184,6 +184,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
    * Détermine le schéma de sortie approprié selon l'outil utilisé
    */
    protected override getSchemaByUsedTool(_toolName: string, context: HowanaContext, forceSummaryToolCall:boolean = false): ChatBotOutputSchema {
-      return this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+      return this.getAddMessageOutputSchema(context, forceSummaryToolCall, true);
    }
 }

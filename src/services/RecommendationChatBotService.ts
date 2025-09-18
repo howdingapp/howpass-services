@@ -52,7 +52,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       `Utilisation des outils:
       - Utilise l'outil 'faq_search' UNIQUEMENT pour des questions informationnelles relevant des thèmes suivants: stress, anxiété, méditation, sommeil, concentration, équilibre émotionnel, confiance en soi, débutants (pratiques/activités), parrainage, ambassadeur Howana, Aper'How bien-être (définition, participation, organisation, types de pratiques)
       - Pour toute autre question (y compris compte/connexion, abonnement/prix, sécurité/données, support/bugs), ne pas utiliser 'faq_search'
-      - Si la question concerne des recommandations personnalisées d'activités/pratiques, utilise 'activities_and_practices'`
+      - Si la question concerne des recommandations personnalisées d'activités/pratiques, utilise 'activities_and_practices_by_user_situation'`
     ];
   }
 
@@ -348,7 +348,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     };
   }
 
-  protected override getAddMessageOutputSchema(_context: HowanaContext, forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
+  protected override getAddMessageOutputSchema(_context: HowanaContext, forceSummaryToolCall: boolean = false, isAfterToolCall: boolean = false): ChatBotOutputSchema {
     if (forceSummaryToolCall) {
       // Si on force un summaryToolCall, utiliser le format idsOnly sans contraintes
       const activitiesAndPracticesSchema = this.getActivitiesAndPracticesResponseSchema(
@@ -366,6 +366,33 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               ...activitiesAndPracticesSchema.properties
             },
             required: ["activities", "practices"],
+            additionalProperties: false
+          },
+          strict: true
+        }
+      };
+    }
+
+    if (isAfterToolCall) {
+      // Après utilisation d'un outil, réponse conversationnelle sans listing
+      return {
+        format: { 
+          type: "json_schema",
+          name: "AfterToolResponse",
+          schema: {
+            type: "object",
+            properties: {
+              response: {
+                type: "string",
+                description: "Réponse conversationnelle de l'assistant Howana basée sur les résultats de l'outil. Ne pas lister les résultats, mais donner une réponse personnalisée et engageante. Maximum 30 mots."
+              },
+              quickReplies: this.getSimpleQuickRepliesSchema(
+                "1 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur. Peuvent être de type 'text' simple.",
+                1,
+                3
+              )
+            },
+            required: ["response", "quickReplies"],
             additionalProperties: false
           },
           strict: true
@@ -404,7 +431,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    */
   protected override getSchemaByUsedTool(toolName: string, context: HowanaContext, forceSummaryToolCall:boolean = false): ChatBotOutputSchema {
     switch (toolName) {
-      case 'activities_and_practices':
+      case 'activities_and_practices_by_user_situation':
         // Schéma pour les réponses après utilisation de l'outil de recherche d'activités et pratiques
         const constraints = this.getActivitiesAndPracticesConstraints(context);
         const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
@@ -441,7 +468,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               },
               required: ["response", "quickReplies"],
               additionalProperties: false,
-              description: `Réponse après utilisation de l'outil activities_and_practices. Les quickReplies peuvent référencer les ${allAvailableIds.length} éléments disponibles dans le contexte.`
+              description: `Réponse après utilisation de l'outil activities_and_practices_by_user_situation. Les quickReplies peuvent référencer les ${allAvailableIds.length} éléments disponibles dans le contexte.`
             },
             strict: true
           }
@@ -523,7 +550,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
       default:
         // Schéma par défaut pour les autres outils ou cas non spécifiés
-        return this.getAddMessageOutputSchema(context, forceSummaryToolCall);
+        return this.getAddMessageOutputSchema(context, forceSummaryToolCall, true);
     }
   }
 
@@ -553,8 +580,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     
     const activitiesAndPracticesTool:OpenAITool = {
       type: 'function',
-      name: 'activities_and_practices',
-      description: 'Rechercher des activités et pratiques pertinentes pour l\'utilisateur',
+      name: 'activities_and_practices_by_user_situation',
+      description: 'Rechercher des activités et pratiques HOW PASS pertinentes pour l\'utilisateur',
       parameters: {
         type: 'object',
         properties: {
@@ -597,6 +624,35 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       strict: false
     };
 
+    const getAllAvailablePracticesTool:OpenAITool = {
+      type: 'function',
+      name: 'get_all_available_practices',
+      description: 'Récupérer toutes les pratiques de bien-être disponibles sur la plateforme HOW PASS',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      strict: false
+    };
+
+    const howerAngelByUserSituationTool:OpenAITool = {
+      type: 'function',
+      name: 'hower_angel_by_user_situation',
+      description: 'Rechercher des hower angels (utilisateurs experts) correspondant à la situation de l\'utilisateur',
+      parameters: {
+        type: 'object',
+        properties: {
+          searchTerm: {
+            type: 'string',
+            description: 'Description de la situation de l\'utilisateur pour trouver des hower angels pertinents (ex: "Je traverse une période de stress au travail", "J\'ai des difficultés avec la méditation")'
+          }
+        },
+        required: ['searchTerm']
+      },
+      strict: false
+    };
+
     if (forceSummaryToolCall) {
       return {
         tools: [activitiesAndPracticesTool]
@@ -608,6 +664,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         activitiesAndPracticesTool,
         faqTool,
         lastUserActivitiesTool,
+        getAllAvailablePracticesTool,
+        howerAngelByUserSituationTool,
       ]
     };
     
@@ -615,7 +673,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
   protected async callTool(toolName: string, toolArgs: any, context: HowanaContext): Promise<any> {
     switch (toolName) {
-      case 'activities_and_practices':
+      case 'activities_and_practices_by_user_situation':
         return await this.searchActivitiesAndPractices(toolArgs.searchTerm);
       
       case 'faq_search':
@@ -623,6 +681,12 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       
       case 'last_user_activities':
         return await this.getLastUserActivities(context.userId);
+      
+      case 'get_all_available_practices':
+        return await this.getAllAvailablePractices();
+      
+      case 'hower_angel_by_user_situation':
+        return await this.searchHowerAngelsByUserSituation(toolArgs.searchTerm);
       
       default:
         throw new Error(`Outil non supporté: ${toolName}`);
@@ -715,6 +779,65 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     }
   }
 
+  private async getAllAvailablePractices(): Promise<any> {
+    try {
+      console.log(`🔍 Récupération de toutes les pratiques disponibles`);
+      
+      const result = await this.supabaseService.getAllAvailablePractices();
+      
+      if (!result.success) {
+        console.error('❌ Erreur lors de la récupération des pratiques:', result.error);
+        return {
+          practices: [],
+          error: result.error
+        };
+      }
+
+      console.log(`✅ ${result.data?.length || 0} pratiques récupérées`);
+      
+      return {
+        practices: result.data || [],
+        total: result.data?.length || 0
+      };
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des pratiques:', error);
+      return {
+        practices: [],
+        error: 'Erreur lors de la récupération des pratiques'
+      };
+    }
+  }
+
+  private async searchHowerAngelsByUserSituation(searchTerm: string): Promise<any> {
+    try {
+      console.log(`🔍 Recherche de hower angels pour la situation: ${searchTerm}`);
+      
+      const result = await this.supabaseService.searchHowerAngelsByUserSituation(searchTerm);
+      
+      if (!result.success) {
+        console.error('❌ Erreur lors de la recherche de hower angels:', result.error);
+        return {
+          howerAngels: [],
+          error: result.error
+        };
+      }
+
+      console.log(`✅ ${result.data?.length || 0} hower angels trouvés`);
+      
+      return {
+        howerAngels: result.data || [],
+        total: result.total || 0,
+        searchTerm: result.searchTerm
+      };
+    } catch (error) {
+      console.error('❌ Erreur lors de la recherche de hower angels:', error);
+      return {
+        howerAngels: [],
+        error: 'Erreur lors de la recherche de hower angels'
+      };
+    }
+  }
+
   /**
    * Implémentation de l'extraction des activités et pratiques pour RecommendationChatBotService
    * L'argument response provient du résultat de l'appel à l'outil de recherche vectorielle
@@ -725,8 +848,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     const activities: ExtractedRecommandations['activities'] = [];
     const practices: ExtractedRecommandations['practices'] = [];
 
-    // Pour l'outil activities_and_practices, extraire depuis les résultats
-    if (toolId === 'activities_and_practices' && response) {
+    // Pour l'outil activities_and_practices_by_user_situation, extraire depuis les résultats
+    if (toolId === 'activities_and_practices_by_user_situation' && response) {
       // Extraire les activités
       if (response.activities && Array.isArray(response.activities)) {
         response.activities.forEach((result: any) => {
@@ -749,6 +872,22 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     // Pour l'outil faq_search, pas d'extraction de recommandations (seulement des informations)
     if (toolId === 'faq_search') {
       console.log(`🔧 Outil FAQ - pas d'extraction de recommandations`);
+    }
+
+    // Pour l'outil get_all_available_practices, extraire les pratiques
+    if (toolId === 'get_all_available_practices' && response) {
+      if (response.practices && Array.isArray(response.practices)) {
+        response.practices.forEach((practice: any) => {
+          if (practice.id && practice.title) {
+            practices.push(practice);
+          }
+        });
+      }
+    }
+
+    // Pour l'outil hower_angel_by_user_situation, pas d'extraction de recommandations (seulement des informations)
+    if (toolId === 'hower_angel_by_user_situation') {
+      console.log(`🔧 Outil hower angel - pas d'extraction de recommandations`);
     }
 
     console.log(`🔧 Extraction terminée: ${activities.length} activités, ${practices.length} pratiques`);
