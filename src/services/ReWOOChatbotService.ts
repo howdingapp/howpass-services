@@ -245,7 +245,7 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
 
 ${contextHints}
 
-Évalue ces suggestions calculées par la plateforme et décide toi-même si elles sont pertinentes pour répondre à l'utilisateur. Tu es le maître décideur.`;
+Évalue ces suggestions avec tact et profondeur. Découvre les centres d'intérêt de l'utilisateur et évoque brièvement les éléments pertinents dans ta conversation, sans recracher les données brutes.`;
   }
 
   /**
