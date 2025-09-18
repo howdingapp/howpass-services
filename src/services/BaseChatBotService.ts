@@ -204,6 +204,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   ): Promise<T> {
     try {
       console.log('🔍 Génération d\'une nouvelle réponse IA pour la conversation:', context.id);
+      console.log(`🔍 Paramètres => forceSummaryToolCall: ${forceSummaryToolCall}, toolsAllowed: ${toolsAllowed}, recursionAllowed: ${recursionAllowed}, toolResults: ${!!toolResults}, useSchemaWithToolResults: ${useSchemaWithToolResults}`);
       console.log('Dernier message de l\'utilisateur:', userMessage);
 
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
