@@ -1,7 +1,7 @@
 import { BaseChatBotService } from './BaseChatBotService';
 import { StartConversationRequest, OpenAIToolsDescription } from '../types/conversation';
 import { HowanaContext } from '../types/repositories';
-import { IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
+import { IAMessageResponse, ExtractedRecommandations, ChatBotOutputSchema } from '../types/chatbot-output';
 
 export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends BaseChatBotService<T> {
   
@@ -338,6 +338,42 @@ Tous les ${ReWOOChatbotService.CONTEXT_REFRESH_CYCLE} échanges, les information
   }
 
   /**
+   * Génère un schéma de sortie basé sur la description des outils disponibles
+   */
+  private generateToolParametersOutputSchema(toolsDescription: OpenAIToolsDescription): ChatBotOutputSchema {
+    // Créer un schéma dynamique où chaque outil devient une propriété de l'objet
+    const toolProperties: Record<string, any> = {};
+    const requiredTools: string[] = [];
+    
+    // Construire dynamiquement les propriétés pour chaque outil
+    toolsDescription.tools.forEach(tool => {
+      const toolName = tool.description.name;
+      toolProperties[toolName] = {
+        type: "object",
+        description: `Paramètres optimaux pour l'outil ${toolName}: ${tool.description.description}`,
+        properties: tool.description.parameters.properties,
+        required: tool.description.parameters.required || [],
+        additionalProperties: false
+      };
+      requiredTools.push(toolName);
+    });
+    
+    return {
+      format: {
+        type: "json_schema",
+        name: "ToolParametersResponse",
+        schema: {
+          type: "object",
+          properties: toolProperties,
+          required: requiredTools,
+          additionalProperties: false
+        },
+        strict: true
+      }
+    };
+  }
+
+  /**
    * Génère les paramètres optimaux pour tous les outils disponibles
    */
   private async generateOptimalToolParameters(
@@ -357,20 +393,10 @@ Type de conversation: ${context.type}
 Outils disponibles:
 ${toolsDescription.tools.map(tool => `- ${tool.description.name}: ${tool.description.description}`).join('\n')}
 
-Réponds UNIQUEMENT avec un JSON valide au format suivant:
-{
-  "toolParameters": [
-    {
-      "toolName": "nom_de_l_outil",
-      "parameters": {
-        "param1": "valeur1",
-        "param2": "valeur2"
-      }
-    }
-  ]
-}
+Pour chaque outil pertinent, fournis des paramètres qui maximiseront la pertinence et l'utilité de la réponse. Chaque outil aura sa propre propriété dans l'objet de réponse avec ses paramètres spécifiques.`;
 
-Pour chaque outil pertinent, fournis des paramètres qui maximiseront la pertinence et l'utilité de la réponse. Si un outil n'est pas pertinent, tu peux l'omettre du tableau.`;
+      // Générer le schéma de sortie basé sur toolsDescription
+      const outputSchema = this.generateToolParametersOutputSchema(toolsDescription);
 
       const result = await this.openai.responses.create({
         model: this.AI_MODEL,
@@ -380,7 +406,8 @@ Pour chaque outil pertinent, fournis des paramètres qui maximiseront la pertine
             role: "user",
             content: [{ type: "input_text", text: prompt }],
           }
-        ]
+        ],
+        ...(outputSchema && { text: outputSchema })
       });
 
       const messageOutput = result.output.find(output => output.type === "message");
@@ -394,11 +421,19 @@ Pour chaque outil pertinent, fournis des paramètres qui maximiseront la pertine
       // Parser la réponse JSON structurée
       const response = JSON.parse(responseText);
       
-      if (!response.toolParameters || !Array.isArray(response.toolParameters)) {
-        throw new Error('La réponse ne contient pas de tableau de paramètres d\'outils');
-      }
+      // Convertir la nouvelle structure en format attendu par le reste du code
+      const optimalParams: Array<{ toolName: string; parameters: any }> = [];
+      
+      toolsDescription.tools.forEach(tool => {
+        const toolName = tool.description.name;
+        if (response[toolName]) {
+          optimalParams.push({
+            toolName: toolName,
+            parameters: response[toolName]
+          });
+        }
+      });
 
-      const optimalParams = response.toolParameters;
       console.log('🔧 ReWOO: Paramètres optimaux générés:', optimalParams);
       return optimalParams;
 
