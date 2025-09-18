@@ -1281,7 +1281,7 @@ export class SupabaseService {
         .from('practices')
         .select(`
           id,
-          title,
+          title
         `)
         .eq('active', true)
         .order('title');
