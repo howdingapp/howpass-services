@@ -862,13 +862,7 @@ export class RecommendationChatBotService extends ReWOOChatbotService<Recommenda
 
     // Pour l'outil get_all_available_practices, extraire les pratiques
     if (toolId === 'get_all_available_practices' && response) {
-      if (response.practices && Array.isArray(response.practices)) {
-        response.practices.forEach((practice: any) => {
-          if (practice.id && practice.title) {
-            practices.push(practice);
-          }
-        });
-      }
+      console.log(`🔧 Outil All Available Practices - pas d'extraction de recommandations`);
     }
 
     // Pour l'outil hower_angel_by_user_situation, pas d'extraction de recommandations (seulement des informations)
