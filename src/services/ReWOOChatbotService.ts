@@ -337,6 +337,7 @@ Tous les ${ReWOOChatbotService.CONTEXT_REFRESH_CYCLE} échanges, les information
     return [...baseRules, contextProvisionRule];
   }
 
+
   /**
    * Génère un schéma de sortie basé sur la description des outils disponibles
    */

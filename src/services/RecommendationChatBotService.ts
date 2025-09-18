@@ -58,9 +58,54 @@ export class RecommendationChatBotService extends ReWOOChatbotService<Recommenda
 
 
   /**
+   * Redéfinit buildSystemPrompt pour inclure les pratiques HOW PASS existantes
+   */
+  protected override async buildSystemPrompt(context: HowanaContext): Promise<string> {
+    // Récupérer les règles IA (format tableau)
+    const rules = await this.getIaRules(context.type, this.getDefaultRules());
+    
+    // Récupérer le contexte système de base
+    const baseSystemContext = this.getSystemContext(context as HowanaRecommandationContext & HowanaContext);
+    
+    // Ajouter les pratiques HOW PASS existantes
+    const practicesContext = await this.getAvailablePracticesContext();
+    
+    // Combiner les règles, le contexte de base et les pratiques
+    return rules.join('\n\n') + '\n\n' + baseSystemContext + '\n\n' + practicesContext;
+  }
+
+  /**
+   * Récupère et formate les pratiques HOW PASS disponibles
+   */
+  protected async getAvailablePracticesContext(): Promise<string> {
+    try {
+      console.log('🔍 Récupération des pratiques HOW PASS disponibles');
+      
+      const result = await this.supabaseService.getAllAvailablePractices();
+      
+      if (!result.success || !result.data || result.data.length === 0) {
+        console.warn('⚠️ ReWOO: Aucune pratique HOW PASS récupérée');
+        return 'PRATIQUES HOW PASS DISPONIBLES: Aucune pratique disponible pour le moment.';
+      }
+
+      const practicesList = result.data.map(practice => `- ${practice.title}`).join('\n');
+      
+      console.log(`✅ ${result.data.length} pratiques HOW PASS récupérées`);
+      
+      return `PRATIQUES HOW PASS DISPONIBLES:
+A titre d'information, voici la liste complète des pratiques de bien-être disponibles sur la plateforme HOW PASS :
+${practicesList}`;
+
+    } catch (error) {
+      console.error('❌ ReWOO: Erreur lors de la récupération des pratiques HOW PASS:', error);
+      return 'PRATIQUES HOW PASS DISPONIBLES: Erreur lors de la récupération des pratiques.';
+    }
+  }
+
+  /**
    * Fonction centralisée pour toutes les informations de contexte système
    */
-  protected getSystemContext(context: HowanaRecommandationContext & HowanaContext): string {
+  protected override getSystemContext(context: HowanaRecommandationContext & HowanaContext): string {
     let contextInfo = '';
 
     // Contexte du dernier bilan
@@ -71,6 +116,7 @@ export class RecommendationChatBotService extends ReWOOChatbotService<Recommenda
 
     return contextInfo;
   }
+
 
   /**
    * Informations contextuelles du bilan
