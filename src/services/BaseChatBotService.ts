@@ -131,7 +131,11 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       const messageOutput = result.output.find(output => output.type === "message");
       const messageId = result.id;
       
-             // Extraire le texte de la réponse
+      if(outputSchema == null) {
+        console.log("messageOutput => ", messageOutput);
+      }
+
+      // Extraire le texte de la réponse
        let resultText = "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
        if (messageOutput?.content?.[0]) {
          const content = messageOutput.content[0];
