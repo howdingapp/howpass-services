@@ -9,8 +9,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   protected conversationService: ConversationService;
   protected supabaseService: SupabaseService;
   protected openai: OpenAI;
-  protected AI_MODEL = "gpt-4o-mini";
-  protected AI_MODEL_QUALITY = "gpt-4o";
+  protected AI_MODEL = "o4-mini";
+  protected AI_MODEL_QUALITY = "o4-mini";
 
   constructor() {
     this.conversationService = new ConversationService();
