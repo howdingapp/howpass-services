@@ -720,7 +720,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       });
     }
 
-    let contextHints = 'CONTEXT HINTS from HOW PASS:\n\n';
+    let contextHints = 'SUGGESTIONS CALCULÉES PAR LA PLATEFORME (ces informations ont été générées automatiquement par nos algorithmes comme potentiellement intéressantes, mais nous n\'en sommes pas certains. C\'est à toi, l\'IA, de décider si elles sont pertinentes pour la situation de l\'utilisateur ou non):\n\n';
     
     toolResults.forEach((toolResult, index) => {
       const toolName = toolResult.tool_name || this.extractToolNameFromCallId(toolResult.tool_call_id || '');

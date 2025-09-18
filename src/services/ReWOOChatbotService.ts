@@ -245,7 +245,7 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
 
 ${contextHints}
 
-Utilise ces informations pour fournir une réponse complète et pertinente.`;
+Évalue ces suggestions calculées par la plateforme et décide toi-même si elles sont pertinentes pour répondre à l'utilisateur. Tu es le maître décideur.`;
   }
 
   /**
