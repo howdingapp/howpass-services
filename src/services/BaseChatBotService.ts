@@ -264,6 +264,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             : []),
         ];
 
+        console.log("outputSchema => ", outputSchema);
+
         apiCallParams = {
           model: this.AI_MODEL,
           previous_response_id: previousCallId,
