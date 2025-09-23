@@ -127,7 +127,7 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
         const enrichedUserMessage = this.buildEnrichedUserMessageWithContextInfo(userMessage, toolsCallIn);
         
         // Appeler la méthode parente avec le message enrichi
-        response = await super._generateAIResponse(context, enrichedUserMessage, forceSummaryToolCall, false, false, undefined, false);
+        response = await super._generateAIResponse(context, enrichedUserMessage, forceSummaryToolCall, forceSummaryToolCall, false, undefined, forceSummaryToolCall);
       }
 
       // Mise à jour unifiée du contexte après récupération de la réponse
