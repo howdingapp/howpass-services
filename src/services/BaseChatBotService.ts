@@ -1005,6 +1005,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       throw new Error('Aucune réponse générée par l\'API responses');
     }
 
+    console.log('🔍 Réponse raw IA:', resultText);
+
     // Parser le JSON de la réponse (contient forcément le champ response)
     let parsedResponse: any;
     try {
