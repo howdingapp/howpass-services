@@ -249,6 +249,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       // Déterminer les paramètres d'appel à l'IA selon le contexte
       let apiCallParams: any;
       
+      console.log("Heve toolsResults: ", toolResults && toolResults.length > 0);
+
       if (toolResults && toolResults.length > 0) {
         // Enchaînement : utiliser uniquement les résultats d'outils
         const toolResultInputs = this.transformToolResultsToMessage(toolResults);
@@ -284,6 +286,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           ...(toolsDescription && { tools: toolsDescription.tools.map(tool => tool.description), tool_choice: 'auto' })
         };
       }
+
+      console.log("Final output schema => ", JSON.stringify(outputSchema));
 
       // Appel unifié à l'API
       const result = await this.openai.responses.create(apiCallParams);
