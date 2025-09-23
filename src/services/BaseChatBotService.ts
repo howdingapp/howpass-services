@@ -287,6 +287,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
       // Appel unifié à l'API
       const result = await this.openai.responses.create(apiCallParams);
+
+      console.log('🔍 Réponse raw IA:', result);
+
       const messageId = result.id;
 
       // Vérifier si l'IA demande l'exécution d'un outil (seulement si les outils sont autorisés)

@@ -116,12 +116,12 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
       let response:T|null = null;
 
       // Si toolsCallIn atteint 0, utiliser le comportement spécial
-      if (toolsCallIn <= 0) {
+      if (toolsCallIn <= 0 && !forceSummaryToolCall) {
         console.log('🔧 ReWOO: toolsCallIn atteint 0, utilisation du comportement spécial');
         response = await this.generateResponseWithAllTools(context, userMessage, previousCallId) as T;
       } else {
         // Comportement normal - enrichir le message avec les infos de contexte
-        console.log('🔧 ReWOO: Utilisation du comportement normal');
+        console.log(`🔧 ReWOO: Utilisation du comportement normal. forceSummaryToolCall = ${forceSummaryToolCall}`);
         
         // Enrichir le message utilisateur avec les informations de contexte
         const enrichedUserMessage = this.buildEnrichedUserMessageWithContextInfo(userMessage, toolsCallIn);
@@ -140,9 +140,12 @@ export abstract class ReWOOChatbotService<T extends IAMessageResponse> extends B
         
         // Mettre à jour le contexte avant d'appeler la méthode parente
         updatedContext.metadata = updatedContext.metadata || {};
-        updatedContext.metadata["toolsCallIn"] = ((toolsCallIn - 1) % (ReWOOChatbotService.CONTEXT_REFRESH_CYCLE + 1));
-        console.log(`🔧 ReWOO: toolsCallIn décrémenté à ${updatedContext.metadata["toolsCallIn"]}`);
         
+        if(!forceSummaryToolCall) {
+          updatedContext.metadata["toolsCallIn"] = ((toolsCallIn - 1) % (ReWOOChatbotService.CONTEXT_REFRESH_CYCLE + 1));
+          console.log(`🔧 ReWOO: toolsCallIn décrémenté à ${updatedContext.metadata["toolsCallIn"]}`); 
+        }
+         
         // Mettre à jour le contexte avec les données extraites si disponibles
         if (response.extractedData) {
           updatedContext = this.enrichContext(updatedContext, { extractedData: response.extractedData });
