@@ -253,18 +253,23 @@ export class VideoService {
       const args = [
         '-i', prefix2Path,        // vidéo 1
         '-i', postfixPath,        // vidéo 2
-        '-i', audioPath,          // musique
+        '-i', audioPath,          // musique (plus longue)
         '-filter_complex',
-          '[0:v][1:v]concat=n=2:v=1:a=0[concatv];' +
-          '[2:a]atrim=duration=30,asetpts=PTS-STARTPTS[trima]',
-        '-map', '[concatv]',
-        '-map', '[trima]',
+          // Concat vidéo seule
+          '[0:v][1:v]concat=n=2:v=1:a=0[v];' +
+          // Remet l’audio à t=0 (pas d’étirement)
+          '[2:a]asetpts=PTS-STARTPTS[a]',
+        '-map', '[v]',
+        '-map', '[a]',
         '-c:v', 'libx264',
         '-c:a', 'aac',
         '-r', (options.fps || 25).toString(),
         '-crf', options.quality === 'low' ? '28' : options.quality === 'medium' ? '23' : '18',
         '-threads', (options.threads || 4).toString(),
-        '-t', '30', // ← force durée finale à 30s
+        // Coupe automatiquement l’audio à la fin de la vidéo
+        '-shortest',
+        // Optionnel: meilleur démarrage pour le web
+        '-movflags', '+faststart',
         '-y',
         outputPath
       ];
