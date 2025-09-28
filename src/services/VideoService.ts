@@ -274,7 +274,6 @@ export class VideoService {
         outputPath
       ];
 
-
       console.log('🎬 Arguments FFmpeg (intermédiaire):', args.join(' '));
 
       const ffmpeg = spawn('ffmpeg', args);
@@ -579,7 +578,7 @@ export class VideoService {
 
       // Analyser les dimensions des vidéos et adapter la vidéo postfixe
       console.log('📐 Analyse des dimensions des vidéos...');
-      const targetDimensions = await this.getTargetDimensions(prefixVideo1Path);
+      const targetDimensions = await this.getTargetDimensions(postfixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
       const adaptedPrefix1Path = await this.adaptVideoDimensions(prefixVideo1Path, targetDimensions, jobId, `prefix1${suffix}`);
