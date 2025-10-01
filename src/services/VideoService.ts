@@ -441,6 +441,8 @@ export class VideoService {
           adaptedPath
         ];
         
+        console.log(`🎬 Arguments FFmpeg pour ${prefix}:`, args.join(' '));
+
         const ffmpeg = spawn('ffmpeg', args);
         
         ffmpeg.stderr.on('data', (data) => {
