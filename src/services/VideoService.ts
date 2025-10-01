@@ -428,11 +428,14 @@ export class VideoService {
       }
       
       const adaptedPath = path.join(this.tempPath, `adapted_${prefix}_${jobId}.mp4`);
-      
+      const filter = this.buildAdaptationFilter(currentWidth, currentHeight, targetDimensions);
+
+      console.log(`🔧 Filtre d'adaptation pour ${prefix}: ${filter}`);
+
       return new Promise((resolve, reject) => {
         const args = [
           '-i', videoPath,
-          '-filter_complex', this.buildAdaptationFilter(currentWidth, currentHeight, targetDimensions),
+          '-filter_complex', filter,
           '-c:v', 'libx264',
           '-c:a', 'aac',
           '-crf', '18',
@@ -440,8 +443,6 @@ export class VideoService {
           '-y',
           adaptedPath
         ];
-        
-        console.log(`🎬 Arguments FFmpeg pour ${prefix}:`, args.join(' '));
 
         const ffmpeg = spawn('ffmpeg', args);
         
