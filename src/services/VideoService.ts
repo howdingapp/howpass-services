@@ -596,11 +596,26 @@ export class VideoService {
     try {
       console.log(`✂️ Détection et suppression des bandes noires pour ${prefix}...`);
       
+      // Vérifier d'abord les dimensions originales
+      const originalInfo = await this.getVideoInfo(videoPath);
+      console.log(`📐 Dimensions originales pour ${prefix}: ${originalInfo.width}x${originalInfo.height}`);
+      
       // Détecter les paramètres de crop
       const cropParams = await this.detectCropParameters(videoPath);
       
       if (!cropParams) {
         console.log(`✅ Aucune bande noire détectée pour ${prefix}, pas de crop nécessaire`);
+        return videoPath;
+      }
+      
+      // Vérifier que les paramètres de crop sont valides
+      if (cropParams.width <= 0 || cropParams.height <= 0 || 
+          cropParams.x < 0 || cropParams.y < 0 ||
+          cropParams.x + cropParams.width > originalInfo.width ||
+          cropParams.y + cropParams.height > originalInfo.height) {
+        console.log(`⚠️ Paramètres de crop invalides pour ${prefix}:`, cropParams);
+        console.log(`⚠️ Dimensions originales: ${originalInfo.width}x${originalInfo.height}`);
+        console.log(`⚠️ Pas de crop appliqué pour ${prefix}`);
         return videoPath;
       }
       
@@ -623,14 +638,30 @@ export class VideoService {
           console.log(`✂️ FFmpeg (crop) pour ${prefix}: ${data}`);
         });
         
-        ffmpeg.on('close', (code) => {
+        ffmpeg.on('close', async (code) => {
           if (code !== 0) {
             console.error(`❌ Erreur lors du crop pour ${prefix}: code ${code}`);
             reject(new Error(`Erreur FFmpeg lors du crop pour ${prefix}: ${code}`));
             return;
           }
-          console.log(`✅ Crop terminé pour ${prefix}: ${croppedPath}`);
-          resolve(croppedPath);
+          
+          // Vérifier que le fichier croppé existe et a du contenu
+          try {
+            const croppedInfo = await this.getVideoInfo(croppedPath);
+            console.log(`✅ Crop terminé pour ${prefix}: ${croppedPath}`);
+            console.log(`📐 Dimensions après crop: ${croppedInfo.width}x${croppedInfo.height}`);
+            
+            if (croppedInfo.width <= 0 || croppedInfo.height <= 0) {
+              console.error(`❌ Dimensions invalides après crop pour ${prefix}: ${croppedInfo.width}x${croppedInfo.height}`);
+              reject(new Error(`Dimensions invalides après crop pour ${prefix}`));
+              return;
+            }
+            
+            resolve(croppedPath);
+          } catch (error) {
+            console.error(`❌ Erreur lors de la vérification du fichier croppé pour ${prefix}:`, error);
+            reject(new Error(`Erreur lors de la vérification du fichier croppé pour ${prefix}`));
+          }
         });
         
         ffmpeg.on('error', (err) => {
@@ -766,65 +797,95 @@ export class VideoService {
     outputPath: string, 
     request: MergeWithFullSoundRequest
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      console.log('🎬 Fusion des vidéos avec son complet...');
-
-      const args = [
-        '-i', prefixPath,        // vidéo prefix avec son
-        '-i', postfixPath,       // vidéo postfix
-        '-filter_complex',
-          // Concat vidéo
-          '[0:v][1:v]concat=n=2:v=1:a=0[v];' +
-          // Utiliser l'audio de la vidéo prefix pour toute la durée
-          '[0:a]asetpts=PTS-STARTPTS[a]',
-        '-map', '[v]',
-        '-map', '[a]',
-        '-c:v', 'libx264',
-        '-c:a', 'aac',
-        '-r', (request.fps || 25).toString(),
-        '-crf', request.quality === 'low' ? '28' : request.quality === 'medium' ? '23' : '18',
-        '-threads', (parseInt(process.env['FFMPEG_THREADS'] || '4')).toString(),
-        // Coupe automatiquement l'audio à la fin de la vidéo
-        '-shortest',
-        // Optionnel: meilleur démarrage pour le web
-        '-movflags', '+faststart',
-        '-y',
-        outputPath
-      ];
-
-      console.log('🎬 Arguments FFmpeg (fusion avec son complet):', args.join(' '));
-
-      const ffmpeg = spawn('ffmpeg', args);
-
-      let stderr = '';
-
-      ffmpeg.stderr.on('data', (data) => {
-        stderr += data.toString();
-        console.log(`🎬 FFmpeg (fusion avec son complet): ${data}`);
-      });
-
-      ffmpeg.on('close', (code) => {
-        if (code !== 0) {
-          console.error(`❌ Erreur FFmpeg (fusion avec son complet): code ${code}`);
-          console.error(`❌ FFmpeg stderr: ${stderr}`);
-          reject(new Error(`ffmpeg error code: ${code}`));
-          return;
+    return new Promise(async (resolve, reject) => {
+      try {
+        console.log('🎬 Fusion des vidéos avec son complet...');
+        
+        // Vérifier que les fichiers d'entrée existent et ont du contenu
+        console.log(`🔍 Vérification des fichiers d'entrée...`);
+        const prefixInfo = await this.getVideoInfo(prefixPath);
+        const postfixInfo = await this.getVideoInfo(postfixPath);
+        
+        console.log(`📹 Prefix: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s, audio: ${prefixInfo.audioCodec || 'aucun'}`);
+        console.log(`📹 Postfix: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s, audio: ${postfixInfo.audioCodec || 'aucun'}`);
+        
+        if (!prefixInfo.audioCodec) {
+          console.warn('⚠️ Aucun flux audio détecté dans la vidéo prefix');
         }
-        console.log('✅ Fusion avec son complet terminée avec succès');
-        resolve();
-      });
+        
+        if (!postfixInfo.audioCodec) {
+          console.warn('⚠️ Aucun flux audio détecté dans la vidéo postfix');
+        }
 
-      ffmpeg.on('error', (err) => {
-        console.error('❌ Erreur lors de la fusion avec son complet:', err);
-        reject(new Error(`Erreur FFmpeg: ${err.message}`));
-      });
+        const args = [
+          '-i', prefixPath,        // vidéo prefix avec son
+          '-i', postfixPath,       // vidéo postfix
+          '-filter_complex',
+            // Concat vidéo
+            '[0:v][1:v]concat=n=2:v=1:a=0[v];' +
+            // Utiliser l'audio de la vidéo prefix pour toute la durée
+            '[0:a]asetpts=PTS-STARTPTS[a]',
+          '-map', '[v]',
+          '-map', '[a]',
+          '-c:v', 'libx264',
+          '-c:a', 'aac',
+          '-r', (request.fps || 25).toString(),
+          '-crf', request.quality === 'low' ? '28' : request.quality === 'medium' ? '23' : '18',
+          '-threads', (parseInt(process.env['FFMPEG_THREADS'] || '4')).toString(),
+          // Coupe automatiquement l'audio à la fin de la vidéo
+          '-shortest',
+          // Optionnel: meilleur démarrage pour le web
+          '-movflags', '+faststart',
+          '-y',
+          outputPath
+        ];
 
-      const timeout = parseInt(process.env['FFMPEG_TIMEOUT'] || '300000');
-      if (timeout) {
-        setTimeout(() => {
-          ffmpeg.kill('SIGKILL');
-          reject(new Error('Timeout lors de la fusion avec son complet'));
-        }, timeout);
+        console.log('🎬 Arguments FFmpeg (fusion avec son complet):', args.join(' '));
+
+        const ffmpeg = spawn('ffmpeg', args);
+
+        let stderr = '';
+
+        ffmpeg.stderr.on('data', (data) => {
+          stderr += data.toString();
+          console.log(`🎬 FFmpeg (fusion avec son complet): ${data}`);
+        });
+
+        ffmpeg.on('close', async (code) => {
+          if (code !== 0) {
+            console.error(`❌ Erreur FFmpeg (fusion avec son complet): code ${code}`);
+            console.error(`❌ FFmpeg stderr: ${stderr}`);
+            reject(new Error(`ffmpeg error code: ${code}`));
+            return;
+          }
+          
+          // Vérifier que le fichier de sortie a été créé et a du contenu
+          try {
+            const outputInfo = await this.getVideoInfo(outputPath);
+            console.log(`✅ Fusion avec son complet terminée avec succès`);
+            console.log(`📹 Fichier de sortie: ${outputInfo.width}x${outputInfo.height}, durée: ${outputInfo.duration}s`);
+            resolve();
+          } catch (error) {
+            console.error(`❌ Erreur lors de la vérification du fichier de sortie:`, error);
+            reject(new Error(`Erreur lors de la vérification du fichier de sortie: ${error instanceof Error ? error.message : 'Erreur inconnue'}`));
+          }
+        });
+
+        ffmpeg.on('error', (err) => {
+          console.error('❌ Erreur lors de la fusion avec son complet:', err);
+          reject(new Error(`Erreur FFmpeg: ${err.message}`));
+        });
+
+        const timeout = parseInt(process.env['FFMPEG_TIMEOUT'] || '300000');
+        if (timeout) {
+          setTimeout(() => {
+            ffmpeg.kill('SIGKILL');
+            reject(new Error('Timeout lors de la fusion avec son complet'));
+          }, timeout);
+        }
+      } catch (error) {
+        console.error('❌ Erreur lors de la préparation de la fusion:', error);
+        reject(new Error(`Erreur lors de la préparation de la fusion: ${error instanceof Error ? error.message : 'Erreur inconnue'}`));
       }
     });
   }
@@ -949,6 +1010,22 @@ export class VideoService {
 
       job.progress = 50;
       job.updatedAt = new Date();
+
+      // Vérifier que les vidéos adaptées ont du contenu valide
+      console.log('🔍 Vérification des vidéos avant fusion...');
+      const prefixInfo = await this.getVideoInfo(adaptedPrefixPath);
+      const postfixInfo = await this.getVideoInfo(adaptedPostfixPath);
+      
+      console.log(`📐 Vidéo prefix adaptée: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s`);
+      console.log(`📐 Vidéo postfix adaptée: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s`);
+      
+      if (prefixInfo.width <= 0 || prefixInfo.height <= 0 || prefixInfo.duration <= 0) {
+        throw new Error(`Vidéo prefix invalide après adaptation: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s`);
+      }
+      
+      if (postfixInfo.width <= 0 || postfixInfo.height <= 0 || postfixInfo.duration <= 0) {
+        throw new Error(`Vidéo postfix invalide après adaptation: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s`);
+      }
 
       // Fusionner les vidéos avec le son de la vidéo prefix (sans trim)
       console.log('🎬 Fusion des vidéos avec son complet...');
