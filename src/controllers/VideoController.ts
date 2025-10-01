@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { MergeRequest } from '../services/VideoService';
+import { MergeWithFullSoundRequest } from '../services/VideoService';
 import { CloudRunJobsService, JobPayload } from '../services/CloudRunJobsService';
 import { SupabaseService } from '../services/SupabaseService';
 
@@ -112,31 +112,29 @@ export class VideoController {
         qrCodeLessVideoStatus
       });
 
-      // Obtenir les URLs publiques des vidéos préfixes et de l'audio via le service Supabase
-      const prefixVideo1BucketPath = 'qr_codes/qr_code_scene1_part1.mp4';
-      const prefixVideo2BucketPath = 'qr_codes/qr_code_scene1_part2.mp4';
-      const audioBucketPath = 'a9e931e3e10ed43f0ca2a15b96453e86.mp3';
+      // Utiliser la vidéo avec son complet
+      const prefixVideoWithFullSound = 'qr_codes/qr_code_scene_start_and_sound.mp4';
 
       // Construire l'URL de la vidéo postfix depuis Supabase
       // Utiliser default_presentation_video_public_url si presentation_video_public_url n'est pas renseignée
       const postfixVideoUrl = record.presentation_video_public_url || record.default_presentation_video_public_url;
 
-      console.log('🎬 Préparation de la fusion:', {
+      console.log('🎬 Préparation de la fusion avec son complet:', {
         table,
         recordId: record.id,
-        prefixVideo1BucketPath,
-        prefixVideo2BucketPath,
+        prefixVideoWithFullSound,
         postfixVideoUrl,
-        audioBucketPath,
+        videoDuration: 16, // 16 secondes de contenu
+        qrCodeLessStart: 6  // QR Code Less commence à 6s
       });
 
-      const mergeRequest: MergeRequest = {
-        prefixVideo1BucketPath,
-        prefixVideo2BucketPath,
+      const mergeRequest: MergeWithFullSoundRequest = {
+        type: 'fullsound',
+        prefixVideoWithFullSound,
         postfixVideoUrl,
-        audioBucketPath,
-        quality: 'medium', // Qualité par défaut
-        resolution: '1920x1080', // Résolution par défaut
+        videoDuration: 16, // 16 secondes de contenu dans la vidéo prefix
+        qrCodeLessStart: 6, // QR Code Less commence à 6 secondes
+        quality: 'high', // Qualité par défaut
         fps: 30, // FPS par défaut
         metadata: {
           table,

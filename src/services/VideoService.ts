@@ -4,11 +4,10 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { SupabaseService, VIDEO_BUCKET, SOUND_BUCKET } from './SupabaseService';
 
-export interface MergeRequest {
-  prefixVideo1BucketPath: string; // Première vidéo préfixe (qr_code_scene1_part1.mp4)
-  prefixVideo2BucketPath: string; // Deuxième vidéo préfixe (qr_code_scene1_part2.mp4)
+// Type parent avec discriminator
+export interface BaseMergeRequest {
+  type: 'classic' | 'fullsound';
   postfixVideoUrl: string; // Vidéo fournie par le webhook
-  audioBucketPath?: string; // Son optionnel (a9e931e3e10ed43f0ca2a15b96453e86.mp3)
   quality?: 'low' | 'medium' | 'high';
   resolution?: string;
   fps?: number;
@@ -21,6 +20,25 @@ export interface MergeRequest {
     [key: string]: any;
   };
 }
+
+// Type pour la fusion classique
+export interface ClassicMergeRequest extends BaseMergeRequest {
+  type: 'classic';
+  prefixVideo1BucketPath: string; // Première vidéo préfixe (qr_code_scene1_part1.mp4)
+  prefixVideo2BucketPath: string; // Deuxième vidéo préfixe (qr_code_scene1_part2.mp4)
+  audioBucketPath?: string; // Son optionnel (a9e931e3e10ed43f0ca2a15b96453e86.mp3)
+}
+
+// Type pour la fusion avec son complet
+export interface MergeWithFullSoundRequest extends BaseMergeRequest {
+  type: 'fullsound';
+  prefixVideoWithFullSound: string; // Vidéo préfixe avec son complet
+  videoDuration: number; // Durée en secondes à extraire de prefixVideoWithFullSound
+  qrCodeLessStart: number; // Point de départ en secondes pour la vidéo qr_codeless
+}
+
+// Union type pour tous les types de fusion
+export type MergeRequest = ClassicMergeRequest | MergeWithFullSoundRequest;
 
 export interface MergeResponse {
   success: boolean;
@@ -173,16 +191,27 @@ export class VideoService {
 
     try {
       console.log(`🎬 Début du job de fusion ${jobId}`);
-      console.log(`📹 Prefix Video 1: ${request.prefixVideo1BucketPath}`);
-      console.log(`📹 Prefix Video 2: ${request.prefixVideo2BucketPath}`);
-      console.log(`📹 Postfix: ${request.postfixVideoUrl}`);
-      if (request.audioBucketPath) {
-        console.log(`🎵 Audio: ${request.audioBucketPath}`);
+      
+      // Utiliser le discriminator pour choisir la fonction appropriée
+      switch (request.type) {
+        case 'fullsound':
+          console.log(`📹 Prefix Video with Full Sound: ${request.prefixVideoWithFullSound}`);
+          console.log(`⏱️ Video Duration: ${request.videoDuration}s`);
+          console.log(`📹 Postfix: ${request.postfixVideoUrl}`);
+          return await this.processVideoWithFullSound(request, jobId);
+          
+        case 'classic':
+          console.log(`📹 Prefix Video 1: ${request.prefixVideo1BucketPath}`);
+          console.log(`📹 Prefix Video 2: ${request.prefixVideo2BucketPath}`);
+          console.log(`📹 Postfix: ${request.postfixVideoUrl}`);
+          if (request.audioBucketPath) {
+            console.log(`🎵 Audio: ${request.audioBucketPath}`);
+          }
+          return await this.processVideoFields(request, jobId);
+          
+        default:
+          throw new Error(`Type de fusion non supporté: ${(request as any).type}`);
       }
-
-      // Traiter les champs de présentation
-      console.log('🎬 Traitement des champs de présentation');
-      return await this.processVideoFields(request, jobId);
     } catch (error) {
       console.error('❌ Erreur lors du traitement vidéo:', error);
       return {
@@ -464,6 +493,342 @@ export class VideoService {
     }
   }
 
+
+  private async detectCropParameters(videoPath: string): Promise<{ x: number; y: number; width: number; height: number } | null> {
+    return new Promise((resolve) => {
+      console.log('🔍 Détection automatique des bandes noires (analyse de 1 seconde)...');
+      
+      const ffmpeg = spawn('ffmpeg', [
+        '-i', videoPath,
+        '-t', '1', // Analyser seulement la première seconde
+        '-vf', 'cropdetect=24:16:0',
+        '-f', 'null',
+        '-'
+      ]);
+      
+      let output = '';
+      let errorOutput = '';
+      
+      ffmpeg.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      const cropResults: { x: number; y: number; width: number; height: number }[] = [];
+      
+      ffmpeg.stderr.on('data', (data) => {
+        const dataStr = data.toString();
+        errorOutput += dataStr;
+        
+        // Parser en temps réel pour collecter tous les résultats
+        const cropMatches = dataStr.match(/crop=(\d+):(\d+):(\d+):(\d+)/g);
+        if (cropMatches) {
+          cropMatches.forEach((match: string) => {
+            const matchResult = match.match(/crop=(\d+):(\d+):(\d+):(\d+)/);
+            if (matchResult) {
+              const [, width, height, x, y] = matchResult;
+              if (width && height && x && y) {
+                cropResults.push({
+                  x: parseInt(x),
+                  y: parseInt(y),
+                  width: parseInt(width),
+                  height: parseInt(height)
+                });
+              }
+            }
+          });
+        }
+      });
+      
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) {
+          console.log('⚠️ Aucune bande noire détectée ou erreur lors de la détection');
+          resolve(null);
+          return;
+        }
+        
+        if (cropResults.length === 0) {
+          console.log('⚠️ Aucun paramètre de crop trouvé');
+          resolve(null);
+          return;
+        }
+        
+        // Prendre le résultat le plus fréquent (plus robuste)
+        const cropCounts = new Map<string, number>();
+        cropResults.forEach(crop => {
+          const key = `${crop.x},${crop.y},${crop.width},${crop.height}`;
+          cropCounts.set(key, (cropCounts.get(key) || 0) + 1);
+        });
+        
+        let mostFrequentCrop = cropResults[0];
+        let maxCount = 0;
+        cropCounts.forEach((count, key) => {
+          if (count > maxCount) {
+            maxCount = count;
+            const parts = key.split(',').map(Number);
+            if (parts.length === 4 && parts.every(p => !isNaN(p))) {
+              const [x, y, width, height] = parts;
+              mostFrequentCrop = { 
+                x: x || 0, 
+                y: y || 0, 
+                width: width || 0, 
+                height: height || 0 
+              };
+            }
+          }
+        });
+        
+        console.log(`✅ Paramètres de crop détectés (${cropResults.length} échantillons):`, mostFrequentCrop);
+        resolve(mostFrequentCrop || null);
+      });
+      
+      ffmpeg.on('error', (err) => {
+        console.error('❌ Erreur lors de la détection des bandes noires:', err);
+        resolve(null);
+      });
+    });
+  }
+
+  private async cropVideo(
+    videoPath: string, 
+    jobId: string, 
+    prefix: string
+  ): Promise<string> {
+    try {
+      console.log(`✂️ Détection et suppression des bandes noires pour ${prefix}...`);
+      
+      // Détecter les paramètres de crop
+      const cropParams = await this.detectCropParameters(videoPath);
+      
+      if (!cropParams) {
+        console.log(`✅ Aucune bande noire détectée pour ${prefix}, pas de crop nécessaire`);
+        return videoPath;
+      }
+      
+      const croppedPath = path.join(this.tempPath, `cropped_${prefix}_${jobId}.mp4`);
+      
+      return new Promise((resolve, reject) => {
+        console.log(`✂️ Application du crop pour ${prefix}:`, cropParams);
+        
+        const args = [
+          '-i', videoPath,
+          '-vf', `crop=${cropParams.width}:${cropParams.height}:${cropParams.x}:${cropParams.y}`,
+          '-c:a', 'copy', // Copier l'audio sans ré-encodage
+          '-y',
+          croppedPath
+        ];
+        
+        const ffmpeg = spawn('ffmpeg', args);
+        
+        ffmpeg.stderr.on('data', (data) => {
+          console.log(`✂️ FFmpeg (crop) pour ${prefix}: ${data}`);
+        });
+        
+        ffmpeg.on('close', (code) => {
+          if (code !== 0) {
+            console.error(`❌ Erreur lors du crop pour ${prefix}: code ${code}`);
+            reject(new Error(`Erreur FFmpeg lors du crop pour ${prefix}: ${code}`));
+            return;
+          }
+          console.log(`✅ Crop terminé pour ${prefix}: ${croppedPath}`);
+          resolve(croppedPath);
+        });
+        
+        ffmpeg.on('error', (err) => {
+          console.error(`❌ Erreur FFmpeg lors du crop pour ${prefix}:`, err);
+          reject(new Error(`Erreur FFmpeg: ${err.message}`));
+        });
+      });
+      
+    } catch (error) {
+      console.error(`❌ Erreur lors du crop pour ${prefix}:`, error);
+      // En cas d'erreur, retourner le chemin original
+      return videoPath;
+    }
+  }
+
+  private async trimVideo(
+    inputPath: string, 
+    startTime: number, 
+    duration: number, 
+    jobId: string, 
+    prefix: string
+  ): Promise<string> {
+    const trimmedPath = path.join(this.tempPath, `${prefix}_${jobId}.mp4`);
+    
+    return new Promise((resolve, reject) => {
+      console.log(`✂️ Découpage de la vidéo: ${startTime}s à ${startTime + duration}s`);
+      
+      const args = [
+        '-i', inputPath,
+        '-ss', startTime.toString(),
+        '-t', duration.toString(),
+        '-c', 'copy', // Copie sans ré-encodage pour plus de rapidité
+        '-avoid_negative_ts', 'make_zero',
+        '-y',
+        trimmedPath
+      ];
+      
+      const ffmpeg = spawn('ffmpeg', args);
+      
+      ffmpeg.stderr.on('data', (data) => {
+        console.log(`✂️ FFmpeg (trim): ${data}`);
+      });
+      
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) {
+          console.error(`❌ Erreur lors du découpage de la vidéo: code ${code}`);
+          reject(new Error(`Erreur FFmpeg lors du découpage: ${code}`));
+          return;
+        }
+        console.log(`✅ Découpage de la vidéo terminé: ${trimmedPath}`);
+        resolve(trimmedPath);
+      });
+      
+      ffmpeg.on('error', (err) => {
+        console.error(`❌ Erreur FFmpeg lors du découpage:`, err);
+        reject(new Error(`Erreur FFmpeg: ${err.message}`));
+      });
+    });
+  }
+
+  private async createQrCodeLessVideoWithFullSound(
+    prefixPath: string, 
+    postfixPath: string, 
+    outputPath: string, 
+    request: MergeWithFullSoundRequest
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      console.log('🎬 Création de la vidéo qr_codeless...');
+
+      const args = [
+        '-i', prefixPath,        // vidéo prefix complète
+        '-i', postfixPath,       // vidéo postfix
+        '-filter_complex',
+          // Concat vidéo
+          '[0:v][1:v]concat=n=2:v=1:a=0[v];' +
+          // Utiliser l'audio de la vidéo prefix pour toute la durée
+          '[0:a]asetpts=PTS-STARTPTS[a]',
+        '-map', '[v]',
+        '-map', '[a]',
+        '-c:v', 'libx264',
+        '-c:a', 'aac',
+        '-r', (request.fps || 25).toString(),
+        '-crf', request.quality === 'low' ? '28' : request.quality === 'medium' ? '23' : '18',
+        '-threads', (parseInt(process.env['FFMPEG_THREADS'] || '4')).toString(),
+        // Coupe automatiquement l'audio à la fin de la vidéo
+        '-shortest',
+        // Optionnel: meilleur démarrage pour le web
+        '-movflags', '+faststart',
+        '-y',
+        outputPath
+      ];
+
+      console.log('🎬 Arguments FFmpeg (qr_codeless):', args.join(' '));
+
+      const ffmpeg = spawn('ffmpeg', args);
+
+      let stderr = '';
+
+      ffmpeg.stderr.on('data', (data) => {
+        stderr += data.toString();
+        console.log(`🎬 FFmpeg (qr_codeless): ${data}`);
+      });
+
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) {
+          console.error(`❌ Erreur FFmpeg (qr_codeless): code ${code}`);
+          console.error(`❌ FFmpeg stderr: ${stderr}`);
+          reject(new Error(`ffmpeg error code: ${code}`));
+          return;
+        }
+        console.log('✅ Vidéo qr_codeless créée avec succès');
+        resolve();
+      });
+
+      ffmpeg.on('error', (err) => {
+        console.error('❌ Erreur lors de la création de la vidéo qr_codeless:', err);
+        reject(new Error(`Erreur FFmpeg: ${err.message}`));
+      });
+
+      const timeout = parseInt(process.env['FFMPEG_TIMEOUT'] || '300000');
+      if (timeout) {
+        setTimeout(() => {
+          ffmpeg.kill('SIGKILL');
+          reject(new Error('Timeout lors de la création de la vidéo qr_codeless'));
+        }, timeout);
+      }
+    });
+  }
+
+  private async createQrCodeWithFullSound(
+    prefixPath: string, 
+    postfixPath: string, 
+    outputPath: string, 
+    request: MergeWithFullSoundRequest
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      console.log('🎬 Fusion des vidéos avec son complet...');
+
+      const args = [
+        '-i', prefixPath,        // vidéo prefix avec son
+        '-i', postfixPath,       // vidéo postfix
+        '-filter_complex',
+          // Concat vidéo
+          '[0:v][1:v]concat=n=2:v=1:a=0[v];' +
+          // Utiliser l'audio de la vidéo prefix pour toute la durée
+          '[0:a]asetpts=PTS-STARTPTS[a]',
+        '-map', '[v]',
+        '-map', '[a]',
+        '-c:v', 'libx264',
+        '-c:a', 'aac',
+        '-r', (request.fps || 25).toString(),
+        '-crf', request.quality === 'low' ? '28' : request.quality === 'medium' ? '23' : '18',
+        '-threads', (parseInt(process.env['FFMPEG_THREADS'] || '4')).toString(),
+        // Coupe automatiquement l'audio à la fin de la vidéo
+        '-shortest',
+        // Optionnel: meilleur démarrage pour le web
+        '-movflags', '+faststart',
+        '-y',
+        outputPath
+      ];
+
+      console.log('🎬 Arguments FFmpeg (fusion avec son complet):', args.join(' '));
+
+      const ffmpeg = spawn('ffmpeg', args);
+
+      let stderr = '';
+
+      ffmpeg.stderr.on('data', (data) => {
+        stderr += data.toString();
+        console.log(`🎬 FFmpeg (fusion avec son complet): ${data}`);
+      });
+
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) {
+          console.error(`❌ Erreur FFmpeg (fusion avec son complet): code ${code}`);
+          console.error(`❌ FFmpeg stderr: ${stderr}`);
+          reject(new Error(`ffmpeg error code: ${code}`));
+          return;
+        }
+        console.log('✅ Fusion avec son complet terminée avec succès');
+        resolve();
+      });
+
+      ffmpeg.on('error', (err) => {
+        console.error('❌ Erreur lors de la fusion avec son complet:', err);
+        reject(new Error(`Erreur FFmpeg: ${err.message}`));
+      });
+
+      const timeout = parseInt(process.env['FFMPEG_TIMEOUT'] || '300000');
+      if (timeout) {
+        setTimeout(() => {
+          ffmpeg.kill('SIGKILL');
+          reject(new Error('Timeout lors de la fusion avec son complet'));
+        }, timeout);
+      }
+    });
+  }
+
   async getJobStatus(jobId: string): Promise<JobStatus | null> {
     return this.jobs.get(jobId) || null;
   }
@@ -525,8 +890,165 @@ export class VideoService {
 
 
 
+  private async processVideoWithFullSound(
+    request: MergeWithFullSoundRequest, 
+    jobId: string
+  ): Promise<MergeResponse> {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error('Job non trouvé');
+    }
+
+    try {
+      console.log('🎬 Début du traitement vidéo avec son complet');
+
+      // Générer les chemins locaux
+      const suffix = '_fullsound';
+      const prefixVideoPath = path.join(this.tempPath, `prefix${suffix}_${jobId}.mp4`);
+      const postfixPath = path.join(this.tempPath, `postfix${suffix}_${jobId}.mp4`);
+      const outputPath = path.join(this.tempPath, `merged${suffix}_${jobId}.mp4`);
+      const qrCodeLessOutputPath = path.join(this.tempPath, `qr_codeless${suffix}_${jobId}.mp4`);
+
+      // Mettre à jour le statut
+      job.status = 'processing';
+      job.progress = 10;
+      job.updatedAt = new Date();
+
+      // Télécharger les vidéos depuis Supabase
+      console.log('📥 Téléchargement des vidéos...');
+      await this.supabaseService.download(VIDEO_BUCKET, request.prefixVideoWithFullSound!, prefixVideoPath);
+      job.progress = 20;
+      job.updatedAt = new Date();
+
+      // Extraire le chemin du fichier depuis l'URL publique
+      const urlParts = request.postfixVideoUrl.split('/');
+      const filePath = urlParts.slice(-3).join('/'); // Prend les 3 derniers segments
+      
+      await this.supabaseService.download(VIDEO_BUCKET, filePath, postfixPath);
+      job.progress = 30;
+      job.updatedAt = new Date();
+
+      // Cropper d'abord les vidéos pour retirer les bandes noires
+      console.log('✂️ Suppression des bandes noires des vidéos...');
+      const croppedPrefixPath = await this.cropVideo(prefixVideoPath, jobId, `prefix${suffix}`);
+      const croppedPostfixPath = await this.cropVideo(postfixPath, jobId, `postfix${suffix}`);
+      
+      job.progress = 35;
+      job.updatedAt = new Date();
+
+      // Analyser les dimensions des vidéos croppées
+      console.log('📐 Analyse des dimensions des vidéos croppées...');
+      const targetDimensions = await this.getTargetDimensions(croppedPrefixPath);
+      
+      // Adapter toutes les vidéos aux mêmes dimensions
+      const adaptedPrefixPath = await this.adaptVideoDimensions(croppedPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
+      const adaptedPostfixPath = await this.adaptVideoDimensions(croppedPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
+      
+      job.progress = 40;
+      job.updatedAt = new Date();
+
+      job.progress = 50;
+      job.updatedAt = new Date();
+
+      // Fusionner les vidéos avec le son de la vidéo prefix (sans trim)
+      console.log('🎬 Fusion des vidéos avec son complet...');
+      await this.createQrCodeWithFullSound(adaptedPrefixPath, adaptedPostfixPath, outputPath, request);
+      
+      job.progress = 60;
+      job.updatedAt = new Date();
+
+      // Créer la vidéo qr_codeless
+      console.log(`🎬 Création de la vidéo qr_codeless à partir de ${request.qrCodeLessStart}s...`);
+      const qrCodeLessPrefixPath = await this.trimVideo(adaptedPrefixPath, request.qrCodeLessStart, request.videoDuration - request.qrCodeLessStart, jobId, `qr_codeless_prefix${suffix}`);
+      await this.createQrCodeLessVideoWithFullSound(qrCodeLessPrefixPath, adaptedPostfixPath, qrCodeLessOutputPath, request);
+      
+      job.progress = 80;
+      job.updatedAt = new Date();
+
+      // Vérifier que les fichiers de sortie existent
+      if (!await fs.pathExists(outputPath)) {
+        throw new Error('Le fichier de sortie principal n\'a pas été créé');
+      }
+      if (!await fs.pathExists(qrCodeLessOutputPath)) {
+        throw new Error('Le fichier de sortie qr_codeless n\'a pas été créé');
+      }
+
+      // Upload des vidéos vers Supabase
+      console.log('📤 Upload des vidéos vers Supabase...');
+      const table = request.metadata?.table || 'practices';
+      const recordId = request.metadata?.recordId || jobId;
+      const timestamp = Date.now();
+      
+      // Upload de la vidéo principale
+      const mainDestinationPath = `${table}/${recordId}/qr_code_presentation_video_${timestamp}.mp4`;
+      const mergedVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, outputPath, mainDestinationPath);
+      
+      // Upload de la vidéo qr_codeless
+      const qrCodeLessDestinationPath = `${table}/${recordId}/qr_code_less_presentation_video_${timestamp}.mp4`;
+      const qrCodeLessVideoOutputUrl = await this.supabaseService.upload(VIDEO_BUCKET, qrCodeLessOutputPath, qrCodeLessDestinationPath);
+
+      // Mettre à jour les champs dans la base de données
+      console.log('📝 Mise à jour des champs dans la base de données...');
+      const updateMainSuccess = await this.supabaseService.updateQrCodePresentationVideoUrl(table, recordId, mergedVideoOutputUrl);
+      const updateQrCodeLessSuccess = await this.supabaseService.updateQrCodePresentationVideoMidUrl(table, recordId, qrCodeLessVideoOutputUrl);
+      
+      if (!updateMainSuccess) {
+        console.error('❌ Échec de la mise à jour du champ qr_code_presentation_video_public_url pour:', { table, recordId });
+        throw new Error('Échec de la mise à jour de la base de données (vidéo principale)');
+      }
+      if (!updateQrCodeLessSuccess) {
+        console.error('❌ Échec de la mise à jour du champ qr_code_less_presentation_video_public_url pour:', { table, recordId });
+        throw new Error('Échec de la mise à jour de la base de données (vidéo qr_codeless)');
+      }
+
+      console.log('✅ Champs mis à jour avec succès');
+
+      // Nettoyer les fichiers temporaires
+      const tempFiles = [
+        prefixVideoPath, 
+        postfixPath, 
+        outputPath, 
+        qrCodeLessOutputPath, 
+        croppedPrefixPath, 
+        croppedPostfixPath,
+        adaptedPrefixPath, 
+        adaptedPostfixPath, 
+        qrCodeLessPrefixPath
+      ];
+      await this.cleanupTempFiles(tempFiles);
+
+      // Mettre à jour le job
+      job.status = 'completed';
+      job.progress = 100;
+      job.outputUrl = outputPath;
+      job.updatedAt = new Date();
+
+      console.log('✅ Traitement vidéo avec son complet terminé avec succès:', outputPath);
+
+      return {
+        success: true,
+        outputUrl: outputPath,
+        jobId
+      };
+
+    } catch (error) {
+      // Mettre à jour le job en cas d'erreur
+      job.status = 'failed';
+      job.error = error instanceof Error ? error.message : 'Erreur inconnue';
+      job.updatedAt = new Date();
+
+      console.error(`❌ Erreur lors du traitement vidéo avec son complet:`, error);
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erreur inconnue',
+        jobId
+      };
+    }
+  }
+
   private async processVideoFields(
-    request: MergeRequest, 
+    request: ClassicMergeRequest, 
     jobId: string
   ): Promise<MergeResponse> {
     const job = this.jobs.get(jobId);
