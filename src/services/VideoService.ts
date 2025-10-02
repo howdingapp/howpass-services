@@ -116,7 +116,8 @@ export class VideoService {
   
   private extractRotationFromStream(stream: any): number {
 
-    console.log('🔍 Extraction de la rotation depuis les tags:', stream?.tags);
+    console.log(' extractRotationFromStream - Tags:', stream?.tags)
+    console.log(' extractRotationFromStream - Side Data List:', stream?.side_data_list)
 
     // Cas le plus fréquent : tag "rotate"
     if (stream?.tags?.rotate) {
