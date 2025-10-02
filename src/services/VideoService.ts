@@ -436,7 +436,7 @@ export class VideoService {
         const args = [
           '-hide_banner',
           '-i', videoPath,
-          '-vf', 'scale=1072:-2,pad=1072:832:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1',
+          '-vf', filter,
           '-c:v', 'libx264',
           '-pix_fmt', 'yuv420p',
           '-crf', '18',
