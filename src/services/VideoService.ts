@@ -481,12 +481,12 @@ export class VideoService {
         // Déterminer la rotation à appliquer selon la valeur de rotationDeg
         // Pour une vidéo avec rotation dans les métadonnées, on doit appliquer la rotation inverse
         // pour "annuler" la rotation des métadonnées et obtenir la vraie orientation
-        let transposeValue = '0'; // Pas de rotation
+        let transposeValue = 'none'; // Pas de rotation
         
         if (rotationDeg === 90) {
-          transposeValue = '3'; // 90° antihoraire pour annuler 90° horaire
+          transposeValue = 'cclock:portrait'; // 90° antihoraire pour annuler 90° horaire, préserver portrait
         } else if (rotationDeg === -90) {
-          transposeValue = '1'; // 90° horaire pour annuler -90°
+          transposeValue = 'clock:portrait'; // 90° horaire pour annuler -90°, préserver portrait
         }
         
         console.log(`📐 Rotation détectée: ${rotationDeg}° -> transpose=${transposeValue}`);
@@ -498,7 +498,7 @@ export class VideoService {
         let newHeight = currentHeight;
         
         // Pour les rotations de 90° et 270°, inverser largeur et hauteur
-        if (transposeValue === '1' || transposeValue === '3') {
+        if (transposeValue === 'clock' || transposeValue === 'cclock') {
           newWidth = currentHeight;
           newHeight = currentWidth;
         }
