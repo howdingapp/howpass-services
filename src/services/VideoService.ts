@@ -445,7 +445,7 @@ export class VideoService {
     });
   }
 
-  private async getTargetDimensions(videoPath: string): Promise<{ width: number; height: number }> {
+  private async getDimensions(videoPath: string): Promise<{ width: number; height: number }> {
     try {
       const videoInfo = await this.getVideoInfo(videoPath);
       return {
@@ -470,21 +470,36 @@ export class VideoService {
       const videoInfo = await this.getVideoInfo(videoPath);
       const currentWidth = videoInfo.width;
       const currentHeight = videoInfo.height;
+      const rotationDeg = videoInfo.rotationDeg;
       
-      // Vérifier si la vidéo est déjà en mode portrait (hauteur > largeur)
-      if (currentHeight > currentWidth) {
-        console.log(`✅ ${prefix} est déjà en mode portrait (${currentWidth}x${currentHeight})`);
+      // Vérifier si une rotation physique est nécessaire
+      // Si les dimensions brutes sont différentes des dimensions effectives, 
+      // c'est qu'une rotation a été appliquée via un tag
+      const needsPhysicalRotation = (currentWidth !== videoInfo.effectiveWidth || currentHeight !== videoInfo.effectiveHeight);
+      
+      if (!needsPhysicalRotation) {
+        console.log(`✅ ${prefix} n'a pas besoin de rotation physique (${currentWidth}x${currentHeight}, rotation: ${rotationDeg}°)`);
         return videoPath;
       }
       
       const rotatedPath = path.join(this.tempPath, `rotated_${prefix}_${jobId}.mp4`);
       
       return new Promise((resolve, reject) => {
-        console.log(`🔄 Rotation de 90° pour ${prefix}: ${currentWidth}x${currentHeight} -> ${currentHeight}x${currentWidth}`);
+        // Déterminer la rotation à appliquer selon la valeur de rotationDeg
+        let transposeValue = '0'; // Pas de rotation
+        if (rotationDeg === 90 || rotationDeg === -270) {
+          transposeValue = '1'; // 90° horaire
+        } else if (rotationDeg === 180 || rotationDeg === -180) {
+          transposeValue = '2'; // 180°
+        } else if (rotationDeg === -90 || rotationDeg === 270) {
+          transposeValue = '3'; // 90° antihoraire
+        }
+        
+        console.log(`🔄 Application de la rotation physique pour ${prefix}: ${currentWidth}x${currentHeight} (rotation: ${rotationDeg}°) -> transpose=${transposeValue}`);
         
         const args = [
           '-i', videoPath,
-          '-vf', 'transpose=1', // Rotation de 90° dans le sens horaire
+          '-vf', `transpose=${transposeValue}`,
           '-c:v', 'libx264',
           '-c:a', 'copy', // Copier l'audio sans ré-encodage
           '-pix_fmt', 'yuv420p',
@@ -1144,7 +1159,7 @@ export class VideoService {
 
       // Analyser les dimensions des vidéos en mode portrait
       console.log('📐 Analyse des dimensions des vidéos en mode portrait...');
-      const targetDimensions = await this.getTargetDimensions(portraitPostfixPath);
+      const targetDimensions = await this.getDimensions(portraitPrefixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
       const adaptedPrefixPath = await this.adaptVideoDimensionsAndRemoveAudio(portraitPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
@@ -1330,7 +1345,7 @@ export class VideoService {
       
       // Analyser les dimensions des vidéos en mode portrait
       console.log('📐 Analyse des dimensions des vidéos en mode portrait...');
-      const targetDimensions = await this.getTargetDimensions(portraitPostfixPath);
+      const targetDimensions = await this.getDimensions(portraitPostfixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
       const adaptedPrefix1Path = await this.adaptVideoDimensionsAndRemoveAudio(portraitPrefix1Path, targetDimensions, jobId, `prefix1${suffix}`);
