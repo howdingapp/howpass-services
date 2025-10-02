@@ -79,16 +79,22 @@ export interface FFmpegOptions {
   };
 }
 
-export interface VideoInfo {
+type VideoInfo = {
   duration: number;
-  width: number;
+  width: number;           // dimensions "brutes" du flux tel qu’encodé
   height: number;
+  effectiveWidth: number;  // dimensions effectives une fois la rotation appliquée
+  effectiveHeight: number;
+  rotationDeg: number;     // -180, -90, 0, 90 ou 180
   fps: number;
   bitrate: number;
   audioCodec?: string;
   videoCodec?: string;
   format: string;
-}
+  hasVideo: boolean;
+  hasAudio: boolean;
+};
+
 
 export class VideoService {
   private tempPath: string;
@@ -107,6 +113,34 @@ export class VideoService {
     fs.ensureDirSync(this.tempPath);
   }
 
+  private normalizeRotationDeg(input?: any): number {
+    if (input == null) return 0;
+    const n = Number(input);
+    if (!Number.isFinite(n)) return 0;
+    // Arrondir au multiple de 90 et normaliser à [-180, 180]
+    let r = Math.round(n / 90) * 90;
+    r = ((r % 360) + 360) % 360;      // [0, 360)
+    if (r > 180) r -= 360;            // [-180, 180]
+    return r === -270 ? 90 : (r === 270 ? -90 : r);
+  }
+  
+  private extractRotationFromStream(stream: any): number {
+    // 1) ffprobe classique: streams[].tags.rotate (string "90", "-90", "180", etc.)
+    if (stream?.tags?.rotate != null) {
+      return this.normalizeRotationDeg(stream.tags.rotate);
+    }
+    // 2) side_data_list[].rotation (side_data_type: "Display Matrix")
+    const sdl = Array.isArray(stream?.side_data_list) ? stream.side_data_list : [];
+    for (const sd of sdl) {
+      if (sd && (sd.rotation != null)) {
+        return this.normalizeRotationDeg(sd.rotation);
+      }
+    }
+    // Certaines builds exposent 'side_data_type' === 'Display Matrix' sans 'rotation' numérique,
+    // mais ce cas est rare en JSON; on laisse 0 par défaut.
+    return 0;
+  }
+  
   async getVideoInfo(filePath: string): Promise<VideoInfo> {
     return new Promise((resolve, reject) => {
       const ffmpeg = spawn('ffprobe', [
@@ -116,18 +150,13 @@ export class VideoService {
         '-show_streams',
         filePath
       ]);
-      
+  
       let output = '';
       let errorOutput = '';
-      
-      ffmpeg.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-      
-      ffmpeg.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-      
+  
+      ffmpeg.stdout.on('data', (data) => { output += data.toString(); });
+      ffmpeg.stderr.on('data', (data) => { errorOutput += data.toString(); });
+  
       ffmpeg.on('close', (code) => {
         if (code !== 0) {
           console.error(`ffprobe error code: ${code}`);
@@ -135,32 +164,61 @@ export class VideoService {
           reject(new Error(`ffprobe error code: ${code}`));
           return;
         }
-        
+  
         try {
           const metadata = JSON.parse(output);
-          const videoStream = metadata.streams.find((stream: any) => stream.codec_type === 'video');
-          const audioStream = metadata.streams.find((stream: any) => stream.codec_type === 'audio');
-
+          const videoStream = (metadata.streams || []).find((s: any) => s.codec_type === 'video');
+          const audioStream = (metadata.streams || []).find((s: any) => s.codec_type === 'audio');
+  
           if (!videoStream) {
             reject(new Error('Aucun flux vidéo trouvé'));
             return;
           }
-
-          resolve({
-            duration: parseFloat(metadata.format.duration) || 0,
-            width: videoStream.width || 0,
-            height: videoStream.height || 0,
-            fps: this.parseFPS(videoStream.r_frame_rate || '0/1'),
-            bitrate: metadata.format.bit_rate ? parseInt(metadata.format.bit_rate) : 0,
+  
+          const rawW = Number(videoStream.width) || 0;
+          const rawH = Number(videoStream.height) || 0;
+          const rotationDeg = this.extractRotationFromStream(videoStream);
+  
+          // Si rotation = ±90, on permute largeur/hauteur pour l'"effectif"
+          const rotatedOdd = Math.abs(rotationDeg) % 180 === 90;
+          const effectiveWidth  = rotatedOdd ? rawH : rawW;
+          const effectiveHeight = rotatedOdd ? rawW : rawH;
+  
+          const info: VideoInfo = {
+            duration: parseFloat(metadata.format?.duration) || 0,
+            width: rawW,
+            height: rawH,
+            effectiveWidth,
+            effectiveHeight,
+            rotationDeg,
+            fps: ((): number => {
+              const r = String(videoStream.r_frame_rate || '0/1');
+              const parts = r.split('/');
+              const num = parts[0] ? Number(parts[0]) : 0;
+              const den = parts[1] ? Number(parts[1]) : 1;
+              
+              if (!parts[0] || !parts[1]) {
+                console.warn(`⚠️ FPS manquant: r_frame_rate="${r}", parts[0]="${parts[0]}", parts[1]="${parts[1]}"`);
+              } else if (num <= 0 || den <= 0) {
+                console.warn(`⚠️ FPS invalide détecté: r_frame_rate="${r}", num=${num}, den=${den}`);
+              }
+              
+              return num > 0 && den > 0 ? num / den : 0;
+            })(),
+            bitrate: metadata.format?.bit_rate ? parseInt(metadata.format.bit_rate, 10) : 0,
             audioCodec: audioStream?.codec_name,
-            videoCodec: videoStream.codec_name,
-            format: metadata.format.format_name || 'unknown'
-          });
+            videoCodec: videoStream?.codec_name,
+            format: metadata.format?.format_name || 'unknown',
+            hasVideo: !!videoStream,
+            hasAudio: !!audioStream
+          };
+  
+          resolve(info);
         } catch (error) {
           reject(new Error(`Erreur lors de l'analyse de la vidéo: ${error instanceof Error ? error.message : 'Erreur inconnue'}`));
         }
       });
-      
+  
       ffmpeg.on('error', (err) => {
         console.error('❌ Erreur ffprobe:', err);
         reject(new Error(`Erreur ffprobe: ${err.message}`));
@@ -405,6 +463,87 @@ export class VideoService {
       console.error('❌ Erreur lors de l\'analyse des dimensions:', error);
       // Dimensions par défaut adaptées aux téléphones (mode portrait)
       return { width: 720, height: 1280 };
+    }
+  }
+
+  private async forcePortraitOrientation(
+    videoPath: string, 
+    jobId: string, 
+    prefix: string
+  ): Promise<string> {
+    try {
+      console.log(`🔄 Forçage du mode portrait pour ${prefix}...`);
+      
+      const videoInfo = await this.getVideoInfo(videoPath);
+      const currentWidth = videoInfo.width;
+      const currentHeight = videoInfo.height;
+      
+      // Vérifier si la vidéo est déjà en mode portrait (hauteur > largeur)
+      if (currentHeight > currentWidth) {
+        console.log(`✅ ${prefix} est déjà en mode portrait (${currentWidth}x${currentHeight})`);
+        return videoPath;
+      }
+      
+      const rotatedPath = path.join(this.tempPath, `rotated_${prefix}_${jobId}.mp4`);
+      
+      return new Promise((resolve, reject) => {
+        console.log(`🔄 Rotation de 90° pour ${prefix}: ${currentWidth}x${currentHeight} -> ${currentHeight}x${currentWidth}`);
+        
+        const args = [
+          '-i', videoPath,
+          '-vf', 'transpose=1', // Rotation de 90° dans le sens horaire
+          '-c:v', 'libx264',
+          '-c:a', 'copy', // Copier l'audio sans ré-encodage
+          '-pix_fmt', 'yuv420p',
+          '-movflags', '+faststart',
+          '-y',
+          rotatedPath
+        ];
+        
+        console.log('🎬 Arguments FFmpeg (rotation):', args.join(' '));
+        
+        const ffmpeg = spawn('ffmpeg', args);
+        
+        ffmpeg.stderr.on('data', (data) => {
+          console.log(`🔄 Rotation FFmpeg pour ${prefix}: ${data}`);
+        });
+        
+        ffmpeg.on('close', async (code) => {
+          if (code !== 0) {
+            console.error(`❌ Erreur lors de la rotation pour ${prefix}: code ${code}`);
+            reject(new Error(`Erreur FFmpeg lors de la rotation pour ${prefix}: ${code}`));
+            return;
+          }
+          
+          // Vérifier que le fichier rotaté existe et a du contenu
+          try {
+            const rotatedInfo = await this.getVideoInfo(rotatedPath);
+            console.log(`✅ Rotation terminée pour ${prefix}: ${rotatedPath}`);
+            console.log(`📐 Dimensions après rotation: ${rotatedInfo.width}x${rotatedInfo.height}`);
+            
+            if (rotatedInfo.width <= 0 || rotatedInfo.height <= 0) {
+              console.error(`❌ Dimensions invalides après rotation pour ${prefix}: ${rotatedInfo.width}x${rotatedInfo.height}`);
+              reject(new Error(`Dimensions invalides après rotation pour ${prefix}`));
+              return;
+            }
+            
+            resolve(rotatedPath);
+          } catch (error) {
+            console.error(`❌ Erreur lors de la vérification du fichier rotaté pour ${prefix}:`, error);
+            reject(new Error(`Erreur lors de la vérification du fichier rotaté pour ${prefix}`));
+          }
+        });
+        
+        ffmpeg.on('error', (err) => {
+          console.error(`❌ Erreur FFmpeg lors de la rotation pour ${prefix}:`, err);
+          reject(new Error(`Erreur FFmpeg: ${err.message}`));
+        });
+      });
+      
+    } catch (error) {
+      console.error(`❌ Erreur lors de la rotation pour ${prefix}:`, error);
+      // En cas d'erreur, retourner le chemin original
+      return videoPath;
     }
   }
 
@@ -1002,13 +1141,21 @@ export class VideoService {
       job.progress = 35;
       job.updatedAt = new Date();
 
-      // Analyser les dimensions des vidéos croppées
-      console.log('📐 Analyse des dimensions des vidéos croppées...');
-      const targetDimensions = await this.getTargetDimensions(croppedPrefixPath);
+      // Forcer le mode portrait pour toutes les vidéos
+      console.log('🔄 Forçage du mode portrait...');
+      const portraitPrefixPath = await this.forcePortraitOrientation(croppedPrefixPath, jobId, `prefix${suffix}`);
+      const portraitPostfixPath = await this.forcePortraitOrientation(croppedPostfixPath, jobId, `postfix${suffix}`);
+      
+      job.progress = 37;
+      job.updatedAt = new Date();
+
+      // Analyser les dimensions des vidéos en mode portrait
+      console.log('📐 Analyse des dimensions des vidéos en mode portrait...');
+      const targetDimensions = await this.getTargetDimensions(portraitPrefixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
-      const adaptedPrefixPath = await this.adaptVideoDimensionsAndRemoveAudio(croppedPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
-      const adaptedPostfixPath = await this.adaptVideoDimensionsAndRemoveAudio(croppedPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
+      const adaptedPrefixPath = await this.adaptVideoDimensionsAndRemoveAudio(portraitPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
+      const adaptedPostfixPath = await this.adaptVideoDimensionsAndRemoveAudio(portraitPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
       
       job.progress = 40;
       job.updatedAt = new Date();
@@ -1093,6 +1240,8 @@ export class VideoService {
         qrCodeLessOutputPath, 
         croppedPrefixPath, 
         croppedPostfixPath,
+        portraitPrefixPath, 
+        portraitPostfixPath,
         adaptedPrefixPath, 
         adaptedPostfixPath, 
         qrCodeLessPrefixPath
@@ -1180,14 +1329,20 @@ export class VideoService {
       job.progress = 40;
       job.updatedAt = new Date();
 
-      // Analyser les dimensions des vidéos et adapter la vidéo postfixe
-      console.log('📐 Analyse des dimensions des vidéos...');
-      const targetDimensions = await this.getTargetDimensions(postfixPath);
+      // Forcer le mode portrait pour toutes les vidéos
+      console.log('🔄 Forçage du mode portrait...');
+      const portraitPrefix1Path = await this.forcePortraitOrientation(prefixVideo1Path, jobId, `prefix1${suffix}`);
+      const portraitPrefix2Path = await this.forcePortraitOrientation(prefixVideo2Path, jobId, `prefix2${suffix}`);
+      const portraitPostfixPath = await this.forcePortraitOrientation(postfixPath, jobId, `postfix${suffix}`);
+      
+      // Analyser les dimensions des vidéos en mode portrait
+      console.log('📐 Analyse des dimensions des vidéos en mode portrait...');
+      const targetDimensions = await this.getTargetDimensions(portraitPostfixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
-      const adaptedPrefix1Path = await this.adaptVideoDimensionsAndRemoveAudio(prefixVideo1Path, targetDimensions, jobId, `prefix1${suffix}`);
-      const adaptedPrefix2Path = await this.adaptVideoDimensionsAndRemoveAudio(prefixVideo2Path, targetDimensions, jobId, `prefix2${suffix}`);
-      const adaptedPostfixPath = await this.adaptVideoDimensionsAndRemoveAudio(postfixPath, targetDimensions, jobId, `postfix${suffix}`);
+      const adaptedPrefix1Path = await this.adaptVideoDimensionsAndRemoveAudio(portraitPrefix1Path, targetDimensions, jobId, `prefix1${suffix}`);
+      const adaptedPrefix2Path = await this.adaptVideoDimensionsAndRemoveAudio(portraitPrefix2Path, targetDimensions, jobId, `prefix2${suffix}`);
+      const adaptedPostfixPath = await this.adaptVideoDimensionsAndRemoveAudio(portraitPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
       
       job.progress = 45;
       job.updatedAt = new Date();
@@ -1228,14 +1383,16 @@ export class VideoService {
       if (audioPath) {
         tempFiles.push(audioPath);
       }
+      // Ajouter les fichiers en mode portrait
+      tempFiles.push(portraitPrefix1Path, portraitPrefix2Path, portraitPostfixPath);
       // Ajouter les fichiers adaptés s'ils sont différents des originaux
-      if (adaptedPrefix1Path !== prefixVideo1Path) {
+      if (adaptedPrefix1Path !== portraitPrefix1Path) {
         tempFiles.push(adaptedPrefix1Path);
       }
-      if (adaptedPrefix2Path !== prefixVideo2Path) {
+      if (adaptedPrefix2Path !== portraitPrefix2Path) {
         tempFiles.push(adaptedPrefix2Path);
       }
-      if (adaptedPostfixPath !== postfixPath) {
+      if (adaptedPostfixPath !== portraitPostfixPath) {
         tempFiles.push(adaptedPostfixPath);
       }
       // Ajouter la vidéo intermédiaire si elle existe
