@@ -474,25 +474,23 @@ export class VideoService {
   }
 
   private buildAdaptationFilter(
-    currentWidth: number, 
-    currentHeight: number, 
+    currentWidth: number,
+    currentHeight: number,
     targetDimensions: { width: number; height: number }
   ): string {
-    const { width: targetWidth, height: targetHeight } = targetDimensions;
-    
-    // Calculer le ratio d'aspect
+    const { width: W, height: H } = targetDimensions;
     const currentRatio = currentWidth / currentHeight;
-    const targetRatio = targetWidth / targetHeight;
-    
+    const targetRatio = W / H;
+  
     if (currentRatio > targetRatio) {
-      // Vidéo plus large que la cible - redimensionner et ajouter du padding vertical
-      return `scale=${targetWidth}:-2,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
+      // plus large -> scale sur largeur, pad en hauteur
+      return `[0:v]scale=${W}:-2,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[vout]`;
     } else if (currentRatio < targetRatio) {
-      // Vidéo plus haute que la cible - redimensionner et ajouter du padding horizontal
-      return `scale=-2:${targetHeight},pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
+      // plus haut -> scale sur hauteur, pad en largeur
+      return `[0:v]scale=-2:${H},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[vout]`;
     } else {
-      // Même ratio - redimensionner simplement
-      return `scale=${targetWidth}:${targetHeight},setsar=1`;
+      // même ratio
+      return `[0:v]scale=${W}:${H},setsar=1[vout]`;
     }
   }
 
