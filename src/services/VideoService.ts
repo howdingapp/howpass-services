@@ -904,11 +904,10 @@ export class VideoService {
           // Tronquer vidéo et audio du prefix à partir de qrCodeLessStart
           `[0:v]trim=start=${request.qrCodeLessStart}:duration=${request.videoDuration - request.qrCodeLessStart},setpts=PTS-STARTPTS[v0];` +
           `[0:a]atrim=start=${request.qrCodeLessStart}:duration=${request.videoDuration - request.qrCodeLessStart},asetpts=PTS-STARTPTS[a0];` +
-          `[1:v]setpts=PTS-STARTPTS[v1];` +                 // 🔑 on reset les PTS de la 2ème vidéo
-          `[v0][v1]concat=n=2:v=1:a=0[v];` +
-          `[a0]anull[a]`,                                   // audio du prefix tronqué
+          `[1:v]setpts=PTS-STARTPTS[v1];` +  
+          `[v0][v1]concat=n=2:v=1:a=0[v]`,   // concat vidéo seulement
         '-map', '[v]',
-        '-map', '[a]',
+        '-map', '[a0]',                       // 🔑 on prend directement l’audio du prefix tronqué
         '-c:v', 'libx264',
         '-c:a', 'aac',
         '-r', (request.fps || 25).toString(),
@@ -919,6 +918,7 @@ export class VideoService {
         '-y',
         outputPath
       ];
+      
       
 
       console.log('🎬 Arguments FFmpeg (qr_codeless):', args.join(' '));
@@ -984,26 +984,30 @@ export class VideoService {
           console.warn('⚠️ Aucun flux audio détecté dans la vidéo postfix');
         }
 
+        //Objectifs :
+        // - Tronquer la vidéo prefix à la durée spécifiée
+        // - Concaténer la vidéo prefix tronquée avec la vidéo postfix
+        // - Utiliser l'audio de la vidéo prefix pour toute la durée (prefix + postfix). L'audio s'arrete exactement à la fin de la vidéo (durée prefix+postfixe)
+
         const args = [
           '-noautorotate',
-          '-i', prefixPath,        // vidéo prefix avec son
-          '-i', postfixPath,       // vidéo postfix
+          '-i', prefixPath,
+          '-i', postfixPath,
           '-filter_complex',
             `[0:v]trim=duration=${request.videoDuration},setpts=PTS-STARTPTS[v0];` +
             `[1:v]setpts=PTS-STARTPTS[v1];` +
             `[v0][v1]concat=n=2:v=1:a=0[v];` +
-            `[0:a]asetpts=PTS-STARTPTS,apad[a]`,
+            `[0:a]asetpts=PTS-STARTPTS[a0]`,
           '-map', '[v]',
-          '-map', '[a]',
+          '-map', '[a0]',
           '-c:v', 'libx264',
           '-c:a', 'aac',
-          '-r', (request.fps || 25).toString(),
+          '-r', String(request.fps || 25),
           '-crf', request.quality === 'low' ? '28' : request.quality === 'medium' ? '23' : '18',
-          '-threads', (parseInt(process.env['FFMPEG_THREADS'] || '4')).toString(),
-          '-shortest',                 // coupe tout à la fin de la vidéo
+          '-threads', String(parseInt(process.env['FFMPEG_THREADS'] || '4')),
+          '-shortest',
           '-movflags', '+faststart',
-          '-y',
-          outputPath
+          '-y', outputPath
         ];
         
 
