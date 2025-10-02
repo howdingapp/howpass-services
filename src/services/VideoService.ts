@@ -893,34 +893,45 @@ export class VideoService {
     outputPath: string, 
     request: MergeWithFullSoundRequest
   ): Promise<void> {
+    
+    const postfixInfo = await this.getVideoInfo(postfixPath);
+    const prefixTrimDur = Math.max(0, request.videoDuration - request.qrCodeLessStart);
+    const totalDuration = prefixTrimDur + (postfixInfo?.duration ?? 0); // en secondes (float OK)
+
+      
     return new Promise((resolve, reject) => {
       console.log('🎬 Création de la vidéo qr_codeless...');
 
+      //Objectifs :
+      // - Tronquer le début de la vidéo du prefix (pour masquée la partie qr code)
+      // - Concaténer la vidéo du prefix tronquée avec la vidéo postfix
+      // - Utiliser l'audio de la vidéo du prefix, troncqué au même endroit pour la cohérence, pour toute la durée (prefixTronquée + postfix). L'audio s'arrete exactement à la fin de la vidéo (durée prefixTronquée + postfixe)
+
       const args = [
         '-noautorotate',
-        '-i', prefixPath,        // vidéo prefix complète
-        '-i', postfixPath,       // vidéo postfix
+        '-i', prefixPath,
+        '-i', postfixPath,
         '-filter_complex',
-          // Tronquer vidéo et audio du prefix à partir de qrCodeLessStart
-          `[0:v]trim=start=${request.qrCodeLessStart}:duration=${request.videoDuration - request.qrCodeLessStart},setpts=PTS-STARTPTS[v0];` +
-          `[0:a]atrim=start=${request.qrCodeLessStart}:duration=${request.videoDuration - request.qrCodeLessStart},asetpts=PTS-STARTPTS[a0];` +
-          `[1:v]setpts=PTS-STARTPTS[v1];` +  
-          `[v0][v1]concat=n=2:v=1:a=0[v]`,   // concat vidéo seulement
+          // 1) vidéo prefix: on saute le début, on garde prefixTrimDur sec, on remet PTS à 0
+          `[0:v]trim=start=${request.qrCodeLessStart}:duration=${prefixTrimDur},setpts=PTS-STARTPTS[v0];` +
+          // 2) vidéo postfix: juste reset PTS
+          `[1:v]setpts=PTS-STARTPTS[v1];` +
+          // 3) concat vidéo uniquement
+          `[v0][v1]concat=n=2:v=1:a=0[v];` +
+          // 4) audio du prefix: on saute le début, et on coupe à la durée totale finale, PTS à 0
+          `[0:a]atrim=start=${request.qrCodeLessStart}:duration=${totalDuration},asetpts=PTS-STARTPTS[a0]`,
         '-map', '[v]',
-        '-map', '[a0]',                       // 🔑 on prend directement l’audio du prefix tronqué
+        '-map', '[a0]',
         '-c:v', 'libx264',
         '-c:a', 'aac',
-        '-r', (request.fps || 25).toString(),
+        '-r', String(request.fps || 25),
         '-crf', request.quality === 'low' ? '28' : request.quality === 'medium' ? '23' : '18',
-        '-threads', (parseInt(process.env['FFMPEG_THREADS'] || '4')).toString(),
-        '-shortest',
+        '-threads', String(parseInt(process.env['FFMPEG_THREADS'] || '4')),
         '-movflags', '+faststart',
         '-y',
         outputPath
       ];
       
-      
-
       console.log('🎬 Arguments FFmpeg (qr_codeless):', args.join(' '));
 
       const ffmpeg = spawn('ffmpeg', args);
@@ -972,6 +983,7 @@ export class VideoService {
         console.log(`🔍 Vérification des fichiers d'entrée...`);
         const prefixInfo = await this.getVideoInfo(prefixPath);
         const postfixInfo = await this.getVideoInfo(postfixPath);
+        const totalDuration = request.videoDuration + Math.round(postfixInfo.duration);
         
         console.log(`📹 Prefix: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s, audio: ${prefixInfo.audioCodec || 'aucun'}`);
         console.log(`📹 Postfix: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s, audio: ${postfixInfo.audioCodec || 'aucun'}`);
@@ -997,7 +1009,7 @@ export class VideoService {
             `[0:v]trim=duration=${request.videoDuration},setpts=PTS-STARTPTS[v0];` +
             `[1:v]setpts=PTS-STARTPTS[v1];` +
             `[v0][v1]concat=n=2:v=1:a=0[v];` +
-            `[0:a]asetpts=PTS-STARTPTS[a0]`,
+            `[0:a]atrim=duration=${totalDuration},asetpts=PTS-STARTPTS[a0]`,
           '-map', '[v]',
           '-map', '[a0]',
           '-c:v', 'libx264',
@@ -1005,11 +1017,9 @@ export class VideoService {
           '-r', String(request.fps || 25),
           '-crf', request.quality === 'low' ? '28' : request.quality === 'medium' ? '23' : '18',
           '-threads', String(parseInt(process.env['FFMPEG_THREADS'] || '4')),
-          '-shortest',
           '-movflags', '+faststart',
           '-y', outputPath
         ];
-        
 
         console.log('🎬 Arguments FFmpeg (fusion avec son complet):', args.join(' '));
 
