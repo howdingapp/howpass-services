@@ -467,7 +467,7 @@ export class VideoService {
       // Vérifier si une rotation physique est nécessaire
       // Si les dimensions brutes sont différentes des dimensions effectives, 
       // c'est qu'une rotation a été appliquée via un tag
-      const needsPhysicalRotation = (currentWidth !== videoInfo.effectiveWidth || currentHeight !== videoInfo.effectiveHeight);
+      const needsPhysicalRotation = (currentWidth !== videoInfo.effectiveWidth || currentHeight !== videoInfo.effectiveHeight) && (rotationDeg % 360 !== 0);
       
       if (!needsPhysicalRotation) {
         console.log(`✅ ${prefix} n'a pas besoin de rotation physique (${currentWidth}x${currentHeight}, rotation: ${rotationDeg}°)`);
@@ -671,6 +671,8 @@ export class VideoService {
         const dataStr = data.toString();
         errorOutput += dataStr;
         
+        console.log(`🔍 Détection automatique des bandes noires pour vidéo portrait (analyse de 1 seconde): ${dataStr}`);
+
         // Parser en temps réel pour collecter tous les résultats
         const cropMatches = dataStr.match(/crop=(\d+):(\d+):(\d+):(\d+)/g);
         if (cropMatches) {
