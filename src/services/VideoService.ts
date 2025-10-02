@@ -879,10 +879,11 @@ export class VideoService {
         '-i', prefixPath,        // vidéo prefix complète
         '-i', postfixPath,       // vidéo postfix
         '-filter_complex',
-          // Concat vidéo
-          '[0:v][1:v]concat=n=2:v=1:a=0[v];' +
-          // Utiliser l'audio de la vidéo prefix pour toute la durée
-          '[0:a]asetpts=PTS-STARTPTS[a]',
+          // Tronquer la vidéo prefix de qrCodeLessStart à videoDuration et concaténer avec la vidéo postfix complète
+          `[0:v]trim=start=${request.qrCodeLessStart}:duration=${request.videoDuration - request.qrCodeLessStart},setpts=PTS-STARTPTS[v0];` +
+          `[0:a]atrim=start=${request.qrCodeLessStart}:duration=${request.videoDuration - request.qrCodeLessStart},asetpts=PTS-STARTPTS[a0];` +
+          '[v0][1:v]concat=n=2:v=1:a=0[v];' +
+          '[a0]asetpts=PTS-STARTPTS[a]',
         '-map', '[v]',
         '-map', '[a]',
         '-c:v', 'libx264',
@@ -965,10 +966,11 @@ export class VideoService {
           '-i', prefixPath,        // vidéo prefix avec son
           '-i', postfixPath,       // vidéo postfix
           '-filter_complex',
-            // Concat vidéo
-            '[0:v][1:v]concat=n=2:v=1:a=0[v];' +
-            // Utiliser l'audio de la vidéo prefix pour toute la durée
-            '[0:a]asetpts=PTS-STARTPTS[a]',
+            // Tronquer la vidéo prefix à la durée spécifiée et concaténer avec la vidéo postfix complète
+            `[0:v]trim=duration=${request.videoDuration},setpts=PTS-STARTPTS[v0];` +
+            `[0:a]atrim=duration=${request.videoDuration},asetpts=PTS-STARTPTS[a0];` +
+            '[v0][1:v]concat=n=2:v=1:a=0[v];' +
+            '[a0]asetpts=PTS-STARTPTS[a]',
           '-map', '[v]',
           '-map', '[a]',
           '-c:v', 'libx264',
