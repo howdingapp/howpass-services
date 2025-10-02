@@ -1185,8 +1185,8 @@ export class VideoService {
       const prefixInfo = await this.getVideoInfo(adaptedPrefixPath);
       const postfixInfo = await this.getVideoInfo(finalPostfixPath);
       
-      console.log(`📐 Vidéo prefix adaptée: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s`);
-      console.log(`📐 Vidéo postfix: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s`);
+      console.log(`📐 Vidéo prefix adaptée: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s, rotation: ${prefixInfo.rotationDeg}°`);
+      console.log(`📐 Vidéo postfix: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s, rotation: ${postfixInfo.rotationDeg}°`);
       
 
       // Fusionner les vidéos avec le son de la vidéo prefix (sans trim)
