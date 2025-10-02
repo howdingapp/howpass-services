@@ -730,6 +730,7 @@ export class VideoService {
     });
   }
 
+  // @ts-ignore - Fonction conservée pour usage futur
   private async cropVideo(
     videoPath: string, 
     jobId: string, 
