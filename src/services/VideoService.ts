@@ -643,20 +643,27 @@ export class VideoService {
   }
 
 
-  private async detectCropParameters(videoPath: string): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  private async detectCropParameters(videoPath: string, duration?: number): Promise<{ x: number; y: number; width: number; height: number } | null> {
     return new Promise((resolve) => {
-      console.log('🔍 Détection automatique des bandes noires pour vidéo portrait (analyse de 1 seconde)...');
+      const analysisDuration = duration ? `${duration} secondes` : 'toute la vidéo';
+      console.log(`🔍 Détection automatique des bandes noires pour vidéo portrait (analyse de ${analysisDuration})...`);
       
       // Utiliser des paramètres optimisés pour le mode portrait
       // cropdetect=seuil:ratio_aspect:mode
       // Pour portrait : ratio 9:16, mode 16 pour plus de flexibilité
-      const ffmpeg = spawn('ffmpeg', [
+      const ffmpegArgs = [
         '-i', videoPath,
-        '-t', '1', // Analyser seulement la première seconde
         '-vf', 'cropdetect=24:9:16', // Seuil 24, ratio 9:16, mode 16
         '-f', 'null',
         '-'
-      ]);
+      ];
+      
+      // Si une durée est spécifiée, limiter l'analyse à cette durée
+      if (duration) {
+        ffmpegArgs.splice(2, 0, '-t', duration.toString());
+      }
+      
+      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
       
       let output = '';
       let errorOutput = '';
@@ -745,7 +752,8 @@ export class VideoService {
   private async cropVideo(
     videoPath: string, 
     jobId: string, 
-    prefix: string
+    prefix: string,
+    duration?: number,
   ): Promise<string> {
     try {
       console.log(`✂️ Détection et suppression des bandes noires pour ${prefix}...`);
@@ -754,8 +762,8 @@ export class VideoService {
       const originalInfo = await this.getVideoInfo(videoPath);
       console.log(`📐 Dimensions originales pour ${prefix}: ${originalInfo.width}x${originalInfo.height}`);
       
-      // Détecter les paramètres de crop
-      const cropParams = await this.detectCropParameters(videoPath);
+      // Détecter les paramètres de crop (analyser 1 seconde par défaut)
+      const cropParams = await this.detectCropParameters(videoPath, duration);
       
       if (!cropParams) {
         console.log(`✅ Aucune bande noire détectée pour ${prefix}, pas de crop nécessaire`);
@@ -1153,7 +1161,7 @@ export class VideoService {
 
       // Cropper les vidéos pour retirer les bandes noires
       console.log('✂️ Suppression des bandes noires des vidéos...');
-      const croppedPrefixPath = await this.cropVideo(portraitPrefixPath, jobId, `prefix${suffix}`);
+      const croppedPrefixPath = await this.cropVideo(portraitPrefixPath, jobId, `prefix${suffix}`, request.videoDuration);
       const croppedPostfixPath = await this.cropVideo(portraitPostfixPath, jobId, `postfix${suffix}`);
       
       // Valider que les vidéos croppées sont bien en mode portrait (hauteur > largeur)
