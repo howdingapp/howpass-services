@@ -643,107 +643,87 @@ export class VideoService {
   }
 
 
-  private async detectCropParameters(videoPath: string, duration?: number): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  private async detectCropParameters(
+    videoPath: string,
+    duration?: number
+  ): Promise<{ x: number; y: number; width: number; height: number } | null> {
     return new Promise((resolve) => {
-      const analysisDuration = duration ? `${duration} secondes` : 'toute la vidéo';
-      console.log(`🔍 Détection automatique des bandes noires pour vidéo portrait (analyse de ${analysisDuration})...`);
-      
-      // Utiliser des paramètres optimisés pour le mode portrait
-      // cropdetect=seuil:ratio_aspect:mode
-      // Pour portrait : ratio 9:16, mode 16 pour plus de flexibilité
       const ffmpegArgs = [
+        ...(duration ? ['-t', String(duration)] : []),
         '-i', videoPath,
-        '-vf', 'cropdetect=24:9:16', // Seuil 24, ratio 9:16, mode 16
+        // seuil=12, arrondi=16 (H.264-friendly), reset=0 (pas de reset)
+        '-vf', 'cropdetect=12:16:0',
         '-f', 'null',
         '-'
       ];
-      
-      // Si une durée est spécifiée, limiter l'analyse à cette durée
-      if (duration) {
-        ffmpegArgs.splice(2, 0, '-t', duration.toString());
-      }
-      
-      console.log('🎬 Arguments FFmpeg (détection des bandes noires):', ffmpegArgs.join(' '));
-
-      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
-      
-      let output = '';
-      let errorOutput = '';
-      
-      ffmpeg.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-      
-      const cropResults: { x: number; y: number; width: number; height: number }[] = [];
-      
-      ffmpeg.stderr.on('data', (data) => {
-        const dataStr = data.toString();
-        errorOutput += dataStr;
-        
-        // Parser en temps réel pour collecter tous les résultats
-        const cropMatches = dataStr.match(/crop=(\d+):(\d+):(\d+):(\d+)/g);
-        if (cropMatches) {
-          cropMatches.forEach((match: string) => {
-            const matchResult = match.match(/crop=(\d+):(\d+):(\d+):(\d+)/);
-            if (matchResult) {
-              const [, width, height, x, y] = matchResult;
-              if (width && height && x && y) {
-                cropResults.push({
-                  x: parseInt(x),
-                  y: parseInt(y),
-                  width: parseInt(width),
-                  height: parseInt(height)
-                });
-              }
-            }
-          });
+  
+      console.log('🎬 Args FFmpeg (detect crop):', ffmpegArgs.join(' '));
+  
+      const ff = spawn('ffmpeg', ffmpegArgs);
+  
+      type Crop = { x: number; y: number; width: number; height: number };
+      const crops: Crop[] = [];
+  
+      ff.stderr.on('data', (buf) => {
+        const str = buf.toString();
+        // on ne prend que la 1re occurrence par chunk (suffisant)
+        const m = str.match(/crop=(\d+):(\d+):(\d+):(\d+)/);
+        if (!m) return;
+        const w = parseInt(m[1], 10);
+        const h = parseInt(m[2], 10);
+        const x = parseInt(m[3], 10);
+        const y = parseInt(m[4], 10);
+  
+        // ✅ x/y peuvent être 0 ; on valide plutôt >0 pour w/h
+        if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0 &&
+            Number.isFinite(x) && Number.isFinite(y)) {
+          crops.push({ x, y, width: w, height: h });
         }
       });
-      
-      ffmpeg.on('close', (code) => {
-        if (code !== 0) {
-          console.log('⚠️ Aucune bande noire détectée ou erreur lors de la détection');
+  
+      ff.on('close', () => {
+        if (crops.length === 0) {
+          console.log('⚠️ Aucun crop détecté');
           resolve(null);
           return;
         }
-        
-        if (cropResults.length === 0) {
-          console.log('⚠️ Aucun paramètre de crop trouvé');
-          resolve(null);
-          return;
+  
+        // Intersection des rectangles détectés (plus petit commun)
+        let left = 0, top = 0;
+        let right = Infinity, bottom = Infinity;
+  
+        for (const c of crops) {
+          left   = Math.max(left, c.x);
+          top    = Math.max(top, c.y);
+          right  = Math.min(right, c.x + c.width);
+          bottom = Math.min(bottom, c.y + c.height);
         }
-        
-        // Prendre le résultat le plus fréquent (plus robuste)
-        const cropCounts = new Map<string, number>();
-        cropResults.forEach(crop => {
-          const key = `${crop.x},${crop.y},${crop.width},${crop.height}`;
-          cropCounts.set(key, (cropCounts.get(key) || 0) + 1);
-        });
-        
-        let mostFrequentCrop = cropResults[0];
-        let maxCount = 0;
-        cropCounts.forEach((count, key) => {
-          if (count > maxCount) {
-            maxCount = count;
-            const parts = key.split(',').map(Number);
-            if (parts.length === 4 && parts.every(p => !isNaN(p))) {
-              const [x, y, width, height] = parts;
-              mostFrequentCrop = { 
-                x: x || 0, 
-                y: y || 0, 
-                width: width || 0, 
-                height: height || 0 
-              };
-            }
-          }
-        });
-        
-        console.log(`✅ Paramètres de crop détectés (${cropResults.length} échantillons):`, mostFrequentCrop);
-        resolve(mostFrequentCrop || null);
+  
+        let w = Math.max(0, Math.floor(right - left));
+        let h = Math.max(0, Math.floor(bottom - top));
+  
+        // Si intersection vide (valeurs aberrantes), fallback au plus petit w/h observé
+        if (w === 0 || h === 0) {
+          const min = crops.reduce((acc, c) =>
+            c.width * c.height < acc.width * acc.height ? c : acc, crops[0]!);
+          left = min.x; top = min.y; w = min.width; h = min.height;
+        }
+  
+        // Arrondi à un multiple (2 ou 16). Ici 2 pour être souple.
+        const roundTo = 2;
+        const round = (n: number) => n - (n % roundTo);
+        const result = { x: round(left), y: round(top), width: round(w), height: round(h) };
+  
+        console.log(`✅ Crop final (intersection): ${result.width}x${result.height}+${result.x}+${result.y}`);
+  
+        // Optionnel: si c’est déjà plein cadre (pas de bandes), renvoyer null
+        // Pour ça, on a besoin de connaître la taille source (ex. via ffprobe).
+        // Ici on ne l’a pas, donc on renvoie le crop calculé.
+        resolve(result);
       });
-      
-      ffmpeg.on('error', (err) => {
-        console.error('❌ Erreur lors de la détection des bandes noires:', err);
+  
+      ff.on('error', (err) => {
+        console.error('❌ Erreur ffmpeg:', err);
         resolve(null);
       });
     });
