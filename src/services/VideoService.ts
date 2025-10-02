@@ -1171,9 +1171,8 @@ export class VideoService {
       console.log('📐 Analyse des dimensions des vidéos pour déterminer les dimensions cibles...');
       const targetDimensions = await this.getDimensions(finalPostfixPath);
       
-      // Adapter toutes les vidéos aux mêmes dimensions
+      // Adapter uniquement la vidéo prefix aux dimensions cibles
       const adaptedPrefixPath = await this.adaptVideoDimensions(finalPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
-      const adaptedPostfixPath = await this.adaptVideoDimensions(finalPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
       
       job.progress = 40;
       job.updatedAt = new Date();
@@ -1181,25 +1180,18 @@ export class VideoService {
       job.progress = 50;
       job.updatedAt = new Date();
 
-      // Vérifier que les vidéos adaptées ont du contenu valide
+      // Vérifier que les vidéos ont du contenu valide
       console.log('🔍 Vérification des vidéos avant fusion...');
       const prefixInfo = await this.getVideoInfo(adaptedPrefixPath);
-      const postfixInfo = await this.getVideoInfo(adaptedPostfixPath);
+      const postfixInfo = await this.getVideoInfo(finalPostfixPath);
       
       console.log(`📐 Vidéo prefix adaptée: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s`);
-      console.log(`📐 Vidéo postfix adaptée: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s`);
+      console.log(`📐 Vidéo postfix: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s`);
       
-      if (prefixInfo.width <= 0 || prefixInfo.height <= 0 || prefixInfo.duration <= 0) {
-        throw new Error(`Vidéo prefix invalide après adaptation: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s`);
-      }
-      
-      if (postfixInfo.width <= 0 || postfixInfo.height <= 0 || postfixInfo.duration <= 0) {
-        throw new Error(`Vidéo postfix invalide après adaptation: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s`);
-      }
 
       // Fusionner les vidéos avec le son de la vidéo prefix (sans trim)
       console.log('🎬 Fusion des vidéos avec son complet...');
-      await this.createQrCodeWithFullSound(adaptedPrefixPath, adaptedPostfixPath, outputPath, request);
+      await this.createQrCodeWithFullSound(adaptedPrefixPath, finalPostfixPath, outputPath, request);
       
       job.progress = 60;
       job.updatedAt = new Date();
@@ -1207,7 +1199,7 @@ export class VideoService {
       // Créer la vidéo qr_codeless
       console.log(`🎬 Création de la vidéo qr_codeless à partir de ${request.qrCodeLessStart}s...`);
       const qrCodeLessPrefixPath = await this.trimVideo(adaptedPrefixPath, request.qrCodeLessStart, request.videoDuration - request.qrCodeLessStart, jobId, `qr_codeless_prefix${suffix}`);
-      await this.createQrCodeLessVideoWithFullSound(qrCodeLessPrefixPath, adaptedPostfixPath, qrCodeLessOutputPath, request);
+      await this.createQrCodeLessVideoWithFullSound(qrCodeLessPrefixPath, finalPostfixPath, qrCodeLessOutputPath, request);
       
       job.progress = 80;
       job.updatedAt = new Date();
@@ -1257,7 +1249,6 @@ export class VideoService {
         outputPath, 
         qrCodeLessOutputPath, 
         adaptedPrefixPath, 
-        adaptedPostfixPath, 
         qrCodeLessPrefixPath
       ];
       await this.cleanupTempFiles(tempFiles);
