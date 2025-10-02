@@ -663,6 +663,8 @@ export class VideoService {
         ffmpegArgs.splice(2, 0, '-t', duration.toString());
       }
       
+      console.log('🎬 Arguments FFmpeg (détection des bandes noires):', ffmpegArgs.join(' '));
+
       const ffmpeg = spawn('ffmpeg', ffmpegArgs);
       
       let output = '';
@@ -678,8 +680,6 @@ export class VideoService {
         const dataStr = data.toString();
         errorOutput += dataStr;
         
-        console.log(`🔍 Détection automatique des bandes noires pour vidéo portrait (analyse de 1 seconde): ${dataStr}`);
-
         // Parser en temps réel pour collecter tous les résultats
         const cropMatches = dataStr.match(/crop=(\d+):(\d+):(\d+):(\d+)/g);
         if (cropMatches) {
