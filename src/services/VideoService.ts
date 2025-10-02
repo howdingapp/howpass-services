@@ -904,8 +904,9 @@ export class VideoService {
           // Tronquer vidéo et audio du prefix à partir de qrCodeLessStart
           `[0:v]trim=start=${request.qrCodeLessStart}:duration=${request.videoDuration - request.qrCodeLessStart},setpts=PTS-STARTPTS[v0];` +
           `[0:a]atrim=start=${request.qrCodeLessStart}:duration=${request.videoDuration - request.qrCodeLessStart},asetpts=PTS-STARTPTS[a0];` +
-          `[v0][1:v]concat=n=2:v=1:a=0[v];` +
-          `[a0]anull[a]`, // audio du prefix tronqué, remis à 0
+          `[1:v]setpts=PTS-STARTPTS[v1];` +                 // 🔑 on reset les PTS de la 2ème vidéo
+          `[v0][v1]concat=n=2:v=1:a=0[v];` +
+          `[a0]anull[a]`,                                   // audio du prefix tronqué
         '-map', '[v]',
         '-map', '[a]',
         '-c:v', 'libx264',
@@ -918,6 +919,7 @@ export class VideoService {
         '-y',
         outputPath
       ];
+      
 
       console.log('🎬 Arguments FFmpeg (qr_codeless):', args.join(' '));
 
@@ -988,7 +990,8 @@ export class VideoService {
           '-i', postfixPath,       // vidéo postfix
           '-filter_complex',
             `[0:v]trim=duration=${request.videoDuration},setpts=PTS-STARTPTS[v0];` +
-            `[v0][1:v]concat=n=2:v=1:a=0[v];` +
+            `[1:v]setpts=PTS-STARTPTS[v1];` +
+            `[v0][v1]concat=n=2:v=1:a=0[v];` +
             `[0:a]asetpts=PTS-STARTPTS,apad[a]`,
           '-map', '[v]',
           '-map', '[a]',
@@ -1002,6 +1005,7 @@ export class VideoService {
           '-y',
           outputPath
         ];
+        
 
         console.log('🎬 Arguments FFmpeg (fusion avec son complet):', args.join(' '));
 
