@@ -1133,29 +1133,44 @@ export class VideoService {
       job.progress = 30;
       job.updatedAt = new Date();
 
-      // Cropper d'abord les vidéos pour retirer les bandes noires
-      console.log('✂️ Suppression des bandes noires des vidéos...');
-      const croppedPrefixPath = await this.cropVideo(prefixVideoPath, jobId, `prefix${suffix}`);
-      const croppedPostfixPath = await this.cropVideo(postfixPath, jobId, `postfix${suffix}`);
+      // Forcer d'abord le mode portrait pour toutes les vidéos
+      console.log('🔄 Forçage du mode portrait...');
+      const portraitPrefixPath = await this.forcePortraitOrientation(prefixVideoPath, jobId, `prefix${suffix}`);
+      const portraitPostfixPath = await this.forcePortraitOrientation(postfixPath, jobId, `postfix${suffix}`);
       
       job.progress = 35;
       job.updatedAt = new Date();
 
-      // Forcer le mode portrait pour toutes les vidéos
-      console.log('🔄 Forçage du mode portrait...');
-      const portraitPrefixPath = await this.forcePortraitOrientation(croppedPrefixPath, jobId, `prefix${suffix}`);
-      const portraitPostfixPath = await this.forcePortraitOrientation(croppedPostfixPath, jobId, `postfix${suffix}`);
+      // Cropper les vidéos pour retirer les bandes noires
+      console.log('✂️ Suppression des bandes noires des vidéos...');
+      const croppedPrefixPath = await this.cropVideo(portraitPrefixPath, jobId, `prefix${suffix}`);
+      const croppedPostfixPath = await this.cropVideo(portraitPostfixPath, jobId, `postfix${suffix}`);
+      
+      // Valider que les vidéos croppées sont bien en mode portrait (hauteur > largeur)
+      console.log('✅ Validation du mode portrait après crop...');
+      const croppedPrefixInfo = await this.getVideoInfo(croppedPrefixPath);
+      const croppedPostfixInfo = await this.getVideoInfo(croppedPostfixPath);
+      
+      if (croppedPrefixInfo.height <= croppedPrefixInfo.width) {
+        throw new Error(`La vidéo prefix n'est pas en mode portrait après crop: ${croppedPrefixInfo.width}x${croppedPrefixInfo.height}`);
+      }
+      
+      if (croppedPostfixInfo.height <= croppedPostfixInfo.width) {
+        throw new Error(`La vidéo postfix n'est pas en mode portrait après crop: ${croppedPostfixInfo.width}x${croppedPostfixInfo.height}`);
+      }
+      
+      console.log(`✅ Validation réussie - Prefix: ${croppedPrefixInfo.width}x${croppedPrefixInfo.height}, Postfix: ${croppedPostfixInfo.width}x${croppedPostfixInfo.height}`);
       
       job.progress = 37;
       job.updatedAt = new Date();
 
       // Analyser les dimensions des vidéos en mode portrait
       console.log('📐 Analyse des dimensions des vidéos en mode portrait...');
-      const targetDimensions = await this.getDimensions(portraitPrefixPath);
+      const targetDimensions = await this.getDimensions(croppedPrefixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
-      const adaptedPrefixPath = await this.adaptVideoDimensionsAndRemoveAudio(portraitPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
-      const adaptedPostfixPath = await this.adaptVideoDimensionsAndRemoveAudio(portraitPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
+      const adaptedPrefixPath = await this.adaptVideoDimensionsAndRemoveAudio(croppedPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
+      const adaptedPostfixPath = await this.adaptVideoDimensionsAndRemoveAudio(croppedPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
       
       job.progress = 40;
       job.updatedAt = new Date();
