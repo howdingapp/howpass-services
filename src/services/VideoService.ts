@@ -1144,7 +1144,7 @@ export class VideoService {
 
       // Analyser les dimensions des vidéos en mode portrait
       console.log('📐 Analyse des dimensions des vidéos en mode portrait...');
-      const targetDimensions = await this.getTargetDimensions(portraitPrefixPath);
+      const targetDimensions = await this.getTargetDimensions(portraitPostfixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
       const adaptedPrefixPath = await this.adaptVideoDimensionsAndRemoveAudio(portraitPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
