@@ -640,12 +640,15 @@ export class VideoService {
 
   private async detectCropParameters(videoPath: string): Promise<{ x: number; y: number; width: number; height: number } | null> {
     return new Promise((resolve) => {
-      console.log('🔍 Détection automatique des bandes noires (analyse de 1 seconde)...');
+      console.log('🔍 Détection automatique des bandes noires pour vidéo portrait (analyse de 1 seconde)...');
       
+      // Utiliser des paramètres optimisés pour le mode portrait
+      // cropdetect=seuil:ratio_aspect:mode
+      // Pour portrait : ratio 9:16, mode 16 pour plus de flexibilité
       const ffmpeg = spawn('ffmpeg', [
         '-i', videoPath,
         '-t', '1', // Analyser seulement la première seconde
-        '-vf', 'cropdetect=24:16:0',
+        '-vf', 'cropdetect=24:9:16', // Seuil 24, ratio 9:16, mode 16
         '-f', 'null',
         '-'
       ]);
