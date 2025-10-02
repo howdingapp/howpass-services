@@ -653,7 +653,7 @@ export class VideoService {
         ...(duration ? ['-t', String(duration)] : []),
         '-i', videoPath,
         // seuil=12, arrondi=16 (H.264-friendly), reset=0 (pas de reset)
-        '-vf', 'cropdetect=12:16:0',
+        '-vf', 'cropdetect=40:16:0',
         '-f', 'null',
         '-'
       ];
