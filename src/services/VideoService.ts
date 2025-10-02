@@ -478,14 +478,17 @@ export class VideoService {
       
       return new Promise((resolve, reject) => {
         // Déterminer la rotation à appliquer selon la valeur de rotationDeg
+        // Pour une vidéo avec rotation dans les métadonnées, on doit appliquer la rotation inverse
+        // pour "annuler" la rotation des métadonnées et obtenir la vraie orientation
         let transposeValue = '0'; // Pas de rotation
-        if (rotationDeg === 90 || rotationDeg === -270) {
-          transposeValue = '1'; // 90° horaire
-        } else if (rotationDeg === 180 || rotationDeg === -180) {
-          transposeValue = '2'; // 180°
-        } else if (rotationDeg === -90 || rotationDeg === 270) {
-          transposeValue = '3'; // 90° antihoraire
+        
+        if (rotationDeg === 90) {
+          transposeValue = '3'; // 90° antihoraire pour annuler 90° horaire
+        } else if (rotationDeg === -90) {
+          transposeValue = '1'; // 90° horaire pour annuler -90°
         }
+        
+        console.log(`📐 Rotation détectée: ${rotationDeg}° -> transpose=${transposeValue}`);
         
         console.log(`🔄 Application de la rotation physique pour ${prefix}: ${currentWidth}x${currentHeight} (rotation: ${rotationDeg}°) -> transpose=${transposeValue}`);
         
@@ -496,6 +499,7 @@ export class VideoService {
           '-c:a', 'copy', // Copier l'audio sans ré-encodage
           '-pix_fmt', 'yuv420p',
           '-movflags', '+faststart',
+          '-metadata:s:v:0', 'rotate=0', // Supprimer la rotation des métadonnées
           '-y',
           rotatedPath
         ];
