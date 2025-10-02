@@ -502,6 +502,7 @@ export class VideoService {
           '-pix_fmt', 'yuv420p',
           '-movflags', '+faststart',
           '-metadata:s:v:0', 'rotate=0', // Supprimer la rotation des métadonnées
+          '-metadata:s:v:0', 'displaymatrix=', // Supprimer la matrice d'affichage
           '-y',
           rotatedPath
         ];
