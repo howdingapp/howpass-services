@@ -441,10 +441,16 @@ export class VideoService {
   private async getDimensions(videoPath: string): Promise<{ width: number; height: number }> {
     try {
       const videoInfo = await this.getVideoInfo(videoPath);
-      return {
-        width: videoInfo.width,
-        height: videoInfo.height
-      };
+      const originalWidth = videoInfo.width;
+      const originalHeight = videoInfo.height;
+      
+      // Toujours utiliser la plus grande dimension comme height et la plus petite comme width
+      const width = Math.min(originalWidth, originalHeight);
+      const height = Math.max(originalWidth, originalHeight);
+      
+      console.log(`📐 Dimensions originales: ${originalWidth}x${originalHeight} -> Dimensions cibles: ${width}x${height}`);
+      
+      return { width, height };
     } catch (error) {
       console.error('❌ Erreur lors de l\'analyse des dimensions:', error);
       // Dimensions par défaut adaptées aux téléphones (mode portrait)
@@ -1146,39 +1152,23 @@ export class VideoService {
       job.progress = 30;
       job.updatedAt = new Date();
 
-      // Forcer d'abord le mode portrait pour toutes les vidéos
-      console.log('🔄 Forçage du mode portrait...');
-      const portraitPrefixPath = await this.forcePortraitOrientation(prefixVideoPath, jobId, `prefix${suffix}`);
-      const portraitPostfixPath = await this.forcePortraitOrientation(postfixPath, jobId, `postfix${suffix}`);
+      // Utiliser directement les vidéos sans forçage du mode portrait
+      console.log('✅ Utilisation des vidéos directement sans forçage du mode portrait');
+      const finalPrefixPath = prefixVideoPath;
+      const finalPostfixPath = postfixPath;
       
-      job.progress = 35;
-      job.updatedAt = new Date();
-
-      // Utiliser directement les vidéos portrait
-      console.log('✅ Utilisation des vidéos portrait directement');
-      const finalPrefixPath = portraitPrefixPath;
-      const finalPostfixPath = portraitPostfixPath;
-      
-      // Valider que les vidéos sont bien en mode portrait (hauteur > largeur)
-      console.log('✅ Validation du mode portrait...');
+      // Analyser les dimensions des vidéos
+      console.log('📐 Analyse des dimensions des vidéos...');
       const prefixVideoInfo = await this.getVideoInfo(finalPrefixPath);
       const postfixVideoInfo = await this.getVideoInfo(finalPostfixPath);
       
-      if (prefixVideoInfo.height <= prefixVideoInfo.width) {
-        throw new Error(`La vidéo prefix n'est pas en mode portrait: ${prefixVideoInfo.width}x${prefixVideoInfo.height}`);
-      }
-      
-      if (postfixVideoInfo.height <= postfixVideoInfo.width) {
-        throw new Error(`La vidéo postfix n'est pas en mode portrait: ${postfixVideoInfo.width}x${postfixVideoInfo.height}`);
-      }
-      
-      console.log(`✅ Validation réussie - Prefix: ${prefixVideoInfo.width}x${prefixVideoInfo.height}, Postfix: ${postfixVideoInfo.width}x${postfixVideoInfo.height}`);
+      console.log(`📐 Prefix: ${prefixVideoInfo.width}x${prefixVideoInfo.height}, Postfix: ${postfixVideoInfo.width}x${postfixVideoInfo.height}`);
       
       job.progress = 37;
       job.updatedAt = new Date();
 
-      // Analyser les dimensions des vidéos en mode portrait
-      console.log('📐 Analyse des dimensions des vidéos en mode portrait...');
+      // Analyser les dimensions des vidéos pour déterminer les dimensions cibles
+      console.log('📐 Analyse des dimensions des vidéos pour déterminer les dimensions cibles...');
       const targetDimensions = await this.getDimensions(finalPostfixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
@@ -1266,8 +1256,6 @@ export class VideoService {
         postfixPath, 
         outputPath, 
         qrCodeLessOutputPath, 
-        portraitPrefixPath, 
-        portraitPostfixPath,
         adaptedPrefixPath, 
         adaptedPostfixPath, 
         qrCodeLessPrefixPath
