@@ -408,7 +408,7 @@ export class VideoService {
     }
   }
 
-  private async adaptVideoDimensions(
+  private async adaptVideoDimensionsAndRemoveAudio(
     videoPath: string, 
     targetDimensions: { width: number; height: number }, 
     jobId: string,
@@ -434,14 +434,16 @@ export class VideoService {
 
       return new Promise((resolve, reject) => {
         const args = [
+          '-hide_banner',
           '-i', videoPath,
-          '-filter_complex', filter,
+          '-vf', 'scale=1072:-2,pad=1072:832:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1',
           '-c:v', 'libx264',
-          '-c:a', 'aac',
+          '-pix_fmt', 'yuv420p',
           '-crf', '18',
           '-preset', 'medium',
-          '-y',
-          adaptedPath
+          '-movflags', '+faststart',
+          '-an',               // ⚡ pas d'audio
+          '-y', adaptedPath
         ];
 
         const ffmpeg = spawn('ffmpeg', args);
@@ -1003,8 +1005,8 @@ export class VideoService {
       const targetDimensions = await this.getTargetDimensions(croppedPrefixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
-      const adaptedPrefixPath = await this.adaptVideoDimensions(croppedPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
-      const adaptedPostfixPath = await this.adaptVideoDimensions(croppedPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
+      const adaptedPrefixPath = await this.adaptVideoDimensionsAndRemoveAudio(croppedPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
+      const adaptedPostfixPath = await this.adaptVideoDimensionsAndRemoveAudio(croppedPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
       
       job.progress = 40;
       job.updatedAt = new Date();
@@ -1181,9 +1183,9 @@ export class VideoService {
       const targetDimensions = await this.getTargetDimensions(postfixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
-      const adaptedPrefix1Path = await this.adaptVideoDimensions(prefixVideo1Path, targetDimensions, jobId, `prefix1${suffix}`);
-      const adaptedPrefix2Path = await this.adaptVideoDimensions(prefixVideo2Path, targetDimensions, jobId, `prefix2${suffix}`);
-      const adaptedPostfixPath = await this.adaptVideoDimensions(postfixPath, targetDimensions, jobId, `postfix${suffix}`);
+      const adaptedPrefix1Path = await this.adaptVideoDimensionsAndRemoveAudio(prefixVideo1Path, targetDimensions, jobId, `prefix1${suffix}`);
+      const adaptedPrefix2Path = await this.adaptVideoDimensionsAndRemoveAudio(prefixVideo2Path, targetDimensions, jobId, `prefix2${suffix}`);
+      const adaptedPostfixPath = await this.adaptVideoDimensionsAndRemoveAudio(postfixPath, targetDimensions, jobId, `postfix${suffix}`);
       
       job.progress = 45;
       job.updatedAt = new Date();
