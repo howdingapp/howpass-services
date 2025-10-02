@@ -493,16 +493,6 @@ export class VideoService {
         
         console.log(`🔄 Application de la rotation physique pour ${prefix}: ${currentWidth}x${currentHeight} (rotation: ${rotationDeg}°) -> transpose=${transposeValue}`);
         
-        // Calculer les nouvelles dimensions après rotation
-        let newWidth = currentWidth;
-        let newHeight = currentHeight;
-        
-        // Pour les rotations de 90° et 270°, inverser largeur et hauteur
-        if (transposeValue === '1' || transposeValue === '3') {
-          newWidth = currentHeight;
-          newHeight = currentWidth;
-        }
-        
         const args = [
           '-noautorotate',
           '-i', videoPath,
