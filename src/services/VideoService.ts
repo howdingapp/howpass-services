@@ -226,13 +226,6 @@ export class VideoService {
     });
   }
 
-  private parseFPS(fpsString: string): number {
-    const parts = fpsString.split('/');
-    const num = parts[0] ? parseInt(parts[0]) : 0;
-    const den = parts[1] ? parseInt(parts[1]) : 1;
-    return den ? num / den : 0;
-  }
-
   async mergeVideos(request: MergeRequest): Promise<MergeResponse> {
     const jobId = uuidv4();
     
