@@ -553,7 +553,7 @@ export class VideoService {
     }
   }
 
-  private async adaptVideoDimensionsAndRemoveAudio(
+  private async adaptVideoDimensions(
     videoPath: string, 
     targetDimensions: { width: number; height: number }, 
     jobId: string,
@@ -583,11 +583,11 @@ export class VideoService {
           '-i', videoPath,
           '-vf', filter,
           '-c:v', 'libx264',
+          '-c:a', 'copy',      // Copier l'audio sans ré-encodage
           '-pix_fmt', 'yuv420p',
           '-crf', '18',
           '-preset', 'medium',
           '-movflags', '+faststart',
-          '-an',               // ⚡ pas d'audio
           '-y', adaptedPath
         ];
 
@@ -966,11 +966,11 @@ export class VideoService {
           '-i', prefixPath,        // vidéo prefix avec son
           '-i', postfixPath,       // vidéo postfix
           '-filter_complex',
-            // Tronquer la vidéo prefix à la durée spécifiée et concaténer avec la vidéo postfix complète
-            `[0:v]trim=duration=${request.videoDuration},setpts=PTS-STARTPTS[v0];` +
-            `[0:a]atrim=duration=${request.videoDuration},asetpts=PTS-STARTPTS[a0];` +
-            '[v0][1:v]concat=n=2:v=1:a=0[v];' +
-            '[a0]asetpts=PTS-STARTPTS[a]',
+          // Tronquer la vidéo prefix à la durée spécifiée et concaténer avec la vidéo postfix complète
+          `[0:v]trim=duration=${request.videoDuration},setpts=PTS-STARTPTS[v0];` +
+          `[0:a]atrim=duration=${request.videoDuration},asetpts=PTS-STARTPTS[a0];` +
+          '[v0][1:v]concat=n=2:v=1:a=0[v];' +
+          '[a0]asetpts=PTS-STARTPTS[a]',
           '-map', '[v]',
           '-map', '[a]',
           '-c:v', 'libx264',
@@ -1171,8 +1171,8 @@ export class VideoService {
       const targetDimensions = await this.getDimensions(finalPostfixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
-      const adaptedPrefixPath = await this.adaptVideoDimensionsAndRemoveAudio(finalPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
-      const adaptedPostfixPath = await this.adaptVideoDimensionsAndRemoveAudio(finalPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
+      const adaptedPrefixPath = await this.adaptVideoDimensions(finalPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
+      const adaptedPostfixPath = await this.adaptVideoDimensions(finalPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
       
       job.progress = 40;
       job.updatedAt = new Date();
@@ -1355,9 +1355,9 @@ export class VideoService {
       const targetDimensions = await this.getDimensions(portraitPostfixPath);
       
       // Adapter toutes les vidéos aux mêmes dimensions
-      const adaptedPrefix1Path = await this.adaptVideoDimensionsAndRemoveAudio(portraitPrefix1Path, targetDimensions, jobId, `prefix1${suffix}`);
-      const adaptedPrefix2Path = await this.adaptVideoDimensionsAndRemoveAudio(portraitPrefix2Path, targetDimensions, jobId, `prefix2${suffix}`);
-      const adaptedPostfixPath = await this.adaptVideoDimensionsAndRemoveAudio(portraitPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
+      const adaptedPrefix1Path = await this.adaptVideoDimensions(portraitPrefix1Path, targetDimensions, jobId, `prefix1${suffix}`);
+      const adaptedPrefix2Path = await this.adaptVideoDimensions(portraitPrefix2Path, targetDimensions, jobId, `prefix2${suffix}`);
+      const adaptedPostfixPath = await this.adaptVideoDimensions(portraitPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
       
       job.progress = 45;
       job.updatedAt = new Date();
