@@ -113,31 +113,23 @@ export class VideoService {
     fs.ensureDirSync(this.tempPath);
   }
 
-  private normalizeRotationDeg(input?: any): number {
-    if (input == null) return 0;
-    const n = Number(input);
-    if (!Number.isFinite(n)) return 0;
-    // Arrondir au multiple de 90 et normaliser à [-180, 180]
-    let r = Math.round(n / 90) * 90;
-    r = ((r % 360) + 360) % 360;      // [0, 360)
-    if (r > 180) r -= 360;            // [-180, 180]
-    return r === -270 ? 90 : (r === 270 ? -90 : r);
-  }
   
   private extractRotationFromStream(stream: any): number {
-    // 1) ffprobe classique: streams[].tags.rotate (string "90", "-90", "180", etc.)
-    if (stream?.tags?.rotate != null) {
-      return this.normalizeRotationDeg(stream.tags.rotate);
+
+    console.log('🔍 Extraction de la rotation depuis les tags:', stream?.tags);
+
+    // Cas le plus fréquent : tag "rotate"
+    if (stream?.tags?.rotate) {
+      return parseInt(stream.tags.rotate, 10) || 0;
     }
-    // 2) side_data_list[].rotation (side_data_type: "Display Matrix")
-    const sdl = Array.isArray(stream?.side_data_list) ? stream.side_data_list : [];
-    for (const sd of sdl) {
-      if (sd && (sd.rotation != null)) {
-        return this.normalizeRotationDeg(sd.rotation);
-      }
+  
+    // Cas alternatif : rotation dans side_data_list
+    const sideData = stream?.side_data_list?.find((sd: any) => sd.rotation != null);
+    if (sideData) {
+      return parseInt(sideData.rotation, 10) || 0;
     }
-    // Certaines builds exposent 'side_data_type' === 'Display Matrix' sans 'rotation' numérique,
-    // mais ce cas est rare en JSON; on laisse 0 par défaut.
+  
+    // Pas de rotation détectée
     return 0;
   }
   
