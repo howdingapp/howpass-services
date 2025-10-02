@@ -506,15 +506,18 @@ export class VideoService {
         const args = [
           '-noautorotate',
           '-i', videoPath,
-          '-vf', `transpose=${transposeValue},setsar=1,setdar=${newWidth}/${newHeight}`,
+          // 1) on "cuit" la rotation ; 2) on fige l'aspect à celui des pixels réels
+          '-vf', `transpose=${transposeValue},setsar=1,setdar=iw/ih`,
           '-c:v', 'libx264',
-          '-c:a', 'copy', // Copier l'audio sans ré-encodage
-          '-pix_fmt', 'yuv420p',
+          '-c:a', 'copy',
           '-movflags', '+faststart',
-          '-metadata:s:v:0', 'rotate=0', // Supprimer la rotation des métadonnées
-          '-metadata:s:v:0', 'displaymatrix=', // Supprimer la matrice d'affichage
-          '-y',
-          rotatedPath
+          // on nettoie les tags au niveau du flux vidéo
+          '-metadata:s:v:0', 'rotate=0',
+          '-metadata:s:v:0', 'displaymatrix=',
+          // on supprime les métadonnées conteneur résiduelles (pratique quand certains muxers
+          // réinjectent une display matrix malgré tout)
+          '-map_metadata', '-1',
+          '-y', rotatedPath
         ];
         
         console.log('🎬 Arguments FFmpeg (rotation):', args.join(' '));
