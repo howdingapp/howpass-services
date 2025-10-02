@@ -590,6 +590,7 @@ export class VideoService {
 
       return new Promise((resolve, reject) => {
         const args = [
+          '-noautorotate',
           '-hide_banner',
           '-i', videoPath,
           '-vf', filter,
@@ -887,6 +888,7 @@ export class VideoService {
       console.log('🎬 Création de la vidéo qr_codeless...');
 
       const args = [
+        '-noautorotate',
         '-i', prefixPath,        // vidéo prefix complète
         '-i', postfixPath,       // vidéo postfix
         '-filter_complex',
@@ -972,6 +974,7 @@ export class VideoService {
         }
 
         const args = [
+          '-noautorotate',
           '-i', prefixPath,        // vidéo prefix avec son
           '-i', postfixPath,       // vidéo postfix
           '-filter_complex',
