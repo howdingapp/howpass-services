@@ -493,6 +493,7 @@ export class VideoService {
         console.log(`🔄 Application de la rotation physique pour ${prefix}: ${currentWidth}x${currentHeight} (rotation: ${rotationDeg}°) -> transpose=${transposeValue}`);
         
         const args = [
+          '-noautorotate',
           '-i', videoPath,
           '-vf', `transpose=${transposeValue}`,
           '-c:v', 'libx264',
