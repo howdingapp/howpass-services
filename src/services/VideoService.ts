@@ -842,6 +842,7 @@ export class VideoService {
     }
   }
 
+  // @ts-ignore - Fonction conservée pour usage futur
   private async trimVideo(
     inputPath: string, 
     startTime: number, 
@@ -1216,8 +1217,7 @@ export class VideoService {
 
       // Créer la vidéo qr_codeless
       console.log(`🎬 Création de la vidéo qr_codeless à partir de ${request.qrCodeLessStart}s...`);
-      const qrCodeLessPrefixPath = await this.trimVideo(adaptedPrefixPath, request.qrCodeLessStart, request.videoDuration - request.qrCodeLessStart, jobId, `qr_codeless_prefix${suffix}`);
-      await this.createQrCodeLessVideoWithFullSound(qrCodeLessPrefixPath, finalPostfixPath, qrCodeLessOutputPath, request);
+      await this.createQrCodeLessVideoWithFullSound(adaptedPrefixPath, finalPostfixPath, qrCodeLessOutputPath, request);
       
       job.progress = 80;
       job.updatedAt = new Date();
@@ -1266,8 +1266,7 @@ export class VideoService {
         postfixPath, 
         outputPath, 
         qrCodeLessOutputPath, 
-        adaptedPrefixPath, 
-        qrCodeLessPrefixPath
+        adaptedPrefixPath
       ];
       await this.cleanupTempFiles(tempFiles);
 
