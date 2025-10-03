@@ -657,11 +657,11 @@ export class VideoService {
     const targetRatio = W / H;
   
     if (currentRatio > targetRatio) {
-      // plus large -> scale sur largeur, pad en hauteur
-      return `[0:v]scale=${W}:-2,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[vout]`;
+      // plus large -> scale sur hauteur, crop en largeur
+      return `[0:v]scale=-2:${H},crop=${W}:${H}:(iw-ow)/2:0,setsar=1[vout]`;
     } else if (currentRatio < targetRatio) {
-      // plus haut -> scale sur hauteur, pad en largeur
-      return `[0:v]scale=-2:${H},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[vout]`;
+      // plus haut -> scale sur largeur, crop en hauteur
+      return `[0:v]scale=${W}:-2,crop=${W}:${H}:0:(ih-oh)/2,setsar=1[vout]`;
     } else {
       // même ratio
       return `[0:v]scale=${W}:${H},setsar=1[vout]`;
