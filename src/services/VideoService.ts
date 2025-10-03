@@ -586,14 +586,24 @@ export class VideoService {
       const currentWidth = videoInfo.width;
       const currentHeight = videoInfo.height;
       
+      // Si la largeur est plus grande que la hauteur, inverser les targetDimensions
+      let finalTargetDimensions = targetDimensions;
+      if (currentWidth > currentHeight) {
+        finalTargetDimensions = {
+          width: targetDimensions.height,
+          height: targetDimensions.width
+        };
+        console.log(`📐 Vidéo en mode paysage détectée, inversion des dimensions cibles: ${targetDimensions.width}x${targetDimensions.height} -> ${finalTargetDimensions.width}x${finalTargetDimensions.height}`);
+      }
+      
       // Vérifier si l'adaptation est nécessaire
-      if (currentWidth === targetDimensions.width && currentHeight === targetDimensions.height) {
+      if (currentWidth === finalTargetDimensions.width && currentHeight === finalTargetDimensions.height) {
         console.log(`✅ Dimensions déjà compatibles pour ${prefix}, pas d'adaptation nécessaire`);
         return videoPath;
       }
       
       const adaptedPath = path.join(this.tempPath, `adapted_${prefix}_${jobId}.mp4`);
-      const filter = this.buildAdaptationFilter(currentWidth, currentHeight, targetDimensions);
+      const filter = this.buildAdaptationFilter(currentWidth, currentHeight, finalTargetDimensions);
 
       console.log(`🔧 Filtre d'adaptation pour ${prefix}: ${filter}`);
 
@@ -1188,10 +1198,10 @@ export class VideoService {
 
       // Analyser les dimensions des vidéos pour déterminer les dimensions cibles
       console.log('📐 Analyse des dimensions des vidéos pour déterminer les dimensions cibles...');
-      const targetDimensions = await this.getDimensions(finalPostfixPath);
+      const targetDimensions = await this.getDimensions(finalPrefixPath);
       
-      // Adapter uniquement la vidéo prefix aux dimensions cibles
-      const adaptedPrefixPath = await this.adaptVideoDimensions(finalPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
+      // Adapter uniquement la vidéo postfix aux dimensions cibles (de la vidéo prefix)
+      const adaptedPostfixPath = await this.adaptVideoDimensions(finalPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
       
       job.progress = 40;
       job.updatedAt = new Date();
@@ -1201,23 +1211,23 @@ export class VideoService {
 
       // Vérifier que les vidéos ont du contenu valide
       console.log('🔍 Vérification des vidéos avant fusion...');
-      const prefixInfo = await this.getVideoInfo(adaptedPrefixPath);
-      const postfixInfo = await this.getVideoInfo(finalPostfixPath);
+      const prefixInfo = await this.getVideoInfo(finalPrefixPath);
+      const postfixInfo = await this.getVideoInfo(adaptedPostfixPath);
       
-      console.log(`📐 Vidéo prefix adaptée: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s, rotation: ${prefixInfo.rotationDeg}°`);
-      console.log(`📐 Vidéo postfix: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s, rotation: ${postfixInfo.rotationDeg}°`);
+      console.log(`📐 Vidéo prefix: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s, rotation: ${prefixInfo.rotationDeg}°`);
+      console.log(`📐 Vidéo postfix adaptée: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s, rotation: ${postfixInfo.rotationDeg}°`);
       
 
       // Fusionner les vidéos avec le son de la vidéo prefix (sans trim)
       console.log('🎬 Fusion des vidéos avec son complet...');
-      await this.createQrCodeWithFullSound(adaptedPrefixPath, finalPostfixPath, outputPath, request);
+      await this.createQrCodeWithFullSound(finalPrefixPath, adaptedPostfixPath, outputPath, request);
       
       job.progress = 60;
       job.updatedAt = new Date();
 
       // Créer la vidéo qr_codeless
       console.log(`🎬 Création de la vidéo qr_codeless à partir de ${request.qrCodeLessStart}s...`);
-      await this.createQrCodeLessVideoWithFullSound(adaptedPrefixPath, finalPostfixPath, qrCodeLessOutputPath, request);
+      await this.createQrCodeLessVideoWithFullSound(finalPrefixPath, adaptedPostfixPath, qrCodeLessOutputPath, request);
       
       job.progress = 80;
       job.updatedAt = new Date();
@@ -1266,7 +1276,7 @@ export class VideoService {
         postfixPath, 
         outputPath, 
         qrCodeLessOutputPath, 
-        adaptedPrefixPath
+        adaptedPostfixPath
       ];
       await this.cleanupTempFiles(tempFiles);
 
