@@ -894,11 +894,11 @@ export class VideoService {
     request: MergeWithFullSoundRequest
   ): Promise<void> {
     
+
     const postfixInfo = await this.getVideoInfo(postfixPath);
     const prefixTrimDur = Math.max(0, request.videoDuration - request.qrCodeLessStart);
-    const totalDuration = prefixTrimDur + (postfixInfo?.duration ?? 0); // en secondes (float OK)
+    const totalDuration = prefixTrimDur + Math.round(postfixInfo.duration);
 
-      
     return new Promise((resolve, reject) => {
       console.log('🎬 Création de la vidéo qr_codeless...');
 
