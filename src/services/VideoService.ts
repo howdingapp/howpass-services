@@ -596,12 +596,6 @@ export class VideoService {
         console.log(`📐 Vidéo en mode paysage détectée, inversion des dimensions cibles: ${targetDimensions.width}x${targetDimensions.height} -> ${finalTargetDimensions.width}x${finalTargetDimensions.height}`);
       }
       
-      // Vérifier si l'adaptation est nécessaire
-      if (currentWidth === finalTargetDimensions.width && currentHeight === finalTargetDimensions.height) {
-        console.log(`✅ Dimensions déjà compatibles pour ${prefix}, pas d'adaptation nécessaire`);
-        return videoPath;
-      }
-      
       const adaptedPath = path.join(this.tempPath, `adapted_${prefix}_${jobId}.mp4`);
       const filter = this.buildAdaptationFilter(currentWidth, currentHeight, finalTargetDimensions);
 
@@ -1200,7 +1194,11 @@ export class VideoService {
       console.log('📐 Analyse des dimensions des vidéos pour déterminer les dimensions cibles...');
       const targetDimensions = await this.getDimensions(finalPrefixPath);
       
-      // Adapter uniquement la vidéo postfix aux dimensions cibles (de la vidéo prefix)
+      // Adapter les deux vidéos aux dimensions cibles (pour s'assurer que le SAR est correct)
+      console.log('🔧 Adaptation de la vidéo prefix aux dimensions cibles...');
+      const adaptedPrefixPath = await this.adaptVideoDimensions(finalPrefixPath, targetDimensions, jobId, `prefix${suffix}`);
+      
+      console.log('🔧 Adaptation de la vidéo postfix aux dimensions cibles...');
       const adaptedPostfixPath = await this.adaptVideoDimensions(finalPostfixPath, targetDimensions, jobId, `postfix${suffix}`);
       
       job.progress = 40;
@@ -1211,23 +1209,23 @@ export class VideoService {
 
       // Vérifier que les vidéos ont du contenu valide
       console.log('🔍 Vérification des vidéos avant fusion...');
-      const prefixInfo = await this.getVideoInfo(finalPrefixPath);
+      const prefixInfo = await this.getVideoInfo(adaptedPrefixPath);
       const postfixInfo = await this.getVideoInfo(adaptedPostfixPath);
       
-      console.log(`📐 Vidéo prefix: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s, rotation: ${prefixInfo.rotationDeg}°`);
+      console.log(`📐 Vidéo prefix adaptée: ${prefixInfo.width}x${prefixInfo.height}, durée: ${prefixInfo.duration}s, rotation: ${prefixInfo.rotationDeg}°`);
       console.log(`📐 Vidéo postfix adaptée: ${postfixInfo.width}x${postfixInfo.height}, durée: ${postfixInfo.duration}s, rotation: ${postfixInfo.rotationDeg}°`);
       
 
       // Fusionner les vidéos avec le son de la vidéo prefix (sans trim)
       console.log('🎬 Fusion des vidéos avec son complet...');
-      await this.createQrCodeWithFullSound(finalPrefixPath, adaptedPostfixPath, outputPath, request);
+      await this.createQrCodeWithFullSound(adaptedPrefixPath, adaptedPostfixPath, outputPath, request);
       
       job.progress = 60;
       job.updatedAt = new Date();
 
       // Créer la vidéo qr_codeless
       console.log(`🎬 Création de la vidéo qr_codeless à partir de ${request.qrCodeLessStart}s...`);
-      await this.createQrCodeLessVideoWithFullSound(finalPrefixPath, adaptedPostfixPath, qrCodeLessOutputPath, request);
+      await this.createQrCodeLessVideoWithFullSound(adaptedPrefixPath, adaptedPostfixPath, qrCodeLessOutputPath, request);
       
       job.progress = 80;
       job.updatedAt = new Date();
