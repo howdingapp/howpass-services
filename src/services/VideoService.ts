@@ -648,15 +648,25 @@ export class VideoService {
   }
 
   private buildAdaptationFilter(
-    _currentWidth: number,
-    _currentHeight: number,
+    currentWidth: number,
+    currentHeight: number,
     targetDimensions: { width: number; height: number }
   ): string {
-    const { width: W, height: H } = targetDimensions;  
-    // Étirement direct vers les dimensions cibles (force l'aspect ratio)
-    return `[0:v]scale=${W}:${H},setsar=1[vout]`;
+    const { width: W, height: H } = targetDimensions;
+    const currentRatio = currentWidth / currentHeight;
+    const targetRatio = W / H;
+  
+    if (currentRatio > targetRatio) {
+      // plus large -> scale sur largeur, pad en hauteur
+      return `[0:v]scale=${W}:-2,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[vout]`;
+    } else if (currentRatio < targetRatio) {
+      // plus haut -> scale sur hauteur, pad en largeur
+      return `[0:v]scale=-2:${H},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[vout]`;
+    } else {
+      // même ratio
+      return `[0:v]scale=${W}:${H},setsar=1[vout]`;
+    }
   }
-
 
   private async detectCropParameters(
     videoPath: string,
