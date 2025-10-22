@@ -326,7 +326,7 @@ function convertToPortableFormat(userData: any): any {
 /**
  * Upload un fichier d'export vers le stockage avec sécurité avancée
  */
-async function uploadExportFile(supabaseService: SupabaseService, filePath: string, fileName: string, userId: string): Promise<string> {
+async function uploadExportFile(supabaseService: SupabaseService, filePath: string, _fileName: string, userId: string): Promise<string> {
   try {
     const fileBuffer = fs.readFileSync(filePath);
     
