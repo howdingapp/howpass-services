@@ -155,6 +155,62 @@ jobs:
         
         echo "✅ Cloud Run Job configuré avec succès (traitement vidéo uniquement)"
 
+    - name: Create Cloud Run Job (RGPD Processing)
+      run: |
+        echo "📋 Création du Cloud Run Job pour le traitement RGPD..."
+        
+        if gcloud run jobs describe rgpd-processing-job --region=${{ env.REGION }} --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
+          echo "✅ Job RGPD existant trouvé, mise à jour..."
+          gcloud run jobs update rgpd-processing-job \
+            --region=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --execution-environment=gen2 \
+            --network=default \
+            --subnet=default \
+            --vpc-egress=private-ranges-only \
+            --memory=2Gi \
+            --cpu=2 \
+            --task-timeout=3600 \
+            --max-retries=3 \
+            --command="npm" \
+            --args="run,job:rgpd" \
+            --set-env-vars=NODE_ENV=production \
+            --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
+            --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+            --set-env-vars=GCP_LOCATION=europe-west1 \
+            --set-env-vars=GCP_JOB_NAME=rgpd-processing-job \
+            --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
+            --set-env-vars=RESEND_FROM_EMAIL=${{ secrets.RESEND_FROM_EMAIL }}
+        else
+          echo "🆕 Création d'un nouveau job RGPD..."
+          gcloud run jobs create rgpd-processing-job \
+            --region=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --execution-environment=gen2 \
+            --network=default \
+            --subnet=default \
+            --vpc-egress=private-ranges-only \
+            --memory=2Gi \
+            --cpu=2 \
+            --task-timeout=3600 \
+            --max-retries=3 \
+            --command="npm" \
+            --args="run,job:rgpd" \
+            --set-env-vars=NODE_ENV=production \
+            --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
+            --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+            --set-env-vars=GCP_LOCATION=europe-west1 \
+            --set-env-vars=GCP_JOB_NAME=rgpd-processing-job \
+            --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
+            --set-env-vars=RESEND_FROM_EMAIL=${{ secrets.RESEND_FROM_EMAIL }}
+        fi
+        
+        echo "✅ Cloud Run Job RGPD configuré avec succès"
+
     - name: Create Google Cloud Tasks Queues
       run: |
         echo "🚀 Configuration des Google Cloud Tasks pour le traitement IA..."

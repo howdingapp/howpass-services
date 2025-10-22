@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import { VideoController } from './controllers/VideoController';
 import { IAController } from './controllers/IAController';
 import conversationRoutes from './routes/conversationRoutes';
+import rgpdRoutes from './routes/rgpdRoutes';
 import dotenv from 'dotenv';
 import { validateIAToken } from './middleware/iaAuthMiddleware';
 
@@ -67,6 +68,9 @@ app.get('/health', (req, res) => {
 
 // Routes des conversations
 app.use('/api/conversations', conversationRoutes);
+
+// Routes RGPD
+app.use('/api/rgpd', rgpdRoutes);
 
 // Routes des jobs IA supprimées - remplacées par Google Cloud Tasks
 

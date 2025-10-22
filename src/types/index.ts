@@ -69,4 +69,5 @@ export interface VideoInfo {
 export * from './bilan';
 export * from './conversation';
 export * from './chatbot-output';
-export * from './quick-replies'; 
+export * from './quick-replies';
+export * from './rgpd'; 
