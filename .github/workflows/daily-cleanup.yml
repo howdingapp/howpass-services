@@ -1,0 +1,44 @@
+name: Daily File Cleanup
+
+on:
+  schedule:
+    # Exécuter tous les jours à 2h00 UTC (3h00 heure française)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: europe-west1
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+jobs:
+  cleanup-files:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Setup Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Execute File Cleanup Job
+        run: |
+          echo "🧹 Exécution du nettoyage quotidien des fichiers RGPD..."
+          
+          # Exécuter le job de nettoyage avec les variables d'environnement
+          gcloud run jobs execute file-cleanup-job \
+            --region=${{ env.REGION }} \
+            --wait \
+            --env-vars="SUPABASE_URL=${{ env.SUPABASE_URL }},SUPABASE_SERVICE_KEY=${{ env.SUPABASE_SERVICE_KEY }},NODE_ENV=production"
+          
+          echo "✅ Nettoyage quotidien terminé"
+
+      - name: Show Cleanup Summary
+        run: |
+          echo "📊 Résumé du nettoyage:"
+          echo "- Fichiers RGPD expirés supprimés"
+          echo "- Anciens enregistrements de queue nettoyés"
+          echo "- Espace de stockage optimisé"

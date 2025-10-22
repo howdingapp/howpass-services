@@ -106,8 +106,8 @@ async function processDataExport(
     // Écrire le fichier d'export
     fs.writeFileSync(filePath, exportData, 'utf8');
 
-    // Uploader le fichier vers Supabase Storage (ou autre service de stockage)
-    const downloadUrl = await uploadExportFile(supabaseService, filePath, fileName);
+    // Uploader le fichier vers Supabase Storage avec sécurité avancée
+    const downloadUrl = await uploadExportFile(supabaseService, filePath, fileName, request.userId);
 
     // Envoyer l'email avec le lien de téléchargement
     const htmlContent = emailService.generateDataExportEmailHtml(request.email, downloadUrl);
@@ -249,8 +249,8 @@ async function processDataPortability(
     // Écrire le fichier de portabilité
     fs.writeFileSync(filePath, JSON.stringify(portableData, null, 2), 'utf8');
 
-    // Uploader le fichier
-    const downloadUrl = await uploadExportFile(supabaseService, filePath, fileName);
+    // Uploader le fichier avec sécurité avancée
+    const downloadUrl = await uploadExportFile(supabaseService, filePath, fileName, request.userId);
 
     // Envoyer l'email
     const htmlContent = emailService.generateDataExportEmailHtml(request.email, downloadUrl);
@@ -324,17 +324,27 @@ function convertToPortableFormat(userData: any): any {
 }
 
 /**
- * Upload un fichier d'export vers le stockage
+ * Upload un fichier d'export vers le stockage avec sécurité avancée
  */
-async function uploadExportFile(supabaseService: SupabaseService, filePath: string, fileName: string): Promise<string> {
+async function uploadExportFile(supabaseService: SupabaseService, filePath: string, fileName: string, userId: string): Promise<string> {
   try {
     const fileBuffer = fs.readFileSync(filePath);
     
+    // 1. Créer un nom de fichier sécurisé avec timestamp et hash aléatoire
+    const timestamp = Date.now();
+    const randomHash = Math.random().toString(36).substring(2, 15);
+    const secureFileName = `export_${userId}_${timestamp}_${randomHash}.json`;
+    
+    // 2. Structure de dossiers sécurisée par utilisateur
+    const secureFilePath = `users/${userId}/exports/${secureFileName}`;
+    
+    // 3. Uploader le fichier
     const { error } = await supabaseService.getSupabaseClient().storage
       .from('rgpd-exports')
-      .upload(fileName, fileBuffer, {
+      .upload(secureFilePath, fileBuffer, {
         contentType: 'application/json',
-        cacheControl: '3600'
+        cacheControl: '3600',
+        upsert: false // Empêcher l'écrasement
       });
 
     if (error) {
@@ -342,16 +352,58 @@ async function uploadExportFile(supabaseService: SupabaseService, filePath: stri
       throw error;
     }
 
-    // Générer l'URL de téléchargement
-    const { data: urlData } = supabaseService.getSupabaseClient().storage
+    // 4. Créer une URL signée avec expiration (7 jours)
+    const expiresIn = 7 * 24 * 60 * 60; // 7 jours en secondes
+    const { data: signedUrlData, error: signedUrlError } = await supabaseService.getSupabaseClient().storage
       .from('rgpd-exports')
-      .getPublicUrl(fileName);
+      .createSignedUrl(secureFilePath, expiresIn, {
+        download: true
+      });
 
-    return urlData.publicUrl;
+    if (signedUrlError) {
+      console.error('❌ Erreur lors de la création de l\'URL signée:', signedUrlError);
+      throw signedUrlError;
+    }
+
+    // 5. Programmer la suppression automatique du fichier après 7 jours
+    await scheduleFileDeletion(supabaseService, secureFilePath, 7);
+
+    console.log(`✅ Fichier sécurisé uploadé: ${secureFilePath}`);
+    console.log(`🔗 URL signée générée (expire dans 7 jours)`);
+
+    return signedUrlData.signedUrl;
 
   } catch (error) {
-    console.error('❌ Erreur lors de l\'upload:', error);
+    console.error('❌ Erreur lors de l\'upload sécurisé:', error);
     throw error;
+  }
+}
+
+/**
+ * Programme la suppression automatique d'un fichier
+ */
+async function scheduleFileDeletion(supabaseService: SupabaseService, filePath: string, daysToExpire: number): Promise<void> {
+  try {
+    const deletionDate = new Date();
+    deletionDate.setDate(deletionDate.getDate() + daysToExpire);
+    
+    // Insérer une tâche de suppression dans la base de données
+    const { error } = await supabaseService.getSupabaseClient()
+      .from('file_deletion_queue')
+      .insert({
+        file_path: filePath,
+        deletion_date: deletionDate.toISOString(),
+        status: 'pending',
+        created_at: new Date().toISOString()
+      });
+
+    if (error) {
+      console.warn('⚠️ Impossible de programmer la suppression automatique:', error);
+    } else {
+      console.log(`📅 Suppression automatique programmée pour ${filePath} le ${deletionDate.toISOString()}`);
+    }
+  } catch (error) {
+    console.warn('⚠️ Erreur lors de la programmation de la suppression:', error);
   }
 }
 

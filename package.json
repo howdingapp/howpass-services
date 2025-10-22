@@ -8,9 +8,11 @@
     "start": "node dist/index.js",
     "job": "node dist/job-processor.js",
     "job:rgpd": "node dist/job-rgpd-processor.js",
+    "job:cleanup": "node dist/job-file-cleanup.js",
     "dev": "ts-node src/index.ts",
     "dev:job": "ts-node src/job-processor.js",
     "dev:job:rgpd": "ts-node src/job-rgpd-processor.ts",
+    "dev:job:cleanup": "ts-node src/job-file-cleanup.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix"
   },

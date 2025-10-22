@@ -211,6 +211,52 @@ jobs:
         
         echo "✅ Cloud Run Job RGPD configuré avec succès"
 
+    - name: Create Cloud Run Job (File Cleanup)
+      run: |
+        echo "📋 Création du Cloud Run Job pour le nettoyage des fichiers..."
+        
+        if gcloud run jobs describe file-cleanup-job --region=${{ env.REGION }} --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
+          echo "✅ Job de nettoyage existant trouvé, mise à jour..."
+          gcloud run jobs update file-cleanup-job \
+            --region=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --execution-environment=gen2 \
+            --network=default \
+            --subnet=default \
+            --vpc-egress=private-ranges-only \
+            --memory=1Gi \
+            --cpu=1 \
+            --task-timeout=1800 \
+            --max-retries=3 \
+            --command="npm" \
+            --args="run,job:cleanup" \
+            --set-env-vars=NODE_ENV=production \
+            --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
+        else
+          echo "🆕 Création d'un nouveau job de nettoyage..."
+          gcloud run jobs create file-cleanup-job \
+            --region=${{ env.REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --image=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --execution-environment=gen2 \
+            --network=default \
+            --subnet=default \
+            --vpc-egress=private-ranges-only \
+            --memory=1Gi \
+            --cpu=1 \
+            --task-timeout=1800 \
+            --max-retries=3 \
+            --command="npm" \
+            --args="run,job:cleanup" \
+            --set-env-vars=NODE_ENV=production \
+            --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
+        fi
+        
+        echo "✅ Cloud Run Job de nettoyage configuré avec succès"
+
     - name: Create Google Cloud Tasks Queues
       run: |
         echo "🚀 Configuration des Google Cloud Tasks pour le traitement IA..."
