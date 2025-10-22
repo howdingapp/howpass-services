@@ -160,7 +160,7 @@ async function processDataExport(
 async function processDataDeletion(
   rgpdService: RgpdService,
   emailService: EmailService,
-  supabaseService: SupabaseService,
+  _supabaseService: SupabaseService,
   request: RgpdJobPayload
 ): Promise<RgpdJobResult> {
   try {
@@ -330,7 +330,7 @@ async function uploadExportFile(supabaseService: SupabaseService, filePath: stri
   try {
     const fileBuffer = fs.readFileSync(filePath);
     
-    const { data, error } = await supabaseService.getSupabaseClient().storage
+    const { error } = await supabaseService.getSupabaseClient().storage
       .from('rgpd-exports')
       .upload(fileName, fileBuffer, {
         contentType: 'application/json',
