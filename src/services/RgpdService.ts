@@ -111,6 +111,7 @@ export class RgpdService {
       .single();
 
     if (error || !data) {
+      console.error('Erreur lors de la récupération des informations personnelles:', error);
       return null;
     }
 
