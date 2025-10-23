@@ -1,6 +1,6 @@
 import { RgpdEmailData } from '../types/rgpd';
-import * as fs from 'fs';
-import * as path from 'path';
+import { howpassRgpdExportTemplate } from '../templates/howpass-rgpd-export';
+import { howpassRgpdDeletionTemplate } from '../templates/howpass-rgpd-deletion';
 
 export class EmailService {
   constructor() {
@@ -45,12 +45,14 @@ export class EmailService {
   }
 
   private loadEmailTemplate(templateName: string): string {
-    try {
-      const templatePath = path.join(__dirname, '..', '..', 'emails', 'templates', templateName);
-      return fs.readFileSync(templatePath, 'utf-8');
-    } catch (error) {
-      console.error(`❌ Erreur lors du chargement du template ${templateName}:`, error);
-      throw new Error(`Template ${templateName} non trouvé`);
+    switch (templateName) {
+      case 'howpass-rgpd-export.html':
+        return howpassRgpdExportTemplate;
+      case 'howpass-rgpd-deletion.html':
+        return howpassRgpdDeletionTemplate;
+      default:
+        console.error(`❌ Template ${templateName} non trouvé`);
+        throw new Error(`Template ${templateName} non trouvé`);
     }
   }
 
