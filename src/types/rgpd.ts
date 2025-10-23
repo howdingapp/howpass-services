@@ -332,6 +332,29 @@ export interface AnonymizedUserDataExport {
     activityGuestId?: string;
     activityId?: string;
   }>;
+  openMapData: Array<{
+    id: string;
+    userDataId: string;
+    userId: string;
+    specialties?: any;
+    gpsLocation?: any;
+    dominantFamilyId?: string;
+    dominantFamilyName?: string;
+    dominantColor?: string;
+    createdAt: string;
+    updatedAt: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    address?: any;
+    experience?: string;
+    diplomas?: any;
+    photoUrl?: string;
+    titleProgression?: any;
+    vectorSummary?: string;
+    isActive: boolean;
+  }>;
   metadata: {
     totalConversations: number;
     totalVideos: number;
@@ -348,6 +371,7 @@ export interface AnonymizedUserDataExport {
     totalDeliveries: number;
     totalEmails: number;
     totalFeedbacks: number;
+    totalOpenMapData: number;
     exportDate: string;
     dataSize: string;
   };

@@ -90,12 +90,13 @@ export class RgpdService {
       const deliveries = await this.getExportDeliveries(userId);
       const emails = await this.getExportEmails(userId);
       const feedbacks = await this.getExportFeedbacks(userId);
+      const openMapData = await this.getExportOpenMapData(userId);
 
       // Calculer les métadonnées
       const metadata = this.calculateAnonymizedMetadata(
         conversations, videos, images, sounds, bilans, 
         activities, activityRequestedModifications, practices, userData, aiResponses, 
-        howanaConversations, userRendezVous, deliveries, emails, feedbacks
+        howanaConversations, userRendezVous, deliveries, emails, feedbacks, openMapData
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
@@ -116,6 +117,7 @@ export class RgpdService {
         deliveries,
         emails,
         feedbacks,
+        openMapData,
         metadata
       };
 
@@ -996,6 +998,84 @@ export class RgpdService {
   }
 
   /**
+   * Récupère les données OpenMap de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportOpenMapData(userId: string): Promise<AnonymizedUserDataExport['openMapData']> {
+    try {
+      console.log(`🔍 Récupération des données OpenMap pour l'utilisateur: ${userId}`);
+
+      const { data, error } = await this.supabaseService.getSupabaseClient()
+        .from('open_map_data')
+        .select(`
+          id,
+          user_data_id,
+          user_id,
+          specialties,
+          gps_location,
+          dominant_family_id,
+          dominant_family_name,
+          dominant_color,
+          created_at,
+          updated_at,
+          first_name,
+          last_name,
+          email,
+          phone,
+          address,
+          experience,
+          diplomas,
+          photo_url,
+          title_progression,
+          vector_summary,
+          is_active
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erreur lors de la récupération des données OpenMap:', error);
+        return [];
+      }
+
+      if (!data) {
+        return [];
+      }
+
+      // Mapper les données vers un format qui ne révèle pas la structure de la table
+      const openMapData = data.map(openMap => ({
+        id: openMap.id,
+        userDataId: openMap.user_data_id,
+        userId: openMap.user_id,
+        specialties: openMap.specialties,
+        gpsLocation: openMap.gps_location,
+        dominantFamilyId: openMap.dominant_family_id,
+        dominantFamilyName: openMap.dominant_family_name,
+        dominantColor: openMap.dominant_color,
+        createdAt: openMap.created_at,
+        updatedAt: openMap.updated_at,
+        firstName: openMap.first_name,
+        lastName: openMap.last_name,
+        email: openMap.email,
+        phone: openMap.phone,
+        address: openMap.address,
+        experience: openMap.experience,
+        diplomas: openMap.diplomas,
+        photoUrl: openMap.photo_url,
+        titleProgression: openMap.title_progression,
+        vectorSummary: openMap.vector_summary,
+        isActive: openMap.is_active
+      }));
+
+      console.log(`✅ ${openMapData.length} données OpenMap récupérées pour l'utilisateur: ${userId}`);
+      return openMapData;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des données OpenMap pour l'utilisateur ${userId}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Calcule les métadonnées de l'export anonymisé
    */
   private calculateAnonymizedMetadata(
@@ -1013,12 +1093,13 @@ export class RgpdService {
     userRendezVous: AnonymizedUserDataExport['userRendezVous'],
     deliveries: AnonymizedUserDataExport['deliveries'],
     emails: AnonymizedUserDataExport['emails'],
-    feedbacks: AnonymizedUserDataExport['feedbacks']
+    feedbacks: AnonymizedUserDataExport['feedbacks'],
+    openMapData: AnonymizedUserDataExport['openMapData']
   ): AnonymizedUserDataExport['metadata'] {
     const dataSize = this.calculateAnonymizedDataSize(
       conversations, videos, images, sounds, bilans, 
       activities, activityRequestedModifications, practices, userData, aiResponses, 
-      howanaConversations, userRendezVous, deliveries, emails, feedbacks
+      howanaConversations, userRendezVous, deliveries, emails, feedbacks, openMapData
     );
 
     return {
@@ -1037,6 +1118,7 @@ export class RgpdService {
       totalDeliveries: deliveries.length,
       totalEmails: emails.length,
       totalFeedbacks: feedbacks.length,
+      totalOpenMapData: openMapData.length,
       exportDate: new Date().toISOString(),
       dataSize: `${dataSize} MB`
     };
@@ -1060,7 +1142,8 @@ export class RgpdService {
     userRendezVous: AnonymizedUserDataExport['userRendezVous'],
     deliveries: AnonymizedUserDataExport['deliveries'],
     emails: AnonymizedUserDataExport['emails'],
-    feedbacks: AnonymizedUserDataExport['feedbacks']
+    feedbacks: AnonymizedUserDataExport['feedbacks'],
+    openMapData: AnonymizedUserDataExport['openMapData']
   ): number {
     // Estimation approximative de la taille des données anonymisées
     const conversationSize = conversations.reduce((acc, conv) => {
@@ -1120,12 +1203,24 @@ export class RgpdService {
              (feedback.feedbackImages ? JSON.stringify(feedback.feedbackImages).length : 0);
     }, 0);
 
+    // Estimation pour les données OpenMap (profil, localisation, expérience)
+    const openMapSize = openMapData.reduce((acc, openMap) => {
+      return acc + (openMap.firstName?.length || 0) + (openMap.lastName?.length || 0) + 
+             (openMap.email?.length || 0) + (openMap.phone?.length || 0) + 
+             (openMap.experience?.length || 0) + (openMap.vectorSummary?.length || 0) +
+             (openMap.specialties ? JSON.stringify(openMap.specialties).length : 0) + 
+             (openMap.gpsLocation ? JSON.stringify(openMap.gpsLocation).length : 0) + 
+             (openMap.address ? JSON.stringify(openMap.address).length : 0) +
+             (openMap.diplomas ? JSON.stringify(openMap.diplomas).length : 0) + 
+             (openMap.titleProgression ? JSON.stringify(openMap.titleProgression).length : 0);
+    }, 0);
+
     // Estimation pour les médias (très approximative)
     const mediaSize = (videos.length * 50) + (images.length * 2) + (sounds.length * 10);
 
     const totalBytes = conversationSize + bilanSize + aiResponseSize + activitySize + 
                       activityModificationSize + practiceSize + userDataSize + howanaSize + 
-                      rendezVousSize + deliverySize + emailSize + feedbackSize + mediaSize;
+                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + mediaSize;
     return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
 }
