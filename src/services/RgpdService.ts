@@ -83,7 +83,7 @@ export class RgpdService {
       const activities = await this.getExportActivities(userId);
       const activityRequestedModifications = await this.getExportActivityRequestedModifications(userId);
       const practices = await this.getExportPractices(userId);
-      const userData = await this.getExportUserData(userId);
+      const userProfile = await this.getExportUserData(userId);
       const aiResponses = await this.getExportAiResponses(userId);
       const howanaConversations = await this.getExportHowanaConversations(userId);
       const rendezVous = await this.getExportRendezVous(userId);
@@ -96,8 +96,8 @@ export class RgpdService {
       // Calculer les métadonnées
       const metadata = this.calculateAnonymizedMetadata(
         conversations, videos, images, sounds, bilans, 
-        activities, activityRequestedModifications, practices, userData, aiResponses, 
-        howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest
+        activities, activityRequestedModifications, practices, aiResponses, 
+        howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userProfile
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
@@ -111,7 +111,6 @@ export class RgpdService {
         activities,
         activityRequestedModifications,
         practices,
-        userData,
         aiResponses,
         howanaConversations,
         rendezVous,
@@ -120,6 +119,7 @@ export class RgpdService {
         feedbacks,
         openMapData,
         treasureChest,
+        userProfile,
         metadata
       };
 
@@ -675,10 +675,196 @@ export class RgpdService {
   /**
    * Récupère les données utilisateur (données complètes, structure masquée)
    */
-  private async getExportUserData(userId: string): Promise<AnonymizedUserDataExport['userData']> {
-    // TODO: Implémenter la récupération des données utilisateur
-    console.log(`🔍 Récupération des données utilisateur pour l'utilisateur: ${userId}`);
-    return [];
+  private async getExportUserData(userId: string): Promise<AnonymizedUserDataExport['userProfile']> {
+    try {
+      console.log(`🔍 Récupération des données utilisateur pour l'utilisateur: ${userId}`);
+
+      // Récupérer les données utilisateur principales
+      const { data: userData, error: userDataError } = await this.supabaseService.getSupabaseClient()
+        .from('user_data')
+        .select(`
+          id,
+          user_id,
+          data_folder,
+          first_name,
+          last_name,
+          email,
+          customer_id,
+          phone,
+          birth_date,
+          address,
+          subscription_type,
+          active_formula,
+          stripe_connect_account_id,
+          status,
+          profil,
+          referral_code,
+          onboarding_referral,
+          onboarding_demande_date,
+          specialties,
+          experience,
+          diplomas,
+          photo_url,
+          title_progression,
+          fcm_token,
+          map_data,
+          howana_recommandation,
+          typical_situations,
+          preferences,
+          favourites,
+          statistics,
+          created_at,
+          updated_at
+        `)
+        .eq('user_id', userId)
+        .single();
+
+      if (userDataError) {
+        console.error('Erreur lors de la récupération des données utilisateur:', userDataError);
+        return {
+          id: '',
+          userId: userId,
+          firstName: '',
+          lastName: '',
+          email: '',
+          status: 'unknown',
+          profil: 'unknown',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      }
+
+      if (!userData) {
+        return {
+          id: '',
+          userId: userId,
+          firstName: '',
+          lastName: '',
+          email: '',
+          status: 'unknown',
+          profil: 'unknown',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      }
+
+      // Récupérer les modifications en attente
+      const { data: pendingModificationData } = await this.supabaseService.getSupabaseClient()
+        .from('user_data_requested_modifications')
+        .select(`
+          id,
+          user_id,
+          specialties,
+          experience,
+          diplomas,
+          typical_situations,
+          status,
+          requested_at,
+          reviewed_at,
+          reviewed_by,
+          review_notes,
+          created_at,
+          updated_at
+        `)
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .single();
+
+      // Récupérer le rôle utilisateur
+      const { data: roleData } = await this.supabaseService.getSupabaseClient()
+        .from('user_roles')
+        .select(`
+          roles(name)
+        `)
+        .eq('user_id', userId);
+
+      const role = roleData && Array.isArray(roleData) && roleData.length > 0 
+        ? ((roleData[0]?.roles ?? {}) as any).name || roleData[0]?.roles?.[0]?.name || undefined
+        : undefined;
+
+      // Transformer les données vers le format camelCase
+      const transformedUserData: AnonymizedUserDataExport['userProfile'] = {
+        id: String(userData.id),
+        userId: String(userData.user_id),
+        ...(userData.data_folder && { dataFolder: String(userData.data_folder) }),
+        firstName: String(userData.first_name),
+        lastName: String(userData.last_name),
+        email: String(userData.email),
+        ...(userData.customer_id && { customerId: String(userData.customer_id) }),
+        ...(userData.phone && { phone: String(userData.phone) }),
+        ...(userData.birth_date && { birthDate: String(userData.birth_date) }),
+        ...(userData.address && { address: {
+          ...(userData.address.street && { street: userData.address.street }),
+          ...(userData.address.city && { city: userData.address.city }),
+          ...(userData.address.postal_code && { postalCode: userData.address.postal_code }),
+          ...(userData.address.country && { country: userData.address.country })
+        }}),
+        ...(userData.subscription_type && { subscriptionType: String(userData.subscription_type) }),
+        ...(userData.active_formula && { activeFormula: String(userData.active_formula) }),
+        ...(userData.stripe_connect_account_id && { stripeConnectAccountId: String(userData.stripe_connect_account_id) }),
+        status: String(userData.status),
+        profil: String(userData.profil),
+        ...(userData.referral_code && { referralCode: String(userData.referral_code) }),
+        ...(userData.onboarding_referral && { onboardingReferral: String(userData.onboarding_referral) }),
+        ...(userData.onboarding_demande_date && { onboardingDemandeDate: String(userData.onboarding_demande_date) }),
+        ...(userData.specialties && { specialties: this.transformSpecialties(userData.specialties) }),
+        ...(userData.experience && { experience: String(userData.experience) }),
+        ...(userData.diplomas && { diplomas: this.transformDiplomas(userData.diplomas) }),
+        ...(userData.photo_url && { photoUrl: String(userData.photo_url) }),
+        ...(userData.title_progression && { titleProgression: this.transformTitleProgression(userData.title_progression) }),
+        ...(userData.fcm_token && { fcmToken: String(userData.fcm_token) }),
+        ...(userData.map_data && { mapData: {
+          ...(userData.map_data.dominant_family_id && { dominantFamilyId: userData.map_data.dominant_family_id })
+        }}),
+        ...(userData.howana_recommandation && { howanaRecommandation: String(userData.howana_recommandation) }),
+        ...(userData.typical_situations && { typicalSituations: String(userData.typical_situations) }),
+        ...(userData.preferences && { preferences: {
+          email: Boolean(userData.preferences.email),
+          push: Boolean(userData.preferences.push)
+        }}),
+        ...(userData.favourites && { favourites: userData.favourites.map((fav: any) => ({
+          id: String(fav.id),
+          type: String(fav.type),
+          addedAt: String(fav.addedAt)
+        }))}),
+        ...(userData.statistics && { statistics: this.transformStatisticsToCamelCase(userData.statistics) }),
+        createdAt: String(userData.created_at),
+        updatedAt: String(userData.updated_at),
+        pendingModificationData: pendingModificationData ? {
+          id: String(pendingModificationData.id),
+          userId: String(pendingModificationData.user_id),
+          ...(pendingModificationData.specialties && { specialties: pendingModificationData.specialties }),
+          ...(pendingModificationData.experience && { experience: String(pendingModificationData.experience) }),
+          ...(pendingModificationData.diplomas && { diplomas: pendingModificationData.diplomas }),
+          ...(pendingModificationData.typical_situations && { typicalSituations: String(pendingModificationData.typical_situations) }),
+          status: String(pendingModificationData.status),
+          requestedAt: String(pendingModificationData.requested_at),
+          ...(pendingModificationData.reviewed_at && { reviewedAt: String(pendingModificationData.reviewed_at) }),
+          ...(pendingModificationData.reviewed_by && { reviewedBy: String(pendingModificationData.reviewed_by) }),
+          ...(pendingModificationData.review_notes && { reviewNotes: String(pendingModificationData.review_notes) }),
+          createdAt: String(pendingModificationData.created_at),
+          updatedAt: String(pendingModificationData.updated_at)
+        } : undefined,
+        role: role
+      };
+
+      console.log(`✅ Données utilisateur récupérées pour l'utilisateur: ${userId}`);
+      return transformedUserData;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des données utilisateur pour l'utilisateur ${userId}:`, error);
+      return {
+        id: '',
+        userId: userId,
+        firstName: '',
+        lastName: '',
+        email: '',
+        status: 'unknown',
+        profil: 'unknown',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
   }
 
   /**
@@ -1430,6 +1616,101 @@ export class RgpdService {
     }
   }
 
+
+  /**
+   * Transforme les spécialités de la base de données vers le format camelCase
+   */
+  private transformSpecialties(specialties: any): { choice: string[]; created: string[] } | undefined {
+    if (!specialties) return undefined;
+    
+    // Si c'est déjà un objet avec choice/created (nouveau format)
+    if (specialties.choice || specialties.created) {
+      return {
+        choice: Array.isArray(specialties.choice) ? specialties.choice : [],
+        created: Array.isArray(specialties.created) ? specialties.created : []
+      };
+    }
+    
+    // Si c'est un tableau (ancien format), le convertir
+    if (Array.isArray(specialties)) {
+      return {
+        choice: specialties,
+        created: []
+      };
+    }
+    
+    // Fallback
+    return {
+      choice: [],
+      created: []
+    };
+  }
+
+  /**
+   * Transforme les diplômes de la base de données vers le format Experience[]
+   */
+  private transformDiplomas(diplomas: any): Array<{ ecole: string; annee: string; intitule: string; duree: string }> | undefined {
+    if (!diplomas) return undefined;
+
+    if (Array.isArray(diplomas)) {
+      return diplomas.map(diploma => ({
+        ecole: String(diploma.ecole),
+        annee: String(diploma.annee),
+        intitule: String(diploma.intitule),
+        duree: String(diploma.duree)
+      }));
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Transforme la progression des titres de la base de données vers le format camelCase
+   */
+  private transformTitleProgression(titleProgression: any): Array<{ title: string; percent: number; category: string; started_at: string; updated_at: string }> | undefined {
+    if (!titleProgression) return undefined;
+    
+    // Si c'est déjà un array (nouveau format)
+    if (Array.isArray(titleProgression)) {
+      return titleProgression.map(item => ({
+        title: String(item.title),
+        percent: Number(item.percent || 0),
+        category: String(item.category || 'hower'),
+        started_at: String(item.started_at || new Date().toISOString()),
+        updated_at: String(item.updated_at || new Date().toISOString())
+      }));
+    }
+    
+    // Si c'est un objet simple (ancien format), le convertir en array
+    if (typeof titleProgression === 'object' && titleProgression.title) {
+      return [{
+        title: String(titleProgression.title),
+        percent: Number(titleProgression.percent || 0),
+        category: String(titleProgression.category || 'hower'),
+        started_at: String(titleProgression.started_at || new Date().toISOString()),
+        updated_at: String(titleProgression.updated_at || new Date().toISOString())
+      }];
+    }
+    
+    // Fallback
+    return [];
+  }
+
+  /**
+   * Transforme les statistiques de snake_case vers camelCase
+   */
+  private transformStatisticsToCamelCase(dbStats: any): { rendezvousPraticien: number; rendezvousPraticienDone: number; userRendezVousPraticien: number; praticienRevenu: number; userRendezVousGuest: number } | undefined {
+    if (!dbStats) return undefined;
+    
+    return {
+      rendezvousPraticien: Number(dbStats.rendezvous_praticien || 0),
+      rendezvousPraticienDone: Number(dbStats.rendezvous_praticien_done || 0),
+      userRendezVousPraticien: Number(dbStats.user_rendezvous_praticien || 0),
+      praticienRevenu: Number(dbStats.praticien_revenu || 0),
+      userRendezVousGuest: Number(dbStats.user_rendezvous_guest || 0)
+    };
+  }
+
   /**
    * Calcule les métadonnées de l'export anonymisé
    */
@@ -1442,7 +1723,6 @@ export class RgpdService {
     activities: AnonymizedUserDataExport['activities'],
     activityRequestedModifications: AnonymizedUserDataExport['activityRequestedModifications'],
     practices: AnonymizedUserDataExport['practices'],
-    userData: AnonymizedUserDataExport['userData'],
     aiResponses: AnonymizedUserDataExport['aiResponses'],
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
     rendezVous: AnonymizedUserDataExport['rendezVous'],
@@ -1450,12 +1730,13 @@ export class RgpdService {
     emails: AnonymizedUserDataExport['emails'],
     feedbacks: AnonymizedUserDataExport['feedbacks'],
     openMapData: AnonymizedUserDataExport['openMapData'],
-    treasureChest: AnonymizedUserDataExport['treasureChest']
+    treasureChest: AnonymizedUserDataExport['treasureChest'],
+    userProfile: AnonymizedUserDataExport['userProfile']
   ): AnonymizedUserDataExport['metadata'] {
     const dataSize = this.calculateAnonymizedDataSize(
       conversations, videos, images, sounds, bilans, 
-      activities, activityRequestedModifications, practices, userData, aiResponses, 
-      howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest
+      activities, activityRequestedModifications, practices, aiResponses, 
+      howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userProfile
     );
 
     return {
@@ -1467,7 +1748,6 @@ export class RgpdService {
       totalActivities: activities.length,
       totalActivityRequestedModifications: activityRequestedModifications.length,
       totalPractices: practices.length,
-      totalUserData: userData.length,
       totalAiResponses: aiResponses.length,
       totalHowanaConversations: howanaConversations.length,
       totalRendezVous: rendezVous.length,
@@ -1493,7 +1773,6 @@ export class RgpdService {
     activities: AnonymizedUserDataExport['activities'],
     activityRequestedModifications: AnonymizedUserDataExport['activityRequestedModifications'],
     practices: AnonymizedUserDataExport['practices'],
-    userData: AnonymizedUserDataExport['userData'],
     aiResponses: AnonymizedUserDataExport['aiResponses'],
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
     rendezVous: AnonymizedUserDataExport['rendezVous'],
@@ -1501,7 +1780,8 @@ export class RgpdService {
     emails: AnonymizedUserDataExport['emails'],
     feedbacks: AnonymizedUserDataExport['feedbacks'],
     openMapData: AnonymizedUserDataExport['openMapData'],
-    treasureChest: AnonymizedUserDataExport['treasureChest']
+    treasureChest: AnonymizedUserDataExport['treasureChest'],
+    userProfile: AnonymizedUserDataExport['userProfile']
   ): number {
     // Estimation approximative de la taille des données anonymisées
     const conversationSize = conversations.reduce((acc, conv) => {
@@ -1524,10 +1804,6 @@ export class RgpdService {
       return acc + (practice.title?.length || 0) + (practice.description?.length || 0);
     }, 0);
 
-    // Estimation pour les données utilisateur
-    const userDataSize = userData.reduce((acc, data) => {
-      return acc + (data.experience?.length || 0) + (data.typicalSituations?.length || 0);
-    }, 0);
 
     // Estimation pour les conversations Howana (contexte JSON)
     const howanaSize = howanaConversations.reduce((acc, conv) => {
@@ -1609,12 +1885,29 @@ export class RgpdService {
       treasureChest.totalEarned.toString().length + 
       treasureChest.blockedAmount.toString().length;
 
+    // Estimation pour les données utilisateur (profil complet)
+    const userProfileSize = (userProfile.firstName?.length || 0) + 
+                              (userProfile.lastName?.length || 0) + 
+                              (userProfile.email?.length || 0) + 
+                              (userProfile.phone?.length || 0) + 
+                              (userProfile.experience?.length || 0) + 
+                              (userProfile.typicalSituations?.length || 0) +
+                              (userProfile.howanaRecommandation?.length || 0) +
+                              (userProfile.specialties ? JSON.stringify(userProfile.specialties).length : 0) +
+                              (userProfile.diplomas ? JSON.stringify(userProfile.diplomas).length : 0) +
+                              (userProfile.titleProgression ? JSON.stringify(userProfile.titleProgression).length : 0) +
+                              (userProfile.address ? JSON.stringify(userProfile.address).length : 0) +
+                              (userProfile.preferences ? JSON.stringify(userProfile.preferences).length : 0) +
+                              (userProfile.favourites ? JSON.stringify(userProfile.favourites).length : 0) +
+                              (userProfile.statistics ? JSON.stringify(userProfile.statistics).length : 0) +
+                              (userProfile.pendingModificationData ? JSON.stringify(userProfile.pendingModificationData).length : 0);
+
     // Estimation pour les médias (très approximative)
     const mediaSize = (videos.length * 50) + (images.length * 2) + (sounds.length * 10);
 
     const totalBytes = conversationSize + bilanSize + aiResponseSize + activitySize + 
-                      activityModificationSize + practiceSize + userDataSize + howanaSize + 
-                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + treasureChestSize + mediaSize;
+                      activityModificationSize + practiceSize + howanaSize + 
+                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + treasureChestSize + userProfileSize + mediaSize;
     return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
 }

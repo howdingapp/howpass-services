@@ -235,15 +235,6 @@ export interface AnonymizedUserDataExport {
     createdAt: string;
     updatedAt: string;
   }>;
-  userData: Array<{
-    id: string;
-    profile?: string;
-    specialties?: any;
-    experience?: string;
-    typicalSituations?: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
   aiResponses: Array<{
     id: string;
     conversationId: string;
@@ -411,6 +402,92 @@ export interface AnonymizedUserDataExport {
       amountOffered: number;
     }>;
   };
+  userProfile: {
+    id: string;
+    userId: string;
+    dataFolder?: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    customerId?: string;
+    phone?: string;
+    birthDate?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      postalCode?: string;
+      country?: string;
+    };
+    subscriptionType?: string;
+    activeFormula?: string;
+    stripeConnectAccountId?: string;
+    status: string;
+    profil: string;
+    referralCode?: string;
+    onboardingReferral?: string;
+    onboardingDemandeDate?: string;
+    specialties?: {
+      choice: string[];
+      created: string[];
+    };
+    experience?: string;
+    diplomas?: Array<{
+      ecole: string;
+      annee: string;
+      intitule: string;
+      duree: string;
+    }>;
+    photoUrl?: string;
+    titleProgression?: Array<{
+      title: string;
+      percent: number;
+      category: string;
+      started_at: string;
+      updated_at: string;
+    }>;
+    fcmToken?: string;
+    mapData?: {
+      dominantFamilyId?: string;
+    };
+    howanaRecommandation?: string;
+    typicalSituations?: string;
+    preferences?: {
+      email: boolean;
+      push: boolean;
+    };
+    favourites?: Array<{
+      id: string;
+      type: string;
+      addedAt: string;
+    }>;
+    statistics?: {
+      rendezvousPraticien: number;
+      rendezvousPraticienDone: number;
+      userRendezVousPraticien: number;
+      praticienRevenu: number;
+      userRendezVousGuest: number;
+    };
+    createdAt: string;
+    updatedAt: string;
+    // Données de modification en attente
+    pendingModificationData?: {
+      id: string;
+      userId: string;
+      specialties?: any;
+      experience?: string;
+      diplomas?: any;
+      typicalSituations?: string;
+      status: string;
+      requestedAt: string;
+      reviewedAt?: string;
+      reviewedBy?: string;
+      reviewNotes?: string;
+      createdAt: string;
+      updatedAt: string;
+    };
+    // Rôle utilisateur
+    role?: string;
+  };
   metadata: {
     totalConversations: number;
     totalVideos: number;
@@ -420,7 +497,6 @@ export interface AnonymizedUserDataExport {
     totalActivities: number;
     totalActivityRequestedModifications: number;
     totalPractices: number;
-    totalUserData: number;
     totalAiResponses: number;
     totalHowanaConversations: number;
     totalDeliveries: number;
