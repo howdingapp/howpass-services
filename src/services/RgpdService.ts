@@ -105,7 +105,7 @@ export class RgpdService {
    */
   private async getPersonalInfo(userId: string): Promise<UserDataExport['personalInfo'] | null> {
     const { data, error } = await this.supabaseService.getSupabaseClient()
-      .from('users')
+      .from('user_data')
       .select('id, email, first_name, last_name, created_at, updated_at')
       .eq('user_id', userId)
       .single();
