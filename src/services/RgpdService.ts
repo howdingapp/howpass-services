@@ -9,61 +9,9 @@ export class RgpdService {
   }
 
   /**
-   * Récupère toutes les données d'un utilisateur pour l'export RGPD (version originale)
-   */
-  async exportUserData(userId: string): Promise<UserDataExport | null> {
-    try {
-      console.log(`📊 Début de l'export des données pour l'utilisateur: ${userId}`);
-
-      // Récupérer les informations personnelles
-      const personalInfo = await this.getPersonalInfo(userId);
-      if (!personalInfo) {
-        console.error(`❌ Utilisateur non trouvé: ${userId}`);
-        return null;
-      }
-
-      // Récupérer les conversations
-      const conversations = await this.getUserConversations(userId);
-
-      // Récupérer les vidéos
-      const videos = await this.getUserVideos(userId);
-
-      // Récupérer les images
-      const images = await this.getUserImages(userId);
-
-      // Récupérer les sons
-      const sounds = await this.getUserSounds(userId);
-
-      // Récupérer les bilans
-      const bilans = await this.getUserBilans(userId);
-
-      // Calculer les métadonnées
-      const metadata = this.calculateMetadata(conversations, videos, images, sounds, bilans);
-
-      const userDataExport: UserDataExport = {
-        userId,
-        personalInfo,
-        conversations,
-        videos,
-        images,
-        sounds,
-        bilans,
-        metadata
-      };
-
-      console.log(`✅ Export des données terminé pour l'utilisateur: ${userId}`);
-      return userDataExport;
-
-    } catch (error) {
-      console.error(`❌ Erreur lors de l'export des données pour l'utilisateur ${userId}:`, error);
-      throw error;
-    }
-  }
-
-  /**
    * Récupère toutes les données d'un utilisateur pour l'export RGPD (structure masquée)
    */
-  async exportAnonymizedUserData(userId: string): Promise<AnonymizedUserDataExport | null> {
+  async exportUserData(userId: string): Promise<AnonymizedUserDataExport | null> {
     try {
       console.log(`📊 Début de l'export des données pour l'utilisateur: ${userId}`);
 
