@@ -333,4 +333,76 @@ export class GprdRequestController {
     }
   }
 
+  /**
+   * Endpoint de santé pour le service RGPD
+   */
+  async getHealth(req: Request, res: Response): Promise<void> {
+    try {
+      // Vérifier la connexion à la base de données
+      const { data, error } = await this.supabaseService.getSupabaseClient()
+        .from('gprd_requests')
+        .select('count')
+        .limit(1);
+
+      if (error) {
+        console.error('❌ Erreur de connexion à la base de données:', error);
+        res.status(503).json({
+          success: false,
+          status: 'unhealthy',
+          service: 'rgpd-service',
+          timestamp: new Date().toISOString(),
+          database: 'disconnected',
+          error: error.message
+        });
+        return;
+      }
+
+      // Vérifier la connexion aux services Cloud Run
+      const cloudRunStatus = await this.checkCloudRunHealth();
+
+      res.status(200).json({
+        success: true,
+        status: 'healthy',
+        service: 'rgpd-service',
+        timestamp: new Date().toISOString(),
+        database: 'connected',
+        cloudRun: cloudRunStatus,
+        version: process.env['SERVICE_VERSION'] || '1.0.0',
+        environment: process.env['NODE_ENV'] || 'development'
+      });
+
+    } catch (error) {
+      console.error('❌ Erreur lors de la vérification de santé:', error);
+      res.status(503).json({
+        success: false,
+        status: 'unhealthy',
+        service: 'rgpd-service',
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Erreur interne'
+      });
+    }
+  }
+
+  /**
+   * Vérifie la santé des services Cloud Run
+   */
+  private async checkCloudRunHealth(): Promise<string> {
+    try {
+      // Vérifier si le service Cloud Run est configuré
+      const projectId = process.env['GCP_PROJECT_ID'];
+      const jobName = process.env['GCP_JOB_NAME'];
+      
+      if (!projectId || !jobName) {
+        return 'not_configured';
+      }
+
+      // Ici on pourrait faire un appel de test au service Cloud Run
+      // Pour l'instant, on considère qu'il est disponible si configuré
+      return 'available';
+    } catch (error) {
+      console.error('❌ Erreur lors de la vérification Cloud Run:', error);
+      return 'error';
+    }
+  }
+
 }

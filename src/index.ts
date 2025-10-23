@@ -7,6 +7,7 @@ import { VideoController } from './controllers/VideoController';
 import { IAController } from './controllers/IAController';
 import conversationRoutes from './routes/conversationRoutes';
 import rgpdRoutes from './routes/rgpdRoutes';
+import videoRoutes from './routes/videoRoutes';
 import dotenv from 'dotenv';
 import { validateIAToken } from './middleware/iaAuthMiddleware';
 
@@ -49,28 +50,15 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Routes
-const videoController = new VideoController();
-
-// Routes vidéo
-app.post('/webhook/database', (req, res) => {
-  videoController.handleDatabaseWebhook(req, res);
-});
-
-app.get('/job/:executionName', (req, res) => {
-  videoController.getJobStatus(req, res);
-});
-
-app.get('/health', (req, res) => {
-  videoController.getHealth(req, res);
-});
-
-
 // Routes des conversations
 app.use('/api/conversations', conversationRoutes);
 
 // Routes RGPD
 app.use('/api/rgpd', rgpdRoutes);
+
+// Routes vidéo
+app.use('/api/videos', videoRoutes);
+
 
 // Routes des jobs IA supprimées - remplacées par Google Cloud Tasks
 
