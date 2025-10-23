@@ -198,13 +198,6 @@ export interface AnonymizedUserDataExport {
     createdAt: string;
     metadata?: any;
   }>;
-  howanaConversations: Array<{
-    id: string;
-    context?: any;
-    status: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
   deliveries: Array<{
     id: string;
     deliveryType?: string;

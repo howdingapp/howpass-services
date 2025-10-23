@@ -28,7 +28,6 @@ export class RgpdService {
       const activityRequestedModifications = await this.getExportActivityRequestedModifications(userId);
       const userProfile = await this.getExportUserData(userId);
       const aiResponses = await this.getExportAiResponses(userId);
-      const howanaConversations = await this.getExportHowanaConversations(userId);
       const rendezVous = await this.getExportRendezVous(userId);
       const deliveries = await this.getExportDeliveries(userId);
       const emails = await this.getExportEmails(userId);
@@ -41,7 +40,7 @@ export class RgpdService {
       const metadata = this.calculateAnonymizedMetadata(
         bilans, 
         activities, activityRequestedModifications, aiResponses, 
-        howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile
+        rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
@@ -51,7 +50,6 @@ export class RgpdService {
         activities,
         activityRequestedModifications,
         aiResponses,
-        howanaConversations,
         rendezVous,
         deliveries,
         emails,
@@ -689,16 +687,6 @@ export class RgpdService {
       return [];
     }
   }
-
-  /**
-   * Récupère les conversations Howana de l'utilisateur (données complètes, structure masquée)
-   */
-  private async getExportHowanaConversations(userId: string): Promise<AnonymizedUserDataExport['howanaConversations']> {
-    // TODO: Implémenter la récupération des conversations Howana
-    console.log(`🔍 Récupération des conversations Howana pour l'utilisateur: ${userId}`);
-    return [];
-  }
-
 
   /**
    * Récupère les livraisons de l'utilisateur (données complètes, structure masquée)
@@ -1556,7 +1544,6 @@ export class RgpdService {
     activities: AnonymizedUserDataExport['activities'],
     activityRequestedModifications: AnonymizedUserDataExport['activityRequestedModifications'],
     aiResponses: AnonymizedUserDataExport['aiResponses'],
-    howanaConversations: AnonymizedUserDataExport['howanaConversations'],
     rendezVous: AnonymizedUserDataExport['rendezVous'],
     deliveries: AnonymizedUserDataExport['deliveries'],
     emails: AnonymizedUserDataExport['emails'],
@@ -1569,7 +1556,7 @@ export class RgpdService {
     const dataSize = this.calculateAnonymizedDataSize(
       bilans, 
       activities, activityRequestedModifications, aiResponses, 
-      howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile
+      rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile
     );
 
     return {
@@ -1577,7 +1564,6 @@ export class RgpdService {
       totalActivities: activities.length,
       totalActivityRequestedModifications: activityRequestedModifications.length,
       totalAiResponses: aiResponses.length,
-      totalHowanaConversations: howanaConversations.length,
       totalRendezVous: rendezVous.length,
       totalDeliveries: deliveries.length,
       totalEmails: emails.length,
@@ -1598,7 +1584,6 @@ export class RgpdService {
     activities: AnonymizedUserDataExport['activities'],
     activityRequestedModifications: AnonymizedUserDataExport['activityRequestedModifications'],
     aiResponses: AnonymizedUserDataExport['aiResponses'],
-    howanaConversations: AnonymizedUserDataExport['howanaConversations'],
     rendezVous: AnonymizedUserDataExport['rendezVous'],
     deliveries: AnonymizedUserDataExport['deliveries'],
     emails: AnonymizedUserDataExport['emails'],
@@ -1620,11 +1605,6 @@ export class RgpdService {
 
     const activityModificationSize = activityRequestedModifications.reduce((acc, modification) => {
       return acc + (modification.title?.length || 0) + (modification.shortDescription?.length || 0) + (modification.longDescription?.length || 0);
-    }, 0);
-
-    // Estimation pour les conversations Howana (contexte JSON)
-    const howanaSize = howanaConversations.reduce((acc, conv) => {
-      return acc + (conv.context ? JSON.stringify(conv.context).length : 0);
     }, 0);
 
     // Estimation pour les rendez-vous (métadonnées et participants)
@@ -1731,7 +1711,7 @@ export class RgpdService {
                               (userProfile.pendingModificationData ? JSON.stringify(userProfile.pendingModificationData).length : 0);
 
     const totalBytes = bilanSize + aiResponseSize + activitySize + 
-                      activityModificationSize + howanaSize + 
+                      activityModificationSize + 
                       rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + treasureChestSize + userEventsSize + userProfileSize;
     return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
