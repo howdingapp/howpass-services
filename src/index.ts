@@ -3,7 +3,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import { spawn } from 'child_process';
-import { VideoController } from './controllers/VideoController';
 import { IAController } from './controllers/IAController';
 import conversationRoutes from './routes/conversationRoutes';
 import rgpdRoutes from './routes/rgpdRoutes';

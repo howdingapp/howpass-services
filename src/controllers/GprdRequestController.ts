@@ -336,10 +336,10 @@ export class GprdRequestController {
   /**
    * Endpoint de santé pour le service RGPD
    */
-  async getHealth(req: Request, res: Response): Promise<void> {
+  async getHealth(_req: Request, res: Response): Promise<void> {
     try {
       // Vérifier la connexion à la base de données
-      const { data, error } = await this.supabaseService.getSupabaseClient()
+      const { error } = await this.supabaseService.getSupabaseClient()
         .from('gprd_requests')
         .select('count')
         .limit(1);
