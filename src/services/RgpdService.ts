@@ -89,12 +89,13 @@ export class RgpdService {
       const userRendezVous = await this.getExportUserRendezVous(userId);
       const deliveries = await this.getExportDeliveries(userId);
       const emails = await this.getExportEmails(userId);
+      const feedbacks = await this.getExportFeedbacks(userId);
 
       // Calculer les métadonnées
       const metadata = this.calculateAnonymizedMetadata(
         conversations, videos, images, sounds, bilans, 
         activities, activityRequestedModifications, practices, userData, aiResponses, 
-        howanaConversations, userRendezVous, deliveries, emails
+        howanaConversations, userRendezVous, deliveries, emails, feedbacks
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
@@ -114,6 +115,7 @@ export class RgpdService {
         userRendezVous,
         deliveries,
         emails,
+        feedbacks,
         metadata
       };
 
@@ -900,6 +902,100 @@ export class RgpdService {
   }
 
   /**
+   * Récupère les feedbacks de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportFeedbacks(userId: string): Promise<AnonymizedUserDataExport['feedbacks']> {
+    try {
+      console.log(`🔍 Récupération des feedbacks pour l'utilisateur: ${userId}`);
+
+      // D'abord, récupérer l'email de l'utilisateur
+      const { data: userData, error: userError } = await this.supabaseService.getSupabaseClient()
+        .from('user_data')
+        .select('email')
+        .eq('user_id', userId)
+        .single();
+
+      if (userError) {
+        console.error('Erreur lors de la récupération de l\'email utilisateur:', userError);
+        return [];
+      }
+
+      const userEmail = userData?.email;
+
+      // Construire la requête OR avec l'email si disponible
+      let orCondition = `practitioner_user_id.eq.${userId},activity_guest_id.eq.${userId}`;
+      if (userEmail) {
+        orCondition += `,patient_email.eq.${userEmail}`;
+      }
+
+      const { data, error } = await this.supabaseService.getSupabaseClient()
+        .from('feedback')
+        .select(`
+          id,
+          practitioner_user_id,
+          patient_name,
+          patient_email,
+          patient_email_validated,
+          rating,
+          experience_quality,
+          communication_quality,
+          overall_satisfaction,
+          additional_comments,
+          is_anonymous,
+          created_at,
+          updated_at,
+          experience,
+          feedback_type,
+          feedback_videos,
+          feedback_images,
+          activity_guest_id,
+          activity_id
+        `)
+        .or(orCondition)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erreur lors de la récupération des feedbacks:', error);
+        return [];
+      }
+
+      if (!data) {
+        return [];
+      }
+
+      // Mapper les données vers un format qui ne révèle pas la structure de la table
+      const feedbacks = data.map(feedback => ({
+        id: feedback.id,
+        practitionerUserId: feedback.practitioner_user_id,
+        patientName: feedback.patient_name,
+        patientEmail: feedback.patient_email,
+        patientEmailValidated: feedback.patient_email_validated,
+        rating: feedback.rating,
+        experienceQuality: feedback.experience_quality,
+        communicationQuality: feedback.communication_quality,
+        overallSatisfaction: feedback.overall_satisfaction,
+        additionalComments: feedback.additional_comments,
+        isAnonymous: feedback.is_anonymous,
+        createdAt: feedback.created_at,
+        updatedAt: feedback.updated_at,
+        experience: feedback.experience,
+        feedbackType: feedback.feedback_type,
+        feedbackVideos: feedback.feedback_videos,
+        feedbackImages: feedback.feedback_images,
+        activityGuestId: feedback.activity_guest_id,
+        activityId: feedback.activity_id
+      }));
+
+      console.log(`✅ ${feedbacks.length} feedbacks récupérés pour l'utilisateur: ${userId}`);
+      return feedbacks;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des feedbacks pour l'utilisateur ${userId}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Calcule les métadonnées de l'export anonymisé
    */
   private calculateAnonymizedMetadata(
@@ -916,12 +1012,13 @@ export class RgpdService {
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
     userRendezVous: AnonymizedUserDataExport['userRendezVous'],
     deliveries: AnonymizedUserDataExport['deliveries'],
-    emails: AnonymizedUserDataExport['emails']
+    emails: AnonymizedUserDataExport['emails'],
+    feedbacks: AnonymizedUserDataExport['feedbacks']
   ): AnonymizedUserDataExport['metadata'] {
     const dataSize = this.calculateAnonymizedDataSize(
       conversations, videos, images, sounds, bilans, 
       activities, activityRequestedModifications, practices, userData, aiResponses, 
-      howanaConversations, userRendezVous, deliveries, emails
+      howanaConversations, userRendezVous, deliveries, emails, feedbacks
     );
 
     return {
@@ -939,6 +1036,7 @@ export class RgpdService {
       totalUserRendezVous: userRendezVous.length,
       totalDeliveries: deliveries.length,
       totalEmails: emails.length,
+      totalFeedbacks: feedbacks.length,
       exportDate: new Date().toISOString(),
       dataSize: `${dataSize} MB`
     };
@@ -961,7 +1059,8 @@ export class RgpdService {
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
     userRendezVous: AnonymizedUserDataExport['userRendezVous'],
     deliveries: AnonymizedUserDataExport['deliveries'],
-    emails: AnonymizedUserDataExport['emails']
+    emails: AnonymizedUserDataExport['emails'],
+    feedbacks: AnonymizedUserDataExport['feedbacks']
   ): number {
     // Estimation approximative de la taille des données anonymisées
     const conversationSize = conversations.reduce((acc, conv) => {
@@ -1011,12 +1110,22 @@ export class RgpdService {
              (email.tags ? JSON.stringify(email.tags).length : 0);
     }, 0);
 
+    // Estimation pour les feedbacks (commentaires, expérience, médias)
+    const feedbackSize = feedbacks.reduce((acc, feedback) => {
+      return acc + (feedback.patientName?.length || 0) + (feedback.patientEmail?.length || 0) + 
+             (feedback.experienceQuality?.length || 0) + (feedback.communicationQuality?.length || 0) + 
+             (feedback.overallSatisfaction?.length || 0) + (feedback.additionalComments?.length || 0) +
+             (feedback.experience ? JSON.stringify(feedback.experience).length : 0) + 
+             (feedback.feedbackVideos ? JSON.stringify(feedback.feedbackVideos).length : 0) + 
+             (feedback.feedbackImages ? JSON.stringify(feedback.feedbackImages).length : 0);
+    }, 0);
+
     // Estimation pour les médias (très approximative)
     const mediaSize = (videos.length * 50) + (images.length * 2) + (sounds.length * 10);
 
     const totalBytes = conversationSize + bilanSize + aiResponseSize + activitySize + 
                       activityModificationSize + practiceSize + userDataSize + howanaSize + 
-                      rendezVousSize + deliverySize + emailSize + mediaSize;
+                      rendezVousSize + deliverySize + emailSize + feedbackSize + mediaSize;
     return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
 }

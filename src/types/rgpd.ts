@@ -311,6 +311,27 @@ export interface AnonymizedUserDataExport {
     createdAt: string;
     updatedAt: string;
   }>;
+  feedbacks: Array<{
+    id: string;
+    practitionerUserId: string;
+    patientName?: string;
+    patientEmail?: string;
+    patientEmailValidated: boolean;
+    rating: number;
+    experienceQuality: string;
+    communicationQuality: string;
+    overallSatisfaction: string;
+    additionalComments?: string;
+    isAnonymous: boolean;
+    createdAt: string;
+    updatedAt: string;
+    experience: any;
+    feedbackType: string;
+    feedbackVideos?: any;
+    feedbackImages?: any;
+    activityGuestId?: string;
+    activityId?: string;
+  }>;
   metadata: {
     totalConversations: number;
     totalVideos: number;
@@ -326,6 +347,7 @@ export interface AnonymizedUserDataExport {
     totalUserRendezVous: number;
     totalDeliveries: number;
     totalEmails: number;
+    totalFeedbacks: number;
     exportDate: string;
     dataSize: string;
   };
