@@ -60,24 +60,31 @@ export class EmailService {
     const template = this.loadEmailTemplate('howpass-rgpd-export.html');
     
     // Remplacer les placeholders
-    let html = template.replace('{{YEAR}}', new Date().getFullYear().toString());
-    html = html.replace('{{SUPPORT_EMAIL}}', process.env['SUPPORT_EMAIL'] || 'howding2022@gmail.com');
-    html = html.replace('{{SUPPORT_LINK}}', process.env['SUPPORT_LINK'] || 'https://howpass.com/support');
+    let html = template.replace(/{{YEAR}}/g, new Date().getFullYear().toString());
+    
+    const supportEmail = process.env['SUPPORT_EMAIL'] || 'howding2022@gmail.com';
+    const supportLink = process.env['SUPPORT_LINK'] || 'https://howpass.com/support';
+    
+    console.log(`📧 Support Email: ${supportEmail}`);
+    console.log(`🔗 Support Link: ${supportLink}`);
+    
+    html = html.replace(/{{SUPPORT_EMAIL}}/g, supportEmail);
+    html = html.replace(/{{SUPPORT_LINK}}/g, supportLink);
     
     if (downloadUrl) {
-      html = html.replace('{{DOWNLOAD_INSTRUCTIONS}}', 'Cliquez sur le bouton ci-dessous pour télécharger votre export :');
-      html = html.replace('{{DOWNLOAD_BUTTON}}', `
+      html = html.replace(/{{DOWNLOAD_INSTRUCTIONS}}/g, 'Cliquez sur le bouton ci-dessous pour télécharger votre export :');
+      html = html.replace(/{{DOWNLOAD_BUTTON}}/g, `
         <p style="margin:0 0 12px 0;">
           <a href="${downloadUrl}" target="_blank" style="background-color:#009da7; color:#ffffff; display:inline-block; padding:10px 18px; border-radius:6px; text-decoration:none; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial; font-size:15px; font-weight:700;">📥 Télécharger mes données</a>
         </p>
       `);
-      html = html.replace('{{DOWNLOAD_LINK}}', `
+      html = html.replace(/{{DOWNLOAD_LINK}}/g, `
         <p class="muted" style="margin:0; font-size:12px; line-height:18px; color:#6b7280;">Si le bouton ne fonctionne pas, copiez-collez ce lien dans votre navigateur :<br><span style="word-break:break-all; color:#00848d;">${downloadUrl}</span></p>
       `);
     } else {
-      html = html.replace('{{DOWNLOAD_INSTRUCTIONS}}', 'Vos données sont jointes à cet email.');
-      html = html.replace('{{DOWNLOAD_BUTTON}}', '');
-      html = html.replace('{{DOWNLOAD_LINK}}', '');
+      html = html.replace(/{{DOWNLOAD_INSTRUCTIONS}}/g, 'Vos données sont jointes à cet email.');
+      html = html.replace(/{{DOWNLOAD_BUTTON}}/g, '');
+      html = html.replace(/{{DOWNLOAD_LINK}}/g, '');
     }
     
     return html;
@@ -88,9 +95,22 @@ export class EmailService {
     const template = this.loadEmailTemplate('howpass-rgpd-deletion.html');
     
     // Remplacer les placeholders
-    let html = template.replace('{{YEAR}}', new Date().getFullYear().toString());
-    html = html.replace('{{SUPPORT_EMAIL}}', process.env['SUPPORT_EMAIL'] || 'howding2022@gmail.com');
-    html = html.replace('{{SUPPORT_LINK}}', process.env['SUPPORT_LINK'] || 'https://howpass.com/support');
+    let html = template.replace(/{{YEAR}}/g, new Date().getFullYear().toString());
+    
+    const supportEmail = process.env['SUPPORT_EMAIL'] || 'howding2022@gmail.com';
+    const supportLink = process.env['SUPPORT_LINK'] || 'https://howpass.com/support';
+    
+    console.log(`📧 Support Email: ${supportEmail}`);
+    console.log(`🔗 Support Link: ${supportLink}`);
+    
+    html = html.replace(/{{SUPPORT_EMAIL}}/g, supportEmail);
+    html = html.replace(/{{SUPPORT_LINK}}/g, supportLink);
+    
+    // Vérifier que le remplacement s'est bien effectué
+    if (html.includes('{{SUPPORT_EMAIL}}') || html.includes('{{SUPPORT_LINK}}')) {
+      console.error('❌ Variables non remplacées dans le template suppression');
+      console.log('Template après remplacement:', html.substring(0, 500) + '...');
+    }
     
     return html;
   }

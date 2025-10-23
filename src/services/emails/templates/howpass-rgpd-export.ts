@@ -198,7 +198,6 @@ export const howpassRgpdExportTemplate = `<!DOCTYPE html>
                     <ul>
                         <li>📧 Email : <a href="mailto:{{SUPPORT_EMAIL}}" style="color: #009da7;">{{SUPPORT_EMAIL}}</a></li>
                         <li>📞 Support : <a href="{{SUPPORT_LINK}}" style="color: #009da7;">Centre d'aide</a></li>
-                        <li>✉️ Écrire au support : <a href="mailto:{{SUPPORT_EMAIL}}" style="color: #009da7;">Écrire au support</a></li>
                     </ul>
                 </div>
             </div>
