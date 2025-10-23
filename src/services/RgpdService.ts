@@ -88,12 +88,13 @@ export class RgpdService {
       const howanaConversations = await this.getExportHowanaConversations(userId);
       const userRendezVous = await this.getExportUserRendezVous(userId);
       const deliveries = await this.getExportDeliveries(userId);
+      const emails = await this.getExportEmails(userId);
 
       // Calculer les métadonnées
       const metadata = this.calculateAnonymizedMetadata(
         conversations, videos, images, sounds, bilans, 
         activities, activityRequestedModifications, practices, userData, aiResponses, 
-        howanaConversations, userRendezVous, deliveries
+        howanaConversations, userRendezVous, deliveries, emails
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
@@ -112,6 +113,7 @@ export class RgpdService {
         howanaConversations,
         userRendezVous,
         deliveries,
+        emails,
         metadata
       };
 
@@ -824,6 +826,80 @@ export class RgpdService {
   }
 
   /**
+   * Récupère les emails de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportEmails(userId: string): Promise<AnonymizedUserDataExport['emails']> {
+    try {
+      console.log(`🔍 Récupération des emails pour l'utilisateur: ${userId}`);
+
+      const { data, error } = await this.supabaseService.getSupabaseClient()
+        .from('email_to_send')
+        .select(`
+          id,
+          from_email,
+          to_emails,
+          cc_emails,
+          bcc_emails,
+          subject,
+          template,
+          text,
+          reply_to,
+          mapping,
+          tags,
+          headers,
+          status,
+          fail_reason,
+          resend_id,
+          attempts,
+          scheduled_at,
+          sent_at,
+          created_at,
+          updated_at
+        `)
+        .contains('to_emails', [userId])
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erreur lors de la récupération des emails:', error);
+        return [];
+      }
+
+      if (!data) {
+        return [];
+      }
+
+      // Mapper les données vers un format qui ne révèle pas la structure de la table
+      const emails = data.map(email => ({
+        fromEmail: email.from_email,
+        toEmails: email.to_emails,
+        ccEmails: email.cc_emails,
+        bccEmails: email.bcc_emails,
+        subject: email.subject,
+        template: email.template,
+        text: email.text,
+        replyTo: email.reply_to,
+        mapping: email.mapping,
+        tags: email.tags,
+        headers: email.headers,
+        status: email.status,
+        failReason: email.fail_reason,
+        attempts: email.attempts,
+        scheduledAt: email.scheduled_at,
+        sentAt: email.sent_at,
+        createdAt: email.created_at,
+        updatedAt: email.updated_at
+      }));
+
+      console.log(`✅ ${emails.length} emails récupérés pour l'utilisateur: ${userId}`);
+      return emails;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des emails pour l'utilisateur ${userId}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Calcule les métadonnées de l'export anonymisé
    */
   private calculateAnonymizedMetadata(
@@ -839,12 +915,13 @@ export class RgpdService {
     aiResponses: AnonymizedUserDataExport['aiResponses'],
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
     userRendezVous: AnonymizedUserDataExport['userRendezVous'],
-    deliveries: AnonymizedUserDataExport['deliveries']
+    deliveries: AnonymizedUserDataExport['deliveries'],
+    emails: AnonymizedUserDataExport['emails']
   ): AnonymizedUserDataExport['metadata'] {
     const dataSize = this.calculateAnonymizedDataSize(
       conversations, videos, images, sounds, bilans, 
       activities, activityRequestedModifications, practices, userData, aiResponses, 
-      howanaConversations, userRendezVous, deliveries
+      howanaConversations, userRendezVous, deliveries, emails
     );
 
     return {
@@ -861,6 +938,7 @@ export class RgpdService {
       totalHowanaConversations: howanaConversations.length,
       totalUserRendezVous: userRendezVous.length,
       totalDeliveries: deliveries.length,
+      totalEmails: emails.length,
       exportDate: new Date().toISOString(),
       dataSize: `${dataSize} MB`
     };
@@ -882,7 +960,8 @@ export class RgpdService {
     aiResponses: AnonymizedUserDataExport['aiResponses'],
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
     userRendezVous: AnonymizedUserDataExport['userRendezVous'],
-    deliveries: AnonymizedUserDataExport['deliveries']
+    deliveries: AnonymizedUserDataExport['deliveries'],
+    emails: AnonymizedUserDataExport['emails']
   ): number {
     // Estimation approximative de la taille des données anonymisées
     const conversationSize = conversations.reduce((acc, conv) => {
@@ -925,12 +1004,19 @@ export class RgpdService {
              (delivery.selectedFormula ? JSON.stringify(delivery.selectedFormula).length : 0);
     }, 0);
 
+    // Estimation pour les emails (sujet, contenu, mapping)
+    const emailSize = emails.reduce((acc, email) => {
+      return acc + (email.subject?.length || 0) + (email.text?.length || 0) + 
+             (email.mapping ? JSON.stringify(email.mapping).length : 0) +
+             (email.tags ? JSON.stringify(email.tags).length : 0);
+    }, 0);
+
     // Estimation pour les médias (très approximative)
     const mediaSize = (videos.length * 50) + (images.length * 2) + (sounds.length * 10);
 
     const totalBytes = conversationSize + bilanSize + aiResponseSize + activitySize + 
                       activityModificationSize + practiceSize + userDataSize + howanaSize + 
-                      rendezVousSize + deliverySize + mediaSize;
+                      rendezVousSize + deliverySize + emailSize + mediaSize;
     return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
 }

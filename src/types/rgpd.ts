@@ -291,6 +291,26 @@ export interface AnonymizedUserDataExport {
     transportCosts?: number;
     promotionId?: string;
   }>;
+  emails: Array<{
+    fromEmail: string;
+    toEmails: string[];
+    ccEmails?: string[];
+    bccEmails?: string[];
+    subject: string;
+    template?: string;
+    text?: string;
+    replyTo?: string[];
+    mapping?: any;
+    tags?: any;
+    headers?: any;
+    status: string;
+    failReason?: string;
+    attempts: number;
+    scheduledAt?: string;
+    sentAt?: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
   metadata: {
     totalConversations: number;
     totalVideos: number;
@@ -305,6 +325,7 @@ export interface AnonymizedUserDataExport {
     totalHowanaConversations: number;
     totalUserRendezVous: number;
     totalDeliveries: number;
+    totalEmails: number;
     exportDate: string;
     dataSize: string;
   };
