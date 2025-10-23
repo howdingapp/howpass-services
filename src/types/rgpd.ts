@@ -456,7 +456,6 @@ export interface AnonymizedUserDataExport {
     totalActivities: number;
     totalActivityRequestedModifications: number;
     totalAiResponses: number;
-    totalHowanaConversations: number;
     totalDeliveries: number;
     totalEmails: number;
     totalFeedbacks: number;
