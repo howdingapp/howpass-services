@@ -8,7 +8,7 @@ const videoController = new VideoController();
 router.get('/health', (req, res) => videoController.getHealth(req, res));
 
 // Route de webhook pour les changements de base de données Supabase
-router.post('/webhook/database', (req, res) => videoController.handleDatabaseWebhook(req, res));
+router.post('/webhook/videos', (req, res) => videoController.handleDatabaseWebhook(req, res));
 
 // Route de statut d'un job
 router.get('/job/:jobId', (req, res) => videoController.getJobStatus(req, res));
