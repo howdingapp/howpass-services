@@ -421,9 +421,8 @@ async function updateRequestStatus(supabaseService: SupabaseService, requestId: 
       if (result.downloadUrl) {
         updateData.download_url = result.downloadUrl;
       }
-    } else {
-      updateData.error_message = result.error;
     }
+    // Note: Les erreurs sont loggées dans les logs, pas stockées en base
 
     const { error } = await supabaseService.getSupabaseClient()
       .from('gprd_requests')
