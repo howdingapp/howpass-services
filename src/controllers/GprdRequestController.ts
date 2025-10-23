@@ -31,7 +31,7 @@ export class GprdRequestController {
         type,
         table,
         recordId: record?.id,
-        requestType: record?.request_type,
+        requestType: record?.type,
         status: record?.status
       });
 
@@ -66,17 +66,17 @@ export class GprdRequestController {
       }
 
       // Valider les champs requis
-      if (!record?.id || !record?.user_id || !record?.request_type || !record?.email) {
+      if (!record?.id || !record?.user_id || !record?.type || !record?.email) {
         console.error('❌ Champs requis manquants dans la demande RGPD:', {
           id: record?.id,
           userId: record?.user_id,
-          requestType: record?.request_type,
+          type: record?.type,
           email: record?.email
         });
         res.status(400).json({
           success: false,
           error: 'Champs requis manquants',
-          message: 'id, user_id, request_type et email sont requis'
+          message: 'id, user_id, type et email sont requis'
         });
         return;
       }
@@ -84,7 +84,7 @@ export class GprdRequestController {
       console.log('🔄 Traitement de la demande RGPD:', {
         requestId: record.id,
         userId: record.user_id,
-        requestType: record.request_type,
+        requestType: record.type,
         email: record.email
       });
 
@@ -95,12 +95,12 @@ export class GprdRequestController {
       const jobPayload: RgpdJobPayload = {
         requestId: record.id,
         userId: record.user_id,
-        requestType: record.request_type,
+        requestType: record.type,
         email: record.email,
         metadata: {
           webhookSource: 'database',
           requestTimestamp: record.requested_at,
-          priority: this.getPriorityFromRequestType(record.request_type)
+          priority: this.getPriorityFromRequestType(record.type)
         }
       };
 
@@ -117,7 +117,7 @@ export class GprdRequestController {
           table,
           recordId: record.id,
           operation: type,
-          requestType: record.request_type
+          requestType: record.type
         }
       });
 
@@ -269,7 +269,7 @@ export class GprdRequestController {
       .from('gprd_requests')
       .insert({
         user_id: userId,
-        request_type: requestType,
+        type: requestType,
         email: email,
         status: 'pending',
         requested_at: new Date().toISOString()
