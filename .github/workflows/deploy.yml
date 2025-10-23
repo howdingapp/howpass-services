@@ -71,6 +71,10 @@ jobs:
           --set-env-vars=GCP_TASKS_QUEUE_NAME=ia-processing-queue
           --set-env-vars=IA_PROCESSING_SERVICE_URL=${{ secrets.IA_PROCESSING_SERVICE_URL }}
           --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+          --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }}
+          --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }}
+          --set-env-vars=SUPPORT_LINK=${{ vars.SUPPORT_LINK }}
 
     - name: Redirect traffic to new revision
       run: |
@@ -183,7 +187,9 @@ jobs:
             --set-env-vars=GCP_JOB_NAME=rgpd-processing-job \
             --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
             --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
-            --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }}
+            --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }} \
+            --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }} \
+            --set-env-vars=SUPPORT_LINK=${{ vars.SUPPORT_LINK }}
         else
           echo "🆕 Création d'un nouveau job RGPD..."
           gcloud run jobs create rgpd-processing-job \
@@ -208,7 +214,9 @@ jobs:
             --set-env-vars=GCP_JOB_NAME=rgpd-processing-job \
             --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
             --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
-            --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }}
+            --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }} \
+            --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }} \
+            --set-env-vars=SUPPORT_LINK=${{ vars.SUPPORT_LINK }}
         fi
         
         echo "✅ Cloud Run Job RGPD configuré avec succès"

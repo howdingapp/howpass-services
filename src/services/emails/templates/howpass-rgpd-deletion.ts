@@ -223,8 +223,8 @@ export const howpassRgpdDeletionTemplate = `<!DOCTYPE html>
                 <div class="section-content">
                     <p>Si vous avez des questions concernant cette suppression :</p>
                     <ul>
-                        <li>📧 Email : <a href="mailto:privacy@howpass.com" style="color: #009da7;">privacy@howpass.com</a></li>
-                        <li>📞 Support : <a href="https://howpass.com/support" style="color: #009da7;">Centre d'aide</a></li>
+                        <li>📧 Email : <a href="mailto:{{SUPPORT_EMAIL}}" style="color: #009da7;">{{SUPPORT_EMAIL}}</a></li>
+                        <li>📞 Support : <a href="{{SUPPORT_LINK}}" style="color: #009da7;">Centre d'aide</a></li>
                     </ul>
                 </div>
             </div>

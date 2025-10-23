@@ -1,6 +1,6 @@
 import { RgpdEmailData } from '../types/rgpd';
-import { howpassRgpdExportTemplate } from '../templates/howpass-rgpd-export';
-import { howpassRgpdDeletionTemplate } from '../templates/howpass-rgpd-deletion';
+import { howpassRgpdExportTemplate } from './emails/templates/howpass-rgpd-export';
+import { howpassRgpdDeletionTemplate } from './emails/templates/howpass-rgpd-deletion';
 
 export class EmailService {
   constructor() {
@@ -61,6 +61,8 @@ export class EmailService {
     
     // Remplacer les placeholders
     let html = template.replace('{{YEAR}}', new Date().getFullYear().toString());
+    html = html.replace('{{SUPPORT_EMAIL}}', process.env['SUPPORT_EMAIL'] || 'howding2022@gmail.com');
+    html = html.replace('{{SUPPORT_LINK}}', process.env['SUPPORT_LINK'] || 'https://howpass.com/support');
     
     if (downloadUrl) {
       html = html.replace('{{DOWNLOAD_INSTRUCTIONS}}', 'Cliquez sur le bouton ci-dessous pour télécharger votre export :');
@@ -86,7 +88,9 @@ export class EmailService {
     const template = this.loadEmailTemplate('howpass-rgpd-deletion.html');
     
     // Remplacer les placeholders
-    const html = template.replace('{{YEAR}}', new Date().getFullYear().toString());
+    let html = template.replace('{{YEAR}}', new Date().getFullYear().toString());
+    html = html.replace('{{SUPPORT_EMAIL}}', process.env['SUPPORT_EMAIL'] || 'howding2022@gmail.com');
+    html = html.replace('{{SUPPORT_LINK}}', process.env['SUPPORT_LINK'] || 'https://howpass.com/support');
     
     return html;
   }
