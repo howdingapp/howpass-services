@@ -32,7 +32,7 @@ export class EmailService {
 
       const data = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
-        console.error('❌ Erreur Resend:', data?.error || 'Unknown Resend error');
+        console.error('❌ Erreur Resend:', data);
         return false;
       }
 
