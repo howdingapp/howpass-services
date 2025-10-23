@@ -394,6 +394,23 @@ export interface AnonymizedUserDataExport {
       reductionType?: string;
     }>;
   }>;
+  treasureChest: {
+    id: string;
+    userId: string;
+    balance: number;
+    totalEarned: number;
+    createdAt: string;
+    blockedAmount: number;
+    referrals: Array<{
+      treasureChestId: string;
+      referencedUserId: string;
+      subscriptionType?: string;
+      amount?: number;
+      dateReferred: string;
+      createdAt: string;
+      amountOffered: number;
+    }>;
+  };
   metadata: {
     totalConversations: number;
     totalVideos: number;
@@ -411,6 +428,7 @@ export interface AnonymizedUserDataExport {
     totalFeedbacks: number;
     totalOpenMapData: number;
     totalRendezVous: number;
+    totalTreasureChestReferrals: number;
     exportDate: string;
     dataSize: string;
   };

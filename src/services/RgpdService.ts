@@ -91,12 +91,13 @@ export class RgpdService {
       const emails = await this.getExportEmails(userId);
       const feedbacks = await this.getExportFeedbacks(userId);
       const openMapData = await this.getExportOpenMapData(userId);
+      const treasureChest = await this.getExportTreasureChest(userId);
 
       // Calculer les métadonnées
       const metadata = this.calculateAnonymizedMetadata(
         conversations, videos, images, sounds, bilans, 
         activities, activityRequestedModifications, practices, userData, aiResponses, 
-        howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData
+        howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
@@ -118,6 +119,7 @@ export class RgpdService {
         emails,
         feedbacks,
         openMapData,
+        treasureChest,
         metadata
       };
 
@@ -1325,6 +1327,110 @@ export class RgpdService {
   }
 
   /**
+   * Récupère le coffre au trésor et les référents de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportTreasureChest(userId: string): Promise<AnonymizedUserDataExport['treasureChest']> {
+    try {
+      console.log(`🔍 Récupération du coffre au trésor pour l'utilisateur: ${userId}`);
+
+      // Récupérer le coffre au trésor de l'utilisateur
+      const { data: treasureChestData, error: treasureChestError } = await this.supabaseService.getSupabaseClient()
+        .from('treasure_chests')
+        .select(`
+          id,
+          user_id,
+          balance,
+          total_earned,
+          created_at,
+          blocked_amount
+        `)
+        .eq('user_id', userId)
+        .single();
+
+      if (treasureChestError) {
+        console.error('Erreur lors de la récupération du coffre au trésor:', treasureChestError);
+        // Retourner un coffre vide si pas trouvé
+        return {
+          id: '',
+          userId: userId,
+          balance: 0,
+          totalEarned: 0,
+          createdAt: new Date().toISOString(),
+          blockedAmount: 0,
+          referrals: []
+        };
+      }
+
+      if (!treasureChestData) {
+        return {
+          id: '',
+          userId: userId,
+          balance: 0,
+          totalEarned: 0,
+          createdAt: new Date().toISOString(),
+          blockedAmount: 0,
+          referrals: []
+        };
+      }
+
+      // Récupérer les référents du coffre au trésor
+      const { data: referralsData, error: referralsError } = await this.supabaseService.getSupabaseClient()
+        .from('treasure_chests_referrals')
+        .select(`
+          treasure_chest_id,
+          referenced_user_id,
+          subscription_type,
+          amount,
+          date_referred,
+          created_at,
+          amount_offered
+        `)
+        .eq('treasure_chest_id', treasureChestData.id)
+        .order('created_at', { ascending: false });
+
+      if (referralsError) {
+        console.error('Erreur lors de la récupération des référents:', referralsError);
+      }
+
+      const referrals = referralsData || [];
+
+      // Mapper les données vers un format qui ne révèle pas la structure de la table
+      const treasureChest: AnonymizedUserDataExport['treasureChest'] = {
+        id: String(treasureChestData.id),
+        userId: String(treasureChestData.user_id),
+        balance: Number(treasureChestData.balance || 0),
+        totalEarned: Number(treasureChestData.total_earned || 0),
+        createdAt: String(treasureChestData.created_at),
+        blockedAmount: Number(treasureChestData.blocked_amount || 0),
+        referrals: referrals.map(referral => ({
+          treasureChestId: String(referral.treasure_chest_id),
+          referencedUserId: String(referral.referenced_user_id),
+          dateReferred: String(referral.date_referred),
+          createdAt: String(referral.created_at),
+          amountOffered: Number(referral.amount_offered || 0),
+          ...(referral.subscription_type && { subscriptionType: String(referral.subscription_type) }),
+          ...(referral.amount && { amount: Number(referral.amount) })
+        }))
+      };
+
+      console.log(`✅ Coffre au trésor récupéré pour l'utilisateur: ${userId} (${referrals.length} référents)`);
+      return treasureChest;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération du coffre au trésor pour l'utilisateur ${userId}:`, error);
+      return {
+        id: '',
+        userId: userId,
+        balance: 0,
+        totalEarned: 0,
+        createdAt: new Date().toISOString(),
+        blockedAmount: 0,
+        referrals: []
+      };
+    }
+  }
+
+  /**
    * Calcule les métadonnées de l'export anonymisé
    */
   private calculateAnonymizedMetadata(
@@ -1343,12 +1449,13 @@ export class RgpdService {
     deliveries: AnonymizedUserDataExport['deliveries'],
     emails: AnonymizedUserDataExport['emails'],
     feedbacks: AnonymizedUserDataExport['feedbacks'],
-    openMapData: AnonymizedUserDataExport['openMapData']
+    openMapData: AnonymizedUserDataExport['openMapData'],
+    treasureChest: AnonymizedUserDataExport['treasureChest']
   ): AnonymizedUserDataExport['metadata'] {
     const dataSize = this.calculateAnonymizedDataSize(
       conversations, videos, images, sounds, bilans, 
       activities, activityRequestedModifications, practices, userData, aiResponses, 
-      howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData
+      howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest
     );
 
     return {
@@ -1368,6 +1475,7 @@ export class RgpdService {
       totalEmails: emails.length,
       totalFeedbacks: feedbacks.length,
       totalOpenMapData: openMapData.length,
+      totalTreasureChestReferrals: treasureChest.referrals.length,
       exportDate: new Date().toISOString(),
       dataSize: `${dataSize} MB`
     };
@@ -1392,7 +1500,8 @@ export class RgpdService {
     deliveries: AnonymizedUserDataExport['deliveries'],
     emails: AnonymizedUserDataExport['emails'],
     feedbacks: AnonymizedUserDataExport['feedbacks'],
-    openMapData: AnonymizedUserDataExport['openMapData']
+    openMapData: AnonymizedUserDataExport['openMapData'],
+    treasureChest: AnonymizedUserDataExport['treasureChest']
   ): number {
     // Estimation approximative de la taille des données anonymisées
     const conversationSize = conversations.reduce((acc, conv) => {
@@ -1491,12 +1600,21 @@ export class RgpdService {
              (openMap.titleProgression ? JSON.stringify(openMap.titleProgression).length : 0);
     }, 0);
 
+    // Estimation pour le coffre au trésor (données financières et référents)
+    const treasureChestSize = treasureChest.referrals.reduce((acc, referral) => {
+      return acc + (referral.subscriptionType?.length || 0) + 
+             (referral.amount?.toString().length || 0) + 
+             (referral.amountOffered.toString().length || 0);
+    }, 0) + treasureChest.balance.toString().length + 
+      treasureChest.totalEarned.toString().length + 
+      treasureChest.blockedAmount.toString().length;
+
     // Estimation pour les médias (très approximative)
     const mediaSize = (videos.length * 50) + (images.length * 2) + (sounds.length * 10);
 
     const totalBytes = conversationSize + bilanSize + aiResponseSize + activitySize + 
                       activityModificationSize + practiceSize + userDataSize + howanaSize + 
-                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + mediaSize;
+                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + treasureChestSize + mediaSize;
     return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
 }
