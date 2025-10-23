@@ -129,44 +129,6 @@ export interface AnonymizedUserDataExport {
     createdAt: string;
     updatedAt: string;
   };
-  conversations: Array<{
-    id: string;
-    title?: string;
-    createdAt: string;
-    updatedAt: string;
-    messages: Array<{
-      id: string;
-      content: string;
-      messageType: string;
-      createdAt: string;
-    }>;
-  }>;
-  videos: Array<{
-    id: string;
-    title?: string;
-    description?: string;
-    createdAt: string;
-    updatedAt: string;
-    filePath: string;
-    duration?: number;
-  }>;
-  images: Array<{
-    id: string;
-    title?: string;
-    description?: string;
-    createdAt: string;
-    updatedAt: string;
-    filePath: string;
-  }>;
-  sounds: Array<{
-    id: string;
-    title?: string;
-    description?: string;
-    createdAt: string;
-    updatedAt: string;
-    filePath: string;
-    duration?: number;
-  }>;
   bilans: Array<{
     id: string;
     title?: string;
@@ -225,13 +187,6 @@ export interface AnonymizedUserDataExport {
     reviewedAt?: string;
     reviewedBy?: string;
     reviewNotes?: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-  practices: Array<{
-    id: string;
-    title?: string;
-    description?: string;
     createdAt: string;
     updatedAt: string;
   }>;
@@ -504,14 +459,9 @@ export interface AnonymizedUserDataExport {
     role?: string;
   };
   metadata: {
-    totalConversations: number;
-    totalVideos: number;
-    totalImages: number;
-    totalSounds: number;
     totalBilans: number;
     totalActivities: number;
     totalActivityRequestedModifications: number;
-    totalPractices: number;
     totalAiResponses: number;
     totalHowanaConversations: number;
     totalDeliveries: number;

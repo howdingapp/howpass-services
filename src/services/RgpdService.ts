@@ -23,14 +23,9 @@ export class RgpdService {
       }
 
       // Récupérer toutes les données (structure masquée)
-      const conversations = await this.getExportConversations(userId);
-      const videos = await this.getExportVideos(userId);
-      const images = await this.getExportImages(userId);
-      const sounds = await this.getExportSounds(userId);
       const bilans = await this.getExportBilans(userId);
       const activities = await this.getExportActivities(userId);
       const activityRequestedModifications = await this.getExportActivityRequestedModifications(userId);
-      const practices = await this.getExportPractices(userId);
       const userProfile = await this.getExportUserData(userId);
       const aiResponses = await this.getExportAiResponses(userId);
       const howanaConversations = await this.getExportHowanaConversations(userId);
@@ -44,22 +39,17 @@ export class RgpdService {
 
       // Calculer les métadonnées
       const metadata = this.calculateAnonymizedMetadata(
-        conversations, videos, images, sounds, bilans, 
-        activities, activityRequestedModifications, practices, aiResponses, 
+        bilans, 
+        activities, activityRequestedModifications, aiResponses, 
         howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
         userId,
         personalInfo,
-        conversations,
-        videos,
-        images,
-        sounds,
         bilans,
         activities,
         activityRequestedModifications,
-        practices,
         aiResponses,
         howanaConversations,
         rendezVous,
@@ -117,7 +107,7 @@ export class RgpdService {
     const { data, error } = await this.supabaseService.getSupabaseClient()
       .from('users')
       .select('id, email, first_name, last_name, created_at, updated_at')
-      .eq('id', userId)
+      .eq('user_id', userId)
       .single();
 
     if (error || !data) {
@@ -236,42 +226,6 @@ export class RgpdService {
   }
 
   // ===== FONCTIONS POUR EXPORT RGPD (STRUCTURE MASQUÉE) =====
-
-  /**
-   * Récupère les conversations de l'utilisateur (données complètes, structure masquée)
-   */
-  private async getExportConversations(userId: string): Promise<AnonymizedUserDataExport['conversations']> {
-    // TODO: Implémenter la récupération des conversations
-    console.log(`🔍 Récupération des conversations pour l'utilisateur: ${userId}`);
-    return [];
-  }
-
-  /**
-   * Récupère les vidéos de l'utilisateur (données complètes, structure masquée)
-   */
-  private async getExportVideos(userId: string): Promise<AnonymizedUserDataExport['videos']> {
-    // TODO: Implémenter la récupération des vidéos
-    console.log(`🔍 Récupération des vidéos pour l'utilisateur: ${userId}`);
-    return [];
-  }
-
-  /**
-   * Récupère les images de l'utilisateur (données complètes, structure masquée)
-   */
-  private async getExportImages(userId: string): Promise<AnonymizedUserDataExport['images']> {
-    // TODO: Implémenter la récupération des images
-    console.log(`🔍 Récupération des images pour l'utilisateur: ${userId}`);
-    return [];
-  }
-
-  /**
-   * Récupère les sons de l'utilisateur (données complètes, structure masquée)
-   */
-  private async getExportSounds(userId: string): Promise<AnonymizedUserDataExport['sounds']> {
-    // TODO: Implémenter la récupération des sons
-    console.log(`🔍 Récupération des sons pour l'utilisateur: ${userId}`);
-    return [];
-  }
 
   /**
    * Récupère les bilans de l'utilisateur (données complètes, structure masquée)
@@ -420,18 +374,76 @@ export class RgpdService {
    * Récupère les demandes de modifications d'activités de l'utilisateur (données complètes, structure masquée)
    */
   private async getExportActivityRequestedModifications(userId: string): Promise<AnonymizedUserDataExport['activityRequestedModifications']> {
-    // TODO: Implémenter la récupération des demandes de modifications d'activités
-    console.log(`🔍 Récupération des demandes de modifications d'activités pour l'utilisateur: ${userId}`);
-    return [];
-  }
+    try {
+      console.log(`🔍 Récupération des demandes de modifications d'activités pour l'utilisateur: ${userId}`);
 
-  /**
-   * Récupère les pratiques de l'utilisateur (données complètes, structure masquée)
-   */
-  private async getExportPractices(userId: string): Promise<AnonymizedUserDataExport['practices']> {
-    // TODO: Implémenter la récupération des pratiques
-    console.log(`🔍 Récupération des pratiques pour l'utilisateur: ${userId}`);
-    return [];
+      const { data, error } = await this.supabaseService.getSupabaseClient()
+        .from('activity_requested_modifications')
+        .select(`
+          id,
+          activity_id,
+          title,
+          presentation_image_public_url,
+          short_description,
+          long_description,
+          benefits,
+          practice_id,
+          price,
+          typical_situations,
+          presentation_video_public_url,
+          address,
+          selected_keywords,
+          status,
+          requested_at,
+          reviewed_at,
+          reviewed_by,
+          review_notes,
+          created_at,
+          updated_at
+        `)
+        .eq('creator_id', userId);
+
+      if (error) {
+        console.error(`❌ Erreur lors de la récupération des demandes de modifications d'activités pour l'utilisateur ${userId}:`, error);
+        return [];
+      }
+
+      if (!data || data.length === 0) {
+        console.log(`ℹ️ Aucune demande de modification d'activité trouvée pour l'utilisateur: ${userId}`);
+        return [];
+      }
+
+      // Mapper les données de snake_case vers camelCase
+      const activityRequestedModifications = data.map(modification => ({
+        id: modification.id,
+        activityId: modification.activity_id,
+        title: modification.title,
+        presentationImageUrl: modification.presentation_image_public_url,
+        shortDescription: modification.short_description,
+        longDescription: modification.long_description,
+        benefits: modification.benefits,
+        practiceId: modification.practice_id,
+        price: modification.price,
+        typicalSituations: modification.typical_situations,
+        presentationVideoUrl: modification.presentation_video_public_url,
+        address: modification.address,
+        selectedKeywords: modification.selected_keywords,
+        status: modification.status,
+        requestedAt: modification.requested_at,
+        reviewedAt: modification.reviewed_at,
+        reviewedBy: modification.reviewed_by,
+        reviewNotes: modification.review_notes,
+        createdAt: modification.created_at,
+        updatedAt: modification.updated_at
+      }));
+
+      console.log(`✅ ${activityRequestedModifications.length} demandes de modifications d'activités récupérées pour l'utilisateur: ${userId}`);
+      return activityRequestedModifications;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des demandes de modifications d'activités pour l'utilisateur ${userId}:`, error);
+      return [];
+    }
   }
 
   /**
@@ -1539,14 +1551,9 @@ export class RgpdService {
    * Calcule les métadonnées de l'export anonymisé
    */
   private calculateAnonymizedMetadata(
-    conversations: AnonymizedUserDataExport['conversations'],
-    videos: AnonymizedUserDataExport['videos'],
-    images: AnonymizedUserDataExport['images'],
-    sounds: AnonymizedUserDataExport['sounds'],
     bilans: AnonymizedUserDataExport['bilans'],
     activities: AnonymizedUserDataExport['activities'],
     activityRequestedModifications: AnonymizedUserDataExport['activityRequestedModifications'],
-    practices: AnonymizedUserDataExport['practices'],
     aiResponses: AnonymizedUserDataExport['aiResponses'],
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
     rendezVous: AnonymizedUserDataExport['rendezVous'],
@@ -1559,20 +1566,15 @@ export class RgpdService {
     userProfile: AnonymizedUserDataExport['userProfile']
   ): AnonymizedUserDataExport['metadata'] {
     const dataSize = this.calculateAnonymizedDataSize(
-      conversations, videos, images, sounds, bilans, 
-      activities, activityRequestedModifications, practices, aiResponses, 
+      bilans, 
+      activities, activityRequestedModifications, aiResponses, 
       howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile
     );
 
     return {
-      totalConversations: conversations.length,
-      totalVideos: videos.length,
-      totalImages: images.length,
-      totalSounds: sounds.length,
       totalBilans: bilans.length,
       totalActivities: activities.length,
       totalActivityRequestedModifications: activityRequestedModifications.length,
-      totalPractices: practices.length,
       totalAiResponses: aiResponses.length,
       totalHowanaConversations: howanaConversations.length,
       totalRendezVous: rendezVous.length,
@@ -1591,14 +1593,9 @@ export class RgpdService {
    * Calcule la taille approximative des données anonymisées
    */
   private calculateAnonymizedDataSize(
-    conversations: AnonymizedUserDataExport['conversations'],
-    videos: AnonymizedUserDataExport['videos'],
-    images: AnonymizedUserDataExport['images'],
-    sounds: AnonymizedUserDataExport['sounds'],
     bilans: AnonymizedUserDataExport['bilans'],
     activities: AnonymizedUserDataExport['activities'],
     activityRequestedModifications: AnonymizedUserDataExport['activityRequestedModifications'],
-    practices: AnonymizedUserDataExport['practices'],
     aiResponses: AnonymizedUserDataExport['aiResponses'],
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
     rendezVous: AnonymizedUserDataExport['rendezVous'],
@@ -1611,9 +1608,6 @@ export class RgpdService {
     userProfile: AnonymizedUserDataExport['userProfile']
   ): number {
     // Estimation approximative de la taille des données anonymisées
-    const conversationSize = conversations.reduce((acc, conv) => {
-      return acc + conv.messages.reduce((msgAcc, msg) => msgAcc + msg.content.length, 0);
-    }, 0);
 
     const bilanSize = bilans.reduce((acc, bilan) => acc + bilan.content.length, 0);
     const aiResponseSize = aiResponses.reduce((acc, response) => acc + response.responseText.length, 0);
@@ -1626,11 +1620,6 @@ export class RgpdService {
     const activityModificationSize = activityRequestedModifications.reduce((acc, modification) => {
       return acc + (modification.title?.length || 0) + (modification.shortDescription?.length || 0) + (modification.longDescription?.length || 0);
     }, 0);
-
-    const practiceSize = practices.reduce((acc, practice) => {
-      return acc + (practice.title?.length || 0) + (practice.description?.length || 0);
-    }, 0);
-
 
     // Estimation pour les conversations Howana (contexte JSON)
     const howanaSize = howanaConversations.reduce((acc, conv) => {
@@ -1740,12 +1729,9 @@ export class RgpdService {
                               (userProfile.statistics ? JSON.stringify(userProfile.statistics).length : 0) +
                               (userProfile.pendingModificationData ? JSON.stringify(userProfile.pendingModificationData).length : 0);
 
-    // Estimation pour les médias (très approximative)
-    const mediaSize = (videos.length * 50) + (images.length * 2) + (sounds.length * 10);
-
-    const totalBytes = conversationSize + bilanSize + aiResponseSize + activitySize + 
-                      activityModificationSize + practiceSize + howanaSize + 
-                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + treasureChestSize + userEventsSize + userProfileSize + mediaSize;
+    const totalBytes = bilanSize + aiResponseSize + activitySize + 
+                      activityModificationSize + howanaSize + 
+                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + treasureChestSize + userEventsSize + userProfileSize;
     return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
 }
