@@ -118,3 +118,156 @@ export interface RgpdJobResult {
   dataSize?: string;
 }
 
+// Types pour l'export anonymisé
+export interface AnonymizedUserDataExport {
+  userId: string;
+  personalInfo: {
+    id: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    createdAt: string;
+    updatedAt: string;
+  };
+  conversations: Array<{
+    id: string;
+    title?: string;
+    createdAt: string;
+    updatedAt: string;
+    messages: Array<{
+      id: string;
+      content: string;
+      messageType: string;
+      createdAt: string;
+    }>;
+  }>;
+  videos: Array<{
+    id: string;
+    title?: string;
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+    filePath: string;
+    duration?: number;
+  }>;
+  images: Array<{
+    id: string;
+    title?: string;
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+    filePath: string;
+  }>;
+  sounds: Array<{
+    id: string;
+    title?: string;
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+    filePath: string;
+    duration?: number;
+  }>;
+  bilans: Array<{
+    id: string;
+    title?: string;
+    content: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  activities: Array<{
+    id: string;
+    title?: string;
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+    status?: string;
+    isActive?: boolean;
+    durationMinutes?: number;
+    participants?: number;
+    rating?: number;
+    price?: number;
+    locationType?: string;
+    typicalSituations?: string;
+    presentationImageUrl?: string;
+    presentationVideoUrl?: string;
+    benefits?: any;
+    selectedKeywords?: any;
+    metadata?: any;
+    statistics?: any;
+    maxParticipantsByUser?: number;
+  }>;
+  activityRequestedModifications: Array<{
+    id: string;
+    activityId: string;
+    title?: string;
+    shortDescription?: string;
+    longDescription?: string;
+    presentationImageUrl?: string;
+    presentationVideoUrl?: string;
+    benefits?: any;
+    practiceId?: string;
+    price?: number;
+    typicalSituations?: string;
+    address?: any;
+    selectedKeywords?: any;
+    status: string;
+    requestedAt: string;
+    reviewedAt?: string;
+    reviewedBy?: string;
+    reviewNotes?: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  practices: Array<{
+    id: string;
+    title?: string;
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  userData: Array<{
+    id: string;
+    profile?: string;
+    specialties?: any;
+    experience?: string;
+    typicalSituations?: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  aiResponses: Array<{
+    id: string;
+    responseText: string;
+    messageType: string;
+    createdAt: string;
+  }>;
+  howanaConversations: Array<{
+    id: string;
+    context?: any;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  userRendezVous: Array<{
+    id: string;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  metadata: {
+    totalConversations: number;
+    totalVideos: number;
+    totalImages: number;
+    totalSounds: number;
+    totalBilans: number;
+    totalActivities: number;
+    totalActivityRequestedModifications: number;
+    totalPractices: number;
+    totalUserData: number;
+    totalAiResponses: number;
+    totalHowanaConversations: number;
+    totalUserRendezVous: number;
+    exportDate: string;
+    dataSize: string;
+  };
+}
+

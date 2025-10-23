@@ -1,5 +1,5 @@
 import { SupabaseService } from './SupabaseService';
-import { UserDataExport } from '../types/rgpd';
+import { UserDataExport, AnonymizedUserDataExport } from '../types/rgpd';
 
 export class RgpdService {
   private supabaseService: SupabaseService;
@@ -9,7 +9,7 @@ export class RgpdService {
   }
 
   /**
-   * Récupère toutes les données d'un utilisateur pour l'export RGPD
+   * Récupère toutes les données d'un utilisateur pour l'export RGPD (version originale)
    */
   async exportUserData(userId: string): Promise<UserDataExport | null> {
     try {
@@ -53,6 +53,68 @@ export class RgpdService {
 
       console.log(`✅ Export des données terminé pour l'utilisateur: ${userId}`);
       return userDataExport;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de l'export des données pour l'utilisateur ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Récupère toutes les données d'un utilisateur pour l'export RGPD (structure masquée)
+   */
+  async exportAnonymizedUserData(userId: string): Promise<AnonymizedUserDataExport | null> {
+    try {
+      console.log(`📊 Début de l'export des données pour l'utilisateur: ${userId}`);
+
+      // Récupérer les informations personnelles
+      const personalInfo = await this.getPersonalInfo(userId);
+      if (!personalInfo) {
+        console.error(`❌ Utilisateur non trouvé: ${userId}`);
+        return null;
+      }
+
+      // Récupérer toutes les données (structure masquée)
+      const conversations = await this.getExportConversations(userId);
+      const videos = await this.getExportVideos(userId);
+      const images = await this.getExportImages(userId);
+      const sounds = await this.getExportSounds(userId);
+      const bilans = await this.getExportBilans(userId);
+      const activities = await this.getExportActivities(userId);
+      const activityRequestedModifications = await this.getExportActivityRequestedModifications(userId);
+      const practices = await this.getExportPractices(userId);
+      const userData = await this.getExportUserData(userId);
+      const aiResponses = await this.getExportAiResponses(userId);
+      const howanaConversations = await this.getExportHowanaConversations(userId);
+      const userRendezVous = await this.getExportUserRendezVous(userId);
+
+      // Calculer les métadonnées
+      const metadata = this.calculateAnonymizedMetadata(
+        conversations, videos, images, sounds, bilans, 
+        activities, activityRequestedModifications, practices, userData, aiResponses, 
+        howanaConversations, userRendezVous
+      );
+
+      const anonymizedUserDataExport: AnonymizedUserDataExport = {
+        userId,
+        personalInfo,
+        conversations,
+        videos,
+        images,
+        sounds,
+        bilans,
+        activities,
+        activityRequestedModifications,
+        practices,
+        userData,
+        aiResponses,
+        howanaConversations,
+        userRendezVous,
+        metadata
+      };
+
+      console.log(`✅ Export des données terminé pour l'utilisateur: ${userId}`);
+      return anonymizedUserDataExport;
 
     } catch (error) {
       console.error(`❌ Erreur lors de l'export des données pour l'utilisateur ${userId}:`, error);
@@ -399,5 +461,284 @@ export class RgpdService {
     if (error) {
       console.error('Erreur lors de la marque de suppression de l\'utilisateur:', error);
     }
+  }
+
+  // ===== FONCTIONS POUR EXPORT RGPD (STRUCTURE MASQUÉE) =====
+
+  /**
+   * Récupère les conversations de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportConversations(userId: string): Promise<AnonymizedUserDataExport['conversations']> {
+    // TODO: Implémenter la récupération des conversations
+    console.log(`🔍 Récupération des conversations pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Récupère les vidéos de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportVideos(userId: string): Promise<AnonymizedUserDataExport['videos']> {
+    // TODO: Implémenter la récupération des vidéos
+    console.log(`🔍 Récupération des vidéos pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Récupère les images de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportImages(userId: string): Promise<AnonymizedUserDataExport['images']> {
+    // TODO: Implémenter la récupération des images
+    console.log(`🔍 Récupération des images pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Récupère les sons de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportSounds(userId: string): Promise<AnonymizedUserDataExport['sounds']> {
+    // TODO: Implémenter la récupération des sons
+    console.log(`🔍 Récupération des sons pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Récupère les bilans de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportBilans(userId: string): Promise<AnonymizedUserDataExport['bilans']> {
+    // TODO: Implémenter la récupération des bilans
+    console.log(`🔍 Récupération des bilans pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Récupère les activités de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportActivities(userId: string): Promise<AnonymizedUserDataExport['activities']> {
+    try {
+      console.log(`🔍 Récupération des activités pour l'utilisateur: ${userId}`);
+
+      const { data, error } = await this.supabaseService.getSupabaseClient()
+        .from('activities')
+        .select(`
+          id,
+          title,
+          short_description,
+          long_description,
+          created_at,
+          updated_at,
+          status,
+          is_active,
+          duration_minutes,
+          participants,
+          rating,
+          price,
+          location_type,
+          typical_situations,
+          presentation_image_public_url,
+          presentation_video_public_url,
+          benefits,
+          selected_keywords,
+          metadata,
+          statistics,
+          max_participants_by_user
+        `)
+        .eq('creator_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erreur lors de la récupération des activités:', error);
+        return [];
+      }
+
+      if (!data) {
+        return [];
+      }
+
+      // Mapper les données vers un format qui ne révèle pas la structure de la table
+      const activities = data.map(activity => ({
+        id: activity.id,
+        title: activity.title || undefined,
+        description: (activity.short_description || "") + (activity.long_description || ""),
+        createdAt: activity.created_at,
+        updatedAt: activity.updated_at,
+        // Données complètes mais avec des noms de champs génériques
+        status: activity.status,
+        isActive: activity.is_active,
+        durationMinutes: activity.duration_minutes,
+        participants: activity.participants,
+        rating: activity.rating,
+        price: activity.price,
+        locationType: activity.location_type,
+        typicalSituations: activity.typical_situations,
+        presentationImageUrl: activity.presentation_image_public_url,
+        presentationVideoUrl: activity.presentation_video_public_url,
+        benefits: activity.benefits,
+        selectedKeywords: activity.selected_keywords,
+        metadata: activity.metadata,
+        statistics: activity.statistics,
+        maxParticipantsByUser: activity.max_participants_by_user
+      }));
+
+      console.log(`✅ ${activities.length} activités récupérées pour l'utilisateur: ${userId}`);
+      return activities;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des activités pour l'utilisateur ${userId}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Récupère les demandes de modifications d'activités de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportActivityRequestedModifications(userId: string): Promise<AnonymizedUserDataExport['activityRequestedModifications']> {
+    // TODO: Implémenter la récupération des demandes de modifications d'activités
+    console.log(`🔍 Récupération des demandes de modifications d'activités pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Récupère les pratiques de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportPractices(userId: string): Promise<AnonymizedUserDataExport['practices']> {
+    // TODO: Implémenter la récupération des pratiques
+    console.log(`🔍 Récupération des pratiques pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Récupère les données utilisateur (données complètes, structure masquée)
+   */
+  private async getExportUserData(userId: string): Promise<AnonymizedUserDataExport['userData']> {
+    // TODO: Implémenter la récupération des données utilisateur
+    console.log(`🔍 Récupération des données utilisateur pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Récupère les réponses IA de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportAiResponses(userId: string): Promise<AnonymizedUserDataExport['aiResponses']> {
+    // TODO: Implémenter la récupération des réponses IA
+    console.log(`🔍 Récupération des réponses IA pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Récupère les conversations Howana de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportHowanaConversations(userId: string): Promise<AnonymizedUserDataExport['howanaConversations']> {
+    // TODO: Implémenter la récupération des conversations Howana
+    console.log(`🔍 Récupération des conversations Howana pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Récupère les rendez-vous utilisateur (données complètes, structure masquée)
+   */
+  private async getExportUserRendezVous(userId: string): Promise<AnonymizedUserDataExport['userRendezVous']> {
+    // TODO: Implémenter la récupération des rendez-vous utilisateur
+    console.log(`🔍 Récupération des rendez-vous utilisateur pour l'utilisateur: ${userId}`);
+    return [];
+  }
+
+  /**
+   * Calcule les métadonnées de l'export anonymisé
+   */
+  private calculateAnonymizedMetadata(
+    conversations: AnonymizedUserDataExport['conversations'],
+    videos: AnonymizedUserDataExport['videos'],
+    images: AnonymizedUserDataExport['images'],
+    sounds: AnonymizedUserDataExport['sounds'],
+    bilans: AnonymizedUserDataExport['bilans'],
+    activities: AnonymizedUserDataExport['activities'],
+    activityRequestedModifications: AnonymizedUserDataExport['activityRequestedModifications'],
+    practices: AnonymizedUserDataExport['practices'],
+    userData: AnonymizedUserDataExport['userData'],
+    aiResponses: AnonymizedUserDataExport['aiResponses'],
+    howanaConversations: AnonymizedUserDataExport['howanaConversations'],
+    userRendezVous: AnonymizedUserDataExport['userRendezVous']
+  ): AnonymizedUserDataExport['metadata'] {
+    const dataSize = this.calculateAnonymizedDataSize(
+      conversations, videos, images, sounds, bilans, 
+      activities, activityRequestedModifications, practices, userData, aiResponses, 
+      howanaConversations, userRendezVous
+    );
+
+    return {
+      totalConversations: conversations.length,
+      totalVideos: videos.length,
+      totalImages: images.length,
+      totalSounds: sounds.length,
+      totalBilans: bilans.length,
+      totalActivities: activities.length,
+      totalActivityRequestedModifications: activityRequestedModifications.length,
+      totalPractices: practices.length,
+      totalUserData: userData.length,
+      totalAiResponses: aiResponses.length,
+      totalHowanaConversations: howanaConversations.length,
+      totalUserRendezVous: userRendezVous.length,
+      exportDate: new Date().toISOString(),
+      dataSize: `${dataSize} MB`
+    };
+  }
+
+  /**
+   * Calcule la taille approximative des données anonymisées
+   */
+  private calculateAnonymizedDataSize(
+    conversations: AnonymizedUserDataExport['conversations'],
+    videos: AnonymizedUserDataExport['videos'],
+    images: AnonymizedUserDataExport['images'],
+    sounds: AnonymizedUserDataExport['sounds'],
+    bilans: AnonymizedUserDataExport['bilans'],
+    activities: AnonymizedUserDataExport['activities'],
+    activityRequestedModifications: AnonymizedUserDataExport['activityRequestedModifications'],
+    practices: AnonymizedUserDataExport['practices'],
+    userData: AnonymizedUserDataExport['userData'],
+    aiResponses: AnonymizedUserDataExport['aiResponses'],
+    howanaConversations: AnonymizedUserDataExport['howanaConversations'],
+    userRendezVous: AnonymizedUserDataExport['userRendezVous']
+  ): number {
+    // Estimation approximative de la taille des données anonymisées
+    const conversationSize = conversations.reduce((acc, conv) => {
+      return acc + conv.messages.reduce((msgAcc, msg) => msgAcc + msg.content.length, 0);
+    }, 0);
+
+    const bilanSize = bilans.reduce((acc, bilan) => acc + bilan.content.length, 0);
+    const aiResponseSize = aiResponses.reduce((acc, response) => acc + response.responseText.length, 0);
+
+    // Estimation pour les activités et pratiques (contenu textuel)
+    const activitySize = activities.reduce((acc, activity) => {
+      return acc + (activity.title?.length || 0) + (activity.description?.length || 0);
+    }, 0);
+
+    const activityModificationSize = activityRequestedModifications.reduce((acc, modification) => {
+      return acc + (modification.title?.length || 0) + (modification.shortDescription?.length || 0) + (modification.longDescription?.length || 0);
+    }, 0);
+
+    const practiceSize = practices.reduce((acc, practice) => {
+      return acc + (practice.title?.length || 0) + (practice.description?.length || 0);
+    }, 0);
+
+    // Estimation pour les données utilisateur
+    const userDataSize = userData.reduce((acc, data) => {
+      return acc + (data.experience?.length || 0) + (data.typicalSituations?.length || 0);
+    }, 0);
+
+    // Estimation pour les conversations Howana (contexte JSON)
+    const howanaSize = howanaConversations.reduce((acc, conv) => {
+      return acc + (conv.context ? JSON.stringify(conv.context).length : 0);
+    }, 0);
+
+    // Estimation pour les rendez-vous (métadonnées)
+    const rendezVousSize = userRendezVous.length * 50; // Estimation par rendez-vous
+
+    // Estimation pour les médias (très approximative)
+    const mediaSize = (videos.length * 50) + (images.length * 2) + (sounds.length * 10);
+
+    const totalBytes = conversationSize + bilanSize + aiResponseSize + activitySize + 
+                      activityModificationSize + practiceSize + userDataSize + howanaSize + rendezVousSize + mediaSize;
+    return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
 }
