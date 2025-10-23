@@ -402,6 +402,21 @@ export interface AnonymizedUserDataExport {
       amountOffered: number;
     }>;
   };
+  userEvents: Array<{
+    id: string;
+    userId: string;
+    phone?: string;
+    title?: string;
+    message: string;
+    messageData?: any;
+    redirectionUrl?: string;
+    fcmToken?: string;
+    status: string;
+    archived: boolean;
+    createdAt: string;
+    updatedAt: string;
+    failReason?: string;
+  }>;
   userProfile: {
     id: string;
     userId: string;
@@ -505,6 +520,7 @@ export interface AnonymizedUserDataExport {
     totalOpenMapData: number;
     totalRendezVous: number;
     totalTreasureChestReferrals: number;
+    totalUserEvents: number;
     exportDate: string;
     dataSize: string;
   };

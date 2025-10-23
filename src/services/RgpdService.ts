@@ -92,12 +92,13 @@ export class RgpdService {
       const feedbacks = await this.getExportFeedbacks(userId);
       const openMapData = await this.getExportOpenMapData(userId);
       const treasureChest = await this.getExportTreasureChest(userId);
+      const userEvents = await this.getExportUserEvents(userId);
 
       // Calculer les métadonnées
       const metadata = this.calculateAnonymizedMetadata(
         conversations, videos, images, sounds, bilans, 
         activities, activityRequestedModifications, practices, aiResponses, 
-        howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userProfile
+        howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
@@ -119,6 +120,7 @@ export class RgpdService {
         feedbacks,
         openMapData,
         treasureChest,
+        userEvents,
         userProfile,
         metadata
       };
@@ -1618,6 +1620,68 @@ export class RgpdService {
 
 
   /**
+   * Récupère les événements utilisateur (données complètes, structure masquée)
+   */
+  private async getExportUserEvents(userId: string): Promise<AnonymizedUserDataExport['userEvents']> {
+    try {
+      console.log(`🔍 Récupération des événements utilisateur pour l'utilisateur: ${userId}`);
+
+      const { data, error } = await this.supabaseService.getSupabaseClient()
+        .from('user_event')
+        .select(`
+          id,
+          user_id,
+          phone,
+          title,
+          message,
+          message_data,
+          redirection_url,
+          fcm_token,
+          status,
+          archived,
+          created_at,
+          updated_at,
+          fail_reason
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erreur lors de la récupération des événements utilisateur:', error);
+        return [];
+      }
+
+      if (!data) {
+        return [];
+      }
+
+      // Mapper les données vers un format qui ne révèle pas la structure de la table
+      const userEvents = data.map(event => ({
+        id: String(event.id),
+        userId: String(event.user_id),
+        ...(event.phone && { phone: String(event.phone) }),
+        ...(event.title && { title: String(event.title) }),
+        message: String(event.message),
+        ...(event.message_data && { messageData: event.message_data }),
+        ...(event.redirection_url && { redirectionUrl: String(event.redirection_url) }),
+        ...(event.fcm_token && { fcmToken: String(event.fcm_token) }),
+        status: String(event.status),
+        archived: Boolean(event.archived),
+        createdAt: String(event.created_at),
+        updatedAt: String(event.updated_at),
+        ...(event.fail_reason && { failReason: String(event.fail_reason) })
+      }));
+
+      console.log(`✅ ${userEvents.length} événements utilisateur récupérés pour l'utilisateur: ${userId}`);
+      return userEvents;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des événements utilisateur pour l'utilisateur ${userId}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Transforme les spécialités de la base de données vers le format camelCase
    */
   private transformSpecialties(specialties: any): { choice: string[]; created: string[] } | undefined {
@@ -1731,12 +1795,13 @@ export class RgpdService {
     feedbacks: AnonymizedUserDataExport['feedbacks'],
     openMapData: AnonymizedUserDataExport['openMapData'],
     treasureChest: AnonymizedUserDataExport['treasureChest'],
+    userEvents: AnonymizedUserDataExport['userEvents'],
     userProfile: AnonymizedUserDataExport['userProfile']
   ): AnonymizedUserDataExport['metadata'] {
     const dataSize = this.calculateAnonymizedDataSize(
       conversations, videos, images, sounds, bilans, 
       activities, activityRequestedModifications, practices, aiResponses, 
-      howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userProfile
+      howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile
     );
 
     return {
@@ -1756,6 +1821,7 @@ export class RgpdService {
       totalFeedbacks: feedbacks.length,
       totalOpenMapData: openMapData.length,
       totalTreasureChestReferrals: treasureChest.referrals.length,
+      totalUserEvents: userEvents.length,
       exportDate: new Date().toISOString(),
       dataSize: `${dataSize} MB`
     };
@@ -1781,6 +1847,7 @@ export class RgpdService {
     feedbacks: AnonymizedUserDataExport['feedbacks'],
     openMapData: AnonymizedUserDataExport['openMapData'],
     treasureChest: AnonymizedUserDataExport['treasureChest'],
+    userEvents: AnonymizedUserDataExport['userEvents'],
     userProfile: AnonymizedUserDataExport['userProfile']
   ): number {
     // Estimation approximative de la taille des données anonymisées
@@ -1885,6 +1952,17 @@ export class RgpdService {
       treasureChest.totalEarned.toString().length + 
       treasureChest.blockedAmount.toString().length;
 
+    // Estimation pour les événements utilisateur (messages, données JSON)
+    const userEventsSize = userEvents.reduce((acc, event) => {
+      return acc + (event.title?.length || 0) + 
+             event.message.length + 
+             (event.phone?.length || 0) + 
+             (event.redirectionUrl?.length || 0) + 
+             (event.fcmToken?.length || 0) + 
+             (event.failReason?.length || 0) +
+             (event.messageData ? JSON.stringify(event.messageData).length : 0);
+    }, 0);
+
     // Estimation pour les données utilisateur (profil complet)
     const userProfileSize = (userProfile.firstName?.length || 0) + 
                               (userProfile.lastName?.length || 0) + 
@@ -1907,7 +1985,7 @@ export class RgpdService {
 
     const totalBytes = conversationSize + bilanSize + aiResponseSize + activitySize + 
                       activityModificationSize + practiceSize + howanaSize + 
-                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + treasureChestSize + userProfileSize + mediaSize;
+                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + treasureChestSize + userEventsSize + userProfileSize + mediaSize;
     return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
 }
