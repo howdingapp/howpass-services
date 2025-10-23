@@ -505,9 +505,65 @@ export class RgpdService {
    * Récupère les bilans de l'utilisateur (données complètes, structure masquée)
    */
   private async getExportBilans(userId: string): Promise<AnonymizedUserDataExport['bilans']> {
-    // TODO: Implémenter la récupération des bilans
-    console.log(`🔍 Récupération des bilans pour l'utilisateur: ${userId}`);
-    return [];
+    try {
+      console.log(`🔍 Récupération des bilans pour l'utilisateur: ${userId}`);
+
+      const { data, error } = await this.supabaseService.getSupabaseClient()
+        .from('bilans')
+        .select(`
+          id,
+          douleurs,
+          notes_personnelles,
+          resume_ia,
+          conversation_context_id,
+          conversation_summary,
+          status,
+          step,
+          created_at,
+          updated_at,
+          scores,
+          ai_summary,
+          howana_summary
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erreur lors de la récupération des bilans:', error);
+        return [];
+      }
+
+      if (!data) {
+        return [];
+      }
+
+      // Mapper les données vers un format qui ne révèle pas la structure de la table
+      const bilans = data.map(bilan => ({
+        id: bilan.id,
+        title: bilan.conversation_summary || undefined,
+        content: (bilan.douleurs || "") + (bilan.notes_personnelles || "") + (bilan.resume_ia || ""),
+        createdAt: bilan.created_at,
+        updatedAt: bilan.updated_at,
+        // Données complètes mais avec des noms de champs génériques
+        douleurs: bilan.douleurs,
+        notesPersonnelles: bilan.notes_personnelles,
+        resumeIa: bilan.resume_ia,
+        conversationContextId: bilan.conversation_context_id,
+        conversationSummary: bilan.conversation_summary,
+        status: bilan.status,
+        step: bilan.step,
+        scores: bilan.scores,
+        aiSummary: bilan.ai_summary,
+        howanaSummary: bilan.howana_summary
+      }));
+
+      console.log(`✅ ${bilans.length} bilans récupérés pour l'utilisateur: ${userId}`);
+      return bilans;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des bilans pour l'utilisateur ${userId}:`, error);
+      return [];
+    }
   }
 
   /**
@@ -619,9 +675,48 @@ export class RgpdService {
    * Récupère les réponses IA de l'utilisateur (données complètes, structure masquée)
    */
   private async getExportAiResponses(userId: string): Promise<AnonymizedUserDataExport['aiResponses']> {
-    // TODO: Implémenter la récupération des réponses IA
-    console.log(`🔍 Récupération des réponses IA pour l'utilisateur: ${userId}`);
-    return [];
+    try {
+      console.log(`🔍 Récupération des réponses IA pour l'utilisateur: ${userId}`);
+
+      const { data, error } = await this.supabaseService.getSupabaseClient()
+        .from('ai_responses')
+        .select(`
+          id,
+          conversation_id,
+          response_text,
+          message_type,
+          created_at,
+          metadata
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erreur lors de la récupération des réponses IA:', error);
+        return [];
+      }
+
+      if (!data) {
+        return [];
+      }
+
+      // Mapper les données vers un format qui ne révèle pas la structure de la table
+      const aiResponses = data.map(response => ({
+        id: response.id,
+        conversationId: response.conversation_id,
+        responseText: response.response_text,
+        messageType: response.message_type,
+        createdAt: response.created_at,
+        metadata: response.metadata
+      }));
+
+      console.log(`✅ ${aiResponses.length} réponses IA récupérées pour l'utilisateur: ${userId}`);
+      return aiResponses;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des réponses IA pour l'utilisateur ${userId}:`, error);
+      return [];
+    }
   }
 
   /**

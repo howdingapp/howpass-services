@@ -173,6 +173,16 @@ export interface AnonymizedUserDataExport {
     content: string;
     createdAt: string;
     updatedAt: string;
+    douleurs?: string;
+    notesPersonnelles?: string;
+    resumeIa?: string;
+    conversationContextId?: string;
+    conversationSummary?: string;
+    status: string;
+    step: number;
+    scores?: any;
+    aiSummary?: any;
+    howanaSummary?: any;
   }>;
   activities: Array<{
     id: string;
@@ -236,9 +246,11 @@ export interface AnonymizedUserDataExport {
   }>;
   aiResponses: Array<{
     id: string;
+    conversationId: string;
     responseText: string;
     messageType: string;
     createdAt: string;
+    metadata?: any;
   }>;
   howanaConversations: Array<{
     id: string;
