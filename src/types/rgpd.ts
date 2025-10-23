@@ -265,6 +265,32 @@ export interface AnonymizedUserDataExport {
     createdAt: string;
     updatedAt: string;
   }>;
+  deliveries: Array<{
+    id: string;
+    deliveryType?: string;
+    deliveryAddress?: any;
+    deliveryReference?: string;
+    createdAt: string;
+    expectedAt: string;
+    paymentIntentId?: string;
+    status?: string;
+    trackingNumber?: string;
+    actualDeliveryDate?: string;
+    isGift?: boolean;
+    recipientFirstName?: string;
+    recipientLastName?: string;
+    recipientEmail?: string;
+    recipientInfo?: any;
+    personalMessage?: string;
+    updatedAt?: string;
+    giftAmount?: number;
+    selectedFormula?: any;
+    activationDate?: string;
+    trackingType?: string;
+    stripeSubscriptionSessionId?: string;
+    transportCosts?: number;
+    promotionId?: string;
+  }>;
   metadata: {
     totalConversations: number;
     totalVideos: number;
@@ -278,6 +304,7 @@ export interface AnonymizedUserDataExport {
     totalAiResponses: number;
     totalHowanaConversations: number;
     totalUserRendezVous: number;
+    totalDeliveries: number;
     exportDate: string;
     dataSize: string;
   };

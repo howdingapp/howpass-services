@@ -87,12 +87,13 @@ export class RgpdService {
       const aiResponses = await this.getExportAiResponses(userId);
       const howanaConversations = await this.getExportHowanaConversations(userId);
       const userRendezVous = await this.getExportUserRendezVous(userId);
+      const deliveries = await this.getExportDeliveries(userId);
 
       // Calculer les métadonnées
       const metadata = this.calculateAnonymizedMetadata(
         conversations, videos, images, sounds, bilans, 
         activities, activityRequestedModifications, practices, userData, aiResponses, 
-        howanaConversations, userRendezVous
+        howanaConversations, userRendezVous, deliveries
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
@@ -110,6 +111,7 @@ export class RgpdService {
         aiResponses,
         howanaConversations,
         userRendezVous,
+        deliveries,
         metadata
       };
 
@@ -738,6 +740,90 @@ export class RgpdService {
   }
 
   /**
+   * Récupère les livraisons de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportDeliveries(userId: string): Promise<AnonymizedUserDataExport['deliveries']> {
+    try {
+      console.log(`🔍 Récupération des livraisons pour l'utilisateur: ${userId}`);
+
+      const { data, error } = await this.supabaseService.getSupabaseClient()
+        .from('deliveries')
+        .select(`
+          id,
+          delivery_type,
+          delivery_address,
+          delivery_reference,
+          created_at,
+          expected_at,
+          payment_intent_id,
+          status,
+          tracking_number,
+          actual_delivery_date,
+          is_gift,
+          recipient_first_name,
+          recipient_last_name,
+          recipient_email,
+          recipient_info,
+          personal_message,
+          updated_at,
+          gift_amount,
+          selected_formula,
+          activation_date,
+          tracking_type,
+          stripe_subscription_session_id,
+          transport_costs,
+          promotion_id
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erreur lors de la récupération des livraisons:', error);
+        return [];
+      }
+
+      if (!data) {
+        return [];
+      }
+
+      // Mapper les données vers un format qui ne révèle pas la structure de la table
+      const deliveries = data.map(delivery => ({
+        id: delivery.id,
+        deliveryType: delivery.delivery_type,
+        deliveryAddress: delivery.delivery_address,
+        deliveryReference: delivery.delivery_reference,
+        createdAt: delivery.created_at,
+        expectedAt: delivery.expected_at,
+        paymentIntentId: delivery.payment_intent_id,
+        status: delivery.status,
+        trackingNumber: delivery.tracking_number,
+        actualDeliveryDate: delivery.actual_delivery_date,
+        isGift: delivery.is_gift,
+        recipientFirstName: delivery.recipient_first_name,
+        recipientLastName: delivery.recipient_last_name,
+        recipientEmail: delivery.recipient_email,
+        recipientInfo: delivery.recipient_info,
+        personalMessage: delivery.personal_message,
+        updatedAt: delivery.updated_at,
+        giftAmount: delivery.gift_amount,
+        selectedFormula: delivery.selected_formula,
+        activationDate: delivery.activation_date,
+        trackingType: delivery.tracking_type,
+        stripeSubscriptionSessionId: delivery.stripe_subscription_session_id,
+        transportCosts: delivery.transport_costs,
+        promotionId: delivery.promotion_id
+      }));
+
+      console.log(`✅ ${deliveries.length} livraisons récupérées pour l'utilisateur: ${userId}`);
+      return deliveries;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des livraisons pour l'utilisateur ${userId}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Calcule les métadonnées de l'export anonymisé
    */
   private calculateAnonymizedMetadata(
@@ -752,12 +838,13 @@ export class RgpdService {
     userData: AnonymizedUserDataExport['userData'],
     aiResponses: AnonymizedUserDataExport['aiResponses'],
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
-    userRendezVous: AnonymizedUserDataExport['userRendezVous']
+    userRendezVous: AnonymizedUserDataExport['userRendezVous'],
+    deliveries: AnonymizedUserDataExport['deliveries']
   ): AnonymizedUserDataExport['metadata'] {
     const dataSize = this.calculateAnonymizedDataSize(
       conversations, videos, images, sounds, bilans, 
       activities, activityRequestedModifications, practices, userData, aiResponses, 
-      howanaConversations, userRendezVous
+      howanaConversations, userRendezVous, deliveries
     );
 
     return {
@@ -773,6 +860,7 @@ export class RgpdService {
       totalAiResponses: aiResponses.length,
       totalHowanaConversations: howanaConversations.length,
       totalUserRendezVous: userRendezVous.length,
+      totalDeliveries: deliveries.length,
       exportDate: new Date().toISOString(),
       dataSize: `${dataSize} MB`
     };
@@ -793,7 +881,8 @@ export class RgpdService {
     userData: AnonymizedUserDataExport['userData'],
     aiResponses: AnonymizedUserDataExport['aiResponses'],
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
-    userRendezVous: AnonymizedUserDataExport['userRendezVous']
+    userRendezVous: AnonymizedUserDataExport['userRendezVous'],
+    deliveries: AnonymizedUserDataExport['deliveries']
   ): number {
     // Estimation approximative de la taille des données anonymisées
     const conversationSize = conversations.reduce((acc, conv) => {
@@ -829,11 +918,19 @@ export class RgpdService {
     // Estimation pour les rendez-vous (métadonnées)
     const rendezVousSize = userRendezVous.length * 50; // Estimation par rendez-vous
 
+    // Estimation pour les livraisons (adresses, messages, formules)
+    const deliverySize = deliveries.reduce((acc, delivery) => {
+      return acc + (delivery.personalMessage?.length || 0) + 
+             (delivery.deliveryAddress ? JSON.stringify(delivery.deliveryAddress).length : 0) +
+             (delivery.selectedFormula ? JSON.stringify(delivery.selectedFormula).length : 0);
+    }, 0);
+
     // Estimation pour les médias (très approximative)
     const mediaSize = (videos.length * 50) + (images.length * 2) + (sounds.length * 10);
 
     const totalBytes = conversationSize + bilanSize + aiResponseSize + activitySize + 
-                      activityModificationSize + practiceSize + userDataSize + howanaSize + rendezVousSize + mediaSize;
+                      activityModificationSize + practiceSize + userDataSize + howanaSize + 
+                      rendezVousSize + deliverySize + mediaSize;
     return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
 }
