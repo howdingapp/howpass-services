@@ -86,7 +86,7 @@ export class RgpdService {
       const userData = await this.getExportUserData(userId);
       const aiResponses = await this.getExportAiResponses(userId);
       const howanaConversations = await this.getExportHowanaConversations(userId);
-      const userRendezVous = await this.getExportUserRendezVous(userId);
+      const rendezVous = await this.getExportRendezVous(userId);
       const deliveries = await this.getExportDeliveries(userId);
       const emails = await this.getExportEmails(userId);
       const feedbacks = await this.getExportFeedbacks(userId);
@@ -96,7 +96,7 @@ export class RgpdService {
       const metadata = this.calculateAnonymizedMetadata(
         conversations, videos, images, sounds, bilans, 
         activities, activityRequestedModifications, practices, userData, aiResponses, 
-        howanaConversations, userRendezVous, deliveries, emails, feedbacks, openMapData
+        howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
@@ -113,7 +113,7 @@ export class RgpdService {
         userData,
         aiResponses,
         howanaConversations,
-        userRendezVous,
+        rendezVous,
         deliveries,
         emails,
         feedbacks,
@@ -736,14 +736,6 @@ export class RgpdService {
     return [];
   }
 
-  /**
-   * Récupère les rendez-vous utilisateur (données complètes, structure masquée)
-   */
-  private async getExportUserRendezVous(userId: string): Promise<AnonymizedUserDataExport['userRendezVous']> {
-    // TODO: Implémenter la récupération des rendez-vous utilisateur
-    console.log(`🔍 Récupération des rendez-vous utilisateur pour l'utilisateur: ${userId}`);
-    return [];
-  }
 
   /**
    * Récupère les livraisons de l'utilisateur (données complètes, structure masquée)
@@ -998,6 +990,263 @@ export class RgpdService {
   }
 
   /**
+   * Récupère les rendez-vous de l'utilisateur (données complètes, structure masquée)
+   * Combine les tables rendezvous et user_rendezvous
+   */
+  private async getExportRendezVous(userId: string): Promise<AnonymizedUserDataExport['rendezVous']> {
+    try {
+      console.log(`🔍 Récupération des rendez-vous pour l'utilisateur: ${userId}`);
+
+      // Cas 1: Récupérer les rendez-vous où l'utilisateur est participant
+      const { data: userRendezVousData, error: userRendezVousError } = await this.supabaseService.getSupabaseClient()
+        .from('user_rendezvous')
+        .select(`
+          id,
+          user_id,
+          rendez_vous_id,
+          status,
+          created_at,
+          updated_at,
+          amount_from_treasure,
+          participants,
+          payment_status,
+          hower_angel_id,
+          first_name,
+          last_name,
+          email,
+          phone,
+          reduction_type
+        `)
+        .eq('user_id', userId);
+
+      if (userRendezVousError) {
+        console.error('Erreur lors de la récupération des user_rendezvous:', userRendezVousError);
+        return [];
+      }
+
+      // Cas 2: Récupérer les rendez-vous des activités créées par l'utilisateur
+      const { data: activitiesData, error: activitiesError } = await this.supabaseService.getSupabaseClient()
+        .from('activities')
+        .select('id')
+        .eq('creator_id', userId);
+
+      if (activitiesError) {
+        console.error('Erreur lors de la récupération des activités:', activitiesError);
+        return [];
+      }
+
+      const activityIds = activitiesData?.map(activity => activity.id) || [];
+
+      // Récupérer les rendez-vous des activités créées par l'utilisateur
+      let creatorRendezVousData: any[] = [];
+      if (activityIds.length > 0) {
+        const { data: rendezVousData, error: rendezVousError } = await this.supabaseService.getSupabaseClient()
+          .from('rendezvous')
+          .select(`
+            id,
+            date,
+            hour,
+            minute,
+            activity_id,
+            status,
+            created_at,
+            updated_at,
+            participants
+          `)
+          .in('activity_id', activityIds);
+
+        if (rendezVousError) {
+          console.error('Erreur lors de la récupération des rendez-vous créés:', rendezVousError);
+        } else {
+          creatorRendezVousData = rendezVousData || [];
+        }
+      }
+
+      // Récupérer les détails des rendez-vous où l'utilisateur est participant
+      const rendezVousIds = userRendezVousData?.map(ur => ur.rendez_vous_id) || [];
+      let participantRendezVousData: any[] = [];
+      let participantUserRendezVousData: any[] = [];
+
+      if (rendezVousIds.length > 0) {
+        // Récupérer les rendez-vous
+        const { data: rendezVousData, error: rendezVousError } = await this.supabaseService.getSupabaseClient()
+          .from('rendezvous')
+          .select(`
+            id,
+            date,
+            hour,
+            minute,
+            activity_id,
+            status,
+            created_at,
+            updated_at,
+            participants
+          `)
+          .in('id', rendezVousIds);
+
+        if (rendezVousError) {
+          console.error('Erreur lors de la récupération des rendez-vous participants:', rendezVousError);
+        } else {
+          participantRendezVousData = rendezVousData || [];
+        }
+
+        // Récupérer tous les participants de ces rendez-vous
+        const { data: allParticipantsData, error: allParticipantsError } = await this.supabaseService.getSupabaseClient()
+          .from('user_rendezvous')
+          .select(`
+            id,
+            user_id,
+            rendez_vous_id,
+            status,
+            created_at,
+            updated_at,
+            amount_from_treasure,
+            participants,
+            payment_status,
+            hower_angel_id,
+            first_name,
+            last_name,
+            email,
+            phone,
+            reduction_type
+          `)
+          .in('rendez_vous_id', rendezVousIds);
+
+        if (allParticipantsError) {
+          console.error('Erreur lors de la récupération des participants:', allParticipantsError);
+        } else {
+          participantUserRendezVousData = allParticipantsData || [];
+        }
+      }
+
+      // Construire la réponse combinée
+      const rendezVous: AnonymizedUserDataExport['rendezVous'] = [];
+
+      // Ajouter les rendez-vous où l'utilisateur est participant
+      for (const rendezVousItem of participantRendezVousData) {
+        const userRendezVousItem = userRendezVousData?.find(ur => ur.rendez_vous_id === rendezVousItem.id);
+        const allParticipants = participantUserRendezVousData.filter(ur => ur.rendez_vous_id === rendezVousItem.id);
+
+        rendezVous.push({
+          id: String(rendezVousItem.id),
+          date: String(rendezVousItem.date),
+          hour: Number(rendezVousItem.hour),
+          minute: Number(rendezVousItem.minute),
+          activityId: String(rendezVousItem.activity_id),
+          status: String(rendezVousItem.status),
+          createdAt: String(rendezVousItem.created_at),
+          updatedAt: String(rendezVousItem.updated_at),
+          participants: Number(rendezVousItem.participants),
+          userRendezVous: userRendezVousItem ? {
+            id: String(userRendezVousItem.id),
+            userId: String(userRendezVousItem.user_id),
+            status: String(userRendezVousItem.status),
+            createdAt: String(userRendezVousItem.created_at),
+            updatedAt: String(userRendezVousItem.updated_at),
+            amountFromTreasure: Number(userRendezVousItem.amount_from_treasure),
+            participants: Number(userRendezVousItem.participants),
+            paymentStatus: String(userRendezVousItem.payment_status),
+            ...(userRendezVousItem.hower_angel_id && { howerAngelId: String(userRendezVousItem.hower_angel_id) }),
+            ...(userRendezVousItem.first_name && { firstName: String(userRendezVousItem.first_name) }),
+            ...(userRendezVousItem.last_name && { lastName: String(userRendezVousItem.last_name) }),
+            ...(userRendezVousItem.email && { email: String(userRendezVousItem.email) }),
+            ...(userRendezVousItem.phone && { phone: String(userRendezVousItem.phone) }),
+            ...(userRendezVousItem.reduction_type && { reductionType: String(userRendezVousItem.reduction_type) })
+          } : undefined,
+          allParticipants: allParticipants.map(participant => ({
+            id: String(participant.id),
+            userId: String(participant.user_id),
+            status: String(participant.status),
+            createdAt: String(participant.created_at),
+            updatedAt: String(participant.updated_at),
+            amountFromTreasure: Number(participant.amount_from_treasure),
+            participants: Number(participant.participants),
+            paymentStatus: String(participant.payment_status),
+            ...(participant.hower_angel_id && { howerAngelId: String(participant.hower_angel_id) }),
+            ...(participant.first_name && { firstName: String(participant.first_name) }),
+            ...(participant.last_name && { lastName: String(participant.last_name) }),
+            ...(participant.email && { email: String(participant.email) }),
+            ...(participant.phone && { phone: String(participant.phone) }),
+            ...(participant.reduction_type && { reductionType: String(participant.reduction_type) })
+          }))
+        });
+      }
+
+      // Ajouter les rendez-vous des activités créées par l'utilisateur (sans duplication)
+      for (const rendezVousItem of creatorRendezVousData) {
+        // Vérifier si ce rendez-vous n'est pas déjà ajouté
+        if (!rendezVous.find(rv => rv.id === rendezVousItem.id)) {
+          // Récupérer tous les participants de ce rendez-vous
+          const { data: allParticipantsData } = await this.supabaseService.getSupabaseClient()
+            .from('user_rendezvous')
+            .select(`
+              id,
+              user_id,
+              rendez_vous_id,
+              status,
+              created_at,
+              updated_at,
+              amount_from_treasure,
+              participants,
+              payment_status,
+              hower_angel_id,
+              first_name,
+              last_name,
+              email,
+              phone,
+              reduction_type
+            `)
+            .eq('rendez_vous_id', rendezVousItem.id);
+
+          const allParticipants = allParticipantsData || [];
+
+          rendezVous.push({
+            id: String(rendezVousItem.id),
+            date: String(rendezVousItem.date),
+            hour: Number(rendezVousItem.hour),
+            minute: Number(rendezVousItem.minute),
+            activityId: String(rendezVousItem.activity_id),
+            status: String(rendezVousItem.status),
+            createdAt: String(rendezVousItem.created_at),
+            updatedAt: String(rendezVousItem.updated_at),
+            participants: Number(rendezVousItem.participants),
+            allParticipants: allParticipants.map(participant => ({
+              id: String(participant.id),
+              userId: String(participant.user_id),
+              status: String(participant.status),
+              createdAt: String(participant.created_at),
+              updatedAt: String(participant.updated_at),
+              amountFromTreasure: Number(participant.amount_from_treasure),
+              participants: Number(participant.participants),
+              paymentStatus: String(participant.payment_status),
+              ...(participant.hower_angel_id && { howerAngelId: String(participant.hower_angel_id) }),
+              ...(participant.first_name && { firstName: String(participant.first_name) }),
+              ...(participant.last_name && { lastName: String(participant.last_name) }),
+              ...(participant.email && { email: String(participant.email) }),
+              ...(participant.phone && { phone: String(participant.phone) }),
+              ...(participant.reduction_type && { reductionType: String(participant.reduction_type) })
+            }))
+          });
+        }
+      }
+
+      // Trier par date et heure
+      rendezVous.sort((a, b) => {
+        const dateA = new Date(`${a.date}T${a.hour.toString().padStart(2, '0')}:${a.minute.toString().padStart(2, '0')}:00`);
+        const dateB = new Date(`${b.date}T${b.hour.toString().padStart(2, '0')}:${b.minute.toString().padStart(2, '0')}:00`);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      console.log(`✅ ${rendezVous.length} rendez-vous récupérés pour l'utilisateur: ${userId}`);
+      return rendezVous;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des rendez-vous pour l'utilisateur ${userId}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Récupère les données OpenMap de l'utilisateur (données complètes, structure masquée)
    */
   private async getExportOpenMapData(userId: string): Promise<AnonymizedUserDataExport['openMapData']> {
@@ -1090,7 +1339,7 @@ export class RgpdService {
     userData: AnonymizedUserDataExport['userData'],
     aiResponses: AnonymizedUserDataExport['aiResponses'],
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
-    userRendezVous: AnonymizedUserDataExport['userRendezVous'],
+    rendezVous: AnonymizedUserDataExport['rendezVous'],
     deliveries: AnonymizedUserDataExport['deliveries'],
     emails: AnonymizedUserDataExport['emails'],
     feedbacks: AnonymizedUserDataExport['feedbacks'],
@@ -1099,7 +1348,7 @@ export class RgpdService {
     const dataSize = this.calculateAnonymizedDataSize(
       conversations, videos, images, sounds, bilans, 
       activities, activityRequestedModifications, practices, userData, aiResponses, 
-      howanaConversations, userRendezVous, deliveries, emails, feedbacks, openMapData
+      howanaConversations, rendezVous, deliveries, emails, feedbacks, openMapData
     );
 
     return {
@@ -1114,7 +1363,7 @@ export class RgpdService {
       totalUserData: userData.length,
       totalAiResponses: aiResponses.length,
       totalHowanaConversations: howanaConversations.length,
-      totalUserRendezVous: userRendezVous.length,
+      totalRendezVous: rendezVous.length,
       totalDeliveries: deliveries.length,
       totalEmails: emails.length,
       totalFeedbacks: feedbacks.length,
@@ -1139,7 +1388,7 @@ export class RgpdService {
     userData: AnonymizedUserDataExport['userData'],
     aiResponses: AnonymizedUserDataExport['aiResponses'],
     howanaConversations: AnonymizedUserDataExport['howanaConversations'],
-    userRendezVous: AnonymizedUserDataExport['userRendezVous'],
+    rendezVous: AnonymizedUserDataExport['rendezVous'],
     deliveries: AnonymizedUserDataExport['deliveries'],
     emails: AnonymizedUserDataExport['emails'],
     feedbacks: AnonymizedUserDataExport['feedbacks'],
@@ -1176,8 +1425,35 @@ export class RgpdService {
       return acc + (conv.context ? JSON.stringify(conv.context).length : 0);
     }, 0);
 
-    // Estimation pour les rendez-vous (métadonnées)
-    const rendezVousSize = userRendezVous.length * 50; // Estimation par rendez-vous
+    // Estimation pour les rendez-vous (métadonnées et participants)
+    const rendezVousSize = rendezVous.reduce((acc, rv) => {
+      let size = 0;
+      
+      // Taille des données de base du rendez-vous
+      size += (rv.date?.length || 0) + (rv.status?.length || 0);
+      
+      // Taille des données de l'utilisateur dans ce rendez-vous
+      if (rv.userRendezVous) {
+        size += (rv.userRendezVous.firstName?.length || 0) + 
+                (rv.userRendezVous.lastName?.length || 0) + 
+                (rv.userRendezVous.email?.length || 0) + 
+                (rv.userRendezVous.phone?.length || 0) + 
+                (rv.userRendezVous.reductionType?.length || 0);
+      }
+      
+      // Taille de tous les participants
+      if (rv.allParticipants) {
+        size += rv.allParticipants.reduce((participantAcc, participant) => {
+          return participantAcc + (participant.firstName?.length || 0) + 
+                 (participant.lastName?.length || 0) + 
+                 (participant.email?.length || 0) + 
+                 (participant.phone?.length || 0) + 
+                 (participant.reductionType?.length || 0);
+        }, 0);
+      }
+      
+      return acc + size;
+    }, 0);
 
     // Estimation pour les livraisons (adresses, messages, formules)
     const deliverySize = deliveries.reduce((acc, delivery) => {

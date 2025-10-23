@@ -259,12 +259,6 @@ export interface AnonymizedUserDataExport {
     createdAt: string;
     updatedAt: string;
   }>;
-  userRendezVous: Array<{
-    id: string;
-    status: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
   deliveries: Array<{
     id: string;
     deliveryType?: string;
@@ -355,6 +349,51 @@ export interface AnonymizedUserDataExport {
     vectorSummary?: string;
     isActive: boolean;
   }>;
+  rendezVous: Array<{
+    id: string;
+    date: string;
+    hour: number;
+    minute: number;
+    activityId: string;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+    participants: number;
+    // Données de l'utilisateur dans ce rendez-vous
+    userRendezVous?: {
+      id: string;
+      userId: string;
+      status: string;
+      createdAt: string;
+      updatedAt: string;
+      amountFromTreasure: number;
+      participants: number;
+      paymentStatus: string;
+      howerAngelId?: string;
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      phone?: string;
+      reductionType?: string;
+    };
+    // Tous les participants si l'utilisateur est le créateur de l'activité
+    allParticipants?: Array<{
+      id: string;
+      userId: string;
+      status: string;
+      createdAt: string;
+      updatedAt: string;
+      amountFromTreasure: number;
+      participants: number;
+      paymentStatus: string;
+      howerAngelId?: string;
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      phone?: string;
+      reductionType?: string;
+    }>;
+  }>;
   metadata: {
     totalConversations: number;
     totalVideos: number;
@@ -367,11 +406,11 @@ export interface AnonymizedUserDataExport {
     totalUserData: number;
     totalAiResponses: number;
     totalHowanaConversations: number;
-    totalUserRendezVous: number;
     totalDeliveries: number;
     totalEmails: number;
     totalFeedbacks: number;
     totalOpenMapData: number;
+    totalRendezVous: number;
     exportDate: string;
     dataSize: string;
   };
