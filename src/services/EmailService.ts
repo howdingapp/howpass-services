@@ -1,4 +1,6 @@
 import { RgpdEmailData } from '../types/rgpd';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export class EmailService {
   constructor() {
@@ -42,114 +44,50 @@ export class EmailService {
     }
   }
 
-  generateDataExportEmailHtml(_userEmail: string, downloadUrl?: string): string {
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Export de vos données - HowPass</title>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-          .content { padding: 20px 0; }
-          .button { 
-            display: inline-block; 
-            background-color: #007bff; 
-            color: white; 
-            padding: 12px 24px; 
-            text-decoration: none; 
-            border-radius: 4px; 
-            margin: 20px 0;
-          }
-          .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>📊 Export de vos données personnelles</h1>
-          </div>
-          <div class="content">
-            <p>Bonjour,</p>
-            <p>Nous avons traité votre demande d'export de données personnelles conformément au RGPD.</p>
-            <p>Vos données ont été compilées et sont maintenant disponibles au téléchargement :</p>
-            ${downloadUrl ? `
-              <p style="text-align: center;">
-                <a href="${downloadUrl}" class="button">📥 Télécharger mes données</a>
-              </p>
-            ` : `
-              <p><strong>Vos données sont jointes à cet email.</strong></p>
-            `}
-            <p><strong>Ce que contient l'export :</strong></p>
-            <ul>
-              <li>Vos informations personnelles</li>
-              <li>Vos conversations avec l'IA</li>
-              <li>Vos vidéos et médias</li>
-              <li>Vos bilans et analyses</li>
-              <li>Métadonnées et statistiques</li>
-            </ul>
-            <p><strong>Important :</strong></p>
-            <ul>
-              <li>Ce fichier contient des informations sensibles, gardez-le en sécurité</li>
-              <li>Le lien de téléchargement expire dans 7 jours</li>
-              <li>Si vous avez des questions, contactez notre support</li>
-            </ul>
-          </div>
-          <div class="footer">
-            <p>HowPass - Respect de votre vie privée</p>
-            <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+  private loadEmailTemplate(templateName: string): string {
+    try {
+      const templatePath = path.join(__dirname, '..', '..', 'emails', 'templates', templateName);
+      return fs.readFileSync(templatePath, 'utf-8');
+    } catch (error) {
+      console.error(`❌ Erreur lors du chargement du template ${templateName}:`, error);
+      throw new Error(`Template ${templateName} non trouvé`);
+    }
   }
 
-  generateDataDeletionConfirmationEmailHtml(_userEmail: string): string {
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Suppression de vos données - HowPass</title>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-          .content { padding: 20px 0; }
-          .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🗑️ Suppression de vos données personnelles</h1>
-          </div>
-          <div class="content">
-            <p>Bonjour,</p>
-            <p>Nous avons traité votre demande de suppression de données personnelles conformément au RGPD.</p>
-            <p><strong>✅ Toutes vos données ont été supprimées de nos serveurs :</strong></p>
-            <ul>
-              <li>Vos informations personnelles</li>
-              <li>Vos conversations avec l'IA</li>
-              <li>Vos vidéos et médias</li>
-              <li>Vos bilans et analyses</li>
-              <li>Toutes les métadonnées associées</li>
-            </ul>
-            <p>Votre compte HowPass a également été désactivé.</p>
-            <p>Si vous souhaitez utiliser nos services à nouveau, vous devrez créer un nouveau compte.</p>
-            <p>Si vous avez des questions, contactez notre support.</p>
-          </div>
-          <div class="footer">
-            <p>HowPass - Respect de votre vie privée</p>
-            <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+  generateDataExportEmailHtml(_userEmail: string, downloadUrl?: string): string {
+    const template = this.loadEmailTemplate('howpass-rgpd-export.html');
+    
+    // Remplacer les placeholders
+    let html = template.replace('{{YEAR}}', new Date().getFullYear().toString());
+    
+    if (downloadUrl) {
+      html = html.replace('{{DOWNLOAD_INSTRUCTIONS}}', 'Cliquez sur le bouton ci-dessous pour télécharger votre export :');
+      html = html.replace('{{DOWNLOAD_BUTTON}}', `
+        <p style="margin:0 0 12px 0;">
+          <a href="${downloadUrl}" target="_blank" style="background-color:#009da7; color:#ffffff; display:inline-block; padding:10px 18px; border-radius:6px; text-decoration:none; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial; font-size:15px; font-weight:700;">📥 Télécharger mes données</a>
+        </p>
+      `);
+      html = html.replace('{{DOWNLOAD_LINK}}', `
+        <p class="muted" style="margin:0; font-size:12px; line-height:18px; color:#6b7280;">Si le bouton ne fonctionne pas, copiez-collez ce lien dans votre navigateur :<br><span style="word-break:break-all; color:#00848d;">${downloadUrl}</span></p>
+      `);
+    } else {
+      html = html.replace('{{DOWNLOAD_INSTRUCTIONS}}', 'Vos données sont jointes à cet email.');
+      html = html.replace('{{DOWNLOAD_BUTTON}}', '');
+      html = html.replace('{{DOWNLOAD_LINK}}', '');
+    }
+    
+    return html;
   }
+
+
+  generateDataDeletionConfirmationEmailHtml(_userEmail: string): string {
+    const template = this.loadEmailTemplate('howpass-rgpd-deletion.html');
+    
+    // Remplacer les placeholders
+    const html = template.replace('{{YEAR}}', new Date().getFullYear().toString());
+    
+    return html;
+  }
+
 }
 
