@@ -1,11 +1,16 @@
 import { SupabaseService } from './SupabaseService';
 import { UserDataExport, AnonymizedUserDataExport } from '../types/rgpd';
+import Stripe from 'stripe';
 
 export class RgpdService {
   private supabaseService: SupabaseService;
+  private stripe: Stripe;
 
   constructor() {
     this.supabaseService = new SupabaseService();
+    this.stripe = new Stripe(process.env["STRIPE_SECRET_KEY"]!, {
+      apiVersion: '2025-08-27.basil',
+    });
   }
 
   /**
@@ -35,12 +40,13 @@ export class RgpdService {
       const openMapData = await this.getExportOpenMapData(userId);
       const treasureChest = await this.getExportTreasureChest(userId);
       const userEvents = await this.getExportUserEvents(userId);
+      const stripeData = await this.getExportStripeData(userId);
 
       // Calculer les métadonnées
       const metadata = this.calculateAnonymizedMetadata(
         bilans, 
         activities, activityRequestedModifications, aiResponses, 
-        rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile
+        rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile, stripeData
       );
 
       const anonymizedUserDataExport: AnonymizedUserDataExport = {
@@ -58,6 +64,7 @@ export class RgpdService {
         treasureChest,
         userEvents,
         userProfile,
+        stripeData,
         metadata
       };
 
@@ -1443,6 +1450,141 @@ export class RgpdService {
   }
 
   /**
+   * Récupère les données Stripe de l'utilisateur (données complètes, structure masquée)
+   */
+  private async getExportStripeData(userId: string): Promise<AnonymizedUserDataExport['stripeData']> {
+    try {
+      console.log(`🔍 Récupération des données Stripe pour l'utilisateur: ${userId}`);
+
+      // Récupérer les données utilisateur pour obtenir les IDs Stripe
+      const { data: userData, error: userError } = await this.supabaseService.getSupabaseClient()
+        .from('user_data')
+        .select('customer_id, stripe_connect_account_id, active_formula')
+        .eq('user_id', userId)
+        .single();
+
+      if (userError) {
+        console.error('Erreur lors de la récupération des données utilisateur pour Stripe:', userError);
+        return {
+          paymentMethods: [],
+          subscriptions: [],
+          transfers: []
+        };
+      }
+
+      const stripeData: AnonymizedUserDataExport['stripeData'] = {
+        customerId: userData?.customer_id || undefined,
+        stripeConnectAccountId: userData?.stripe_connect_account_id || undefined,
+        paymentMethods: [],
+        subscriptions: [],
+        transfers: []
+      };
+
+      // Récupérer les moyens de paiement si customer_id existe
+      if (userData?.customer_id) {
+        try {
+          const paymentMethods = await this.stripe.paymentMethods.list({
+            customer: userData.customer_id,
+            type: 'card'
+          });
+
+          stripeData.paymentMethods = paymentMethods.data.map(pm => ({
+            id: pm.id,
+            type: pm.type,
+            ...(pm.card && {
+              card: {
+                brand: pm.card.brand,
+                last4: pm.card.last4,
+                expMonth: pm.card.exp_month,
+                expYear: pm.card.exp_year
+              }
+            }),
+            created: pm.created
+          }));
+        } catch (error) {
+          console.error('Erreur lors de la récupération des moyens de paiement:', error);
+        }
+      }
+
+      // Récupérer les abonnements via activeFormula (delivery)
+      if (userData?.active_formula) {
+        try {
+          // Récupérer le delivery pour obtenir stripe_subscription_session_id
+          const { data: deliveryData, error: deliveryError } = await this.supabaseService.getSupabaseClient()
+            .from('deliveries')
+            .select('stripe_subscription_session_id')
+            .eq('id', userData.active_formula)
+            .single();
+
+          if (!deliveryError && deliveryData?.stripe_subscription_session_id) {
+            // Récupérer la session Stripe pour obtenir l'ID de l'abonnement
+            const session = await this.stripe.checkout.sessions.retrieve(deliveryData.stripe_subscription_session_id);
+            
+            if (session.subscription) {
+              // Récupérer l'abonnement
+              const subscription = await this.stripe.subscriptions.retrieve(session.subscription as string) as Stripe.Subscription;
+              
+              stripeData.subscriptions = [{
+                id: subscription.id,
+                status: subscription.status,
+                cancelAtPeriodEnd: subscription.cancel_at_period_end,
+                ...(subscription.canceled_at && { canceledAt: subscription.canceled_at }),
+                ...(subscription.trial_start && { trialStart: subscription.trial_start }),
+                ...(subscription.trial_end && { trialEnd: subscription.trial_end }),
+                metadata: subscription.metadata,
+                items: subscription.items.data.map(item => ({
+                  id: item.id,
+                  priceId: item.price.id,
+                  quantity: item.quantity || 1
+                }))
+              }];
+            }
+          }
+        } catch (error) {
+          console.error('Erreur lors de la récupération des abonnements:', error);
+        }
+      }
+
+      // Récupérer les transferts si stripe_connect_account_id existe
+      if (userData?.stripe_connect_account_id) {
+        try {
+          const transfers = await this.stripe.transfers.list({
+            limit: 100
+          });
+
+          // Filtrer les transferts de cet utilisateur
+          const userTransfers = transfers.data.filter(transfer => 
+            transfer.metadata?.["userId"] === userId && 
+            transfer.metadata?.["source"] === 'treasure_chest_withdrawal'
+          );
+
+          stripeData.transfers = userTransfers.map(transfer => ({
+            id: transfer.id,
+            amount: transfer.amount,
+            currency: transfer.currency,
+            status: transfer.reversed ? 'cancelled' : 'completed',
+            created: transfer.created,
+            metadata: transfer.metadata
+          }));
+        } catch (error) {
+          console.error('Erreur lors de la récupération des transferts:', error);
+        }
+      }
+
+      console.log(`✅ Données Stripe récupérées pour l'utilisateur: ${userId} (${stripeData.paymentMethods.length} moyens de paiement, ${stripeData.subscriptions.length} abonnements, ${stripeData.transfers.length} transferts)`);
+      return stripeData;
+
+    } catch (error) {
+      console.error(`❌ Erreur lors de la récupération des données Stripe pour l'utilisateur ${userId}:`, error);
+      return {
+        paymentMethods: [],
+        subscriptions: [],
+        transfers: []
+      };
+    }
+  }
+
+  /**
    * Transforme les spécialités de la base de données vers le format camelCase
    */
   private transformSpecialties(specialties: any): { choice: string[]; created: string[] } | undefined {
@@ -1551,12 +1693,13 @@ export class RgpdService {
     openMapData: AnonymizedUserDataExport['openMapData'],
     treasureChest: AnonymizedUserDataExport['treasureChest'],
     userEvents: AnonymizedUserDataExport['userEvents'],
-    userProfile: AnonymizedUserDataExport['userProfile']
+    userProfile: AnonymizedUserDataExport['userProfile'],
+    stripeData: AnonymizedUserDataExport['stripeData']
   ): AnonymizedUserDataExport['metadata'] {
     const dataSize = this.calculateAnonymizedDataSize(
       bilans, 
       activities, activityRequestedModifications, aiResponses, 
-      rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile
+      rendezVous, deliveries, emails, feedbacks, openMapData, treasureChest, userEvents, userProfile, stripeData
     );
 
     return {
@@ -1571,6 +1714,9 @@ export class RgpdService {
       totalOpenMapData: openMapData.length,
       totalTreasureChestReferrals: treasureChest.referrals.length,
       totalUserEvents: userEvents.length,
+      totalStripePaymentMethods: stripeData.paymentMethods.length,
+      totalStripeSubscriptions: stripeData.subscriptions.length,
+      totalStripeTransfers: stripeData.transfers.length,
       exportDate: new Date().toISOString(),
       dataSize: `${dataSize} MB`
     };
@@ -1591,7 +1737,8 @@ export class RgpdService {
     openMapData: AnonymizedUserDataExport['openMapData'],
     treasureChest: AnonymizedUserDataExport['treasureChest'],
     userEvents: AnonymizedUserDataExport['userEvents'],
-    userProfile: AnonymizedUserDataExport['userProfile']
+    userProfile: AnonymizedUserDataExport['userProfile'],
+    stripeData: AnonymizedUserDataExport['stripeData']
   ): number {
     // Estimation approximative de la taille des données anonymisées
 
@@ -1710,9 +1857,32 @@ export class RgpdService {
                               (userProfile.statistics ? JSON.stringify(userProfile.statistics).length : 0) +
                               (userProfile.pendingModificationData ? JSON.stringify(userProfile.pendingModificationData).length : 0);
 
+    // Estimation pour les données Stripe (moyens de paiement, abonnements, transferts)
+    const stripeSize = stripeData.paymentMethods.reduce((acc, pm) => {
+      return acc + pm.id.length + pm.type.length + 
+             (pm.card ? (pm.card.brand.length + pm.card.last4.length + pm.card.expMonth.toString().length + pm.card.expYear.toString().length) : 0) +
+             pm.created.toString().length;
+    }, 0) + 
+    stripeData.subscriptions.reduce((acc, sub) => {
+      return acc + sub.id.length + sub.status.length + 
+             sub.cancelAtPeriodEnd.toString().length +
+             (sub.canceledAt ? sub.canceledAt.toString().length : 0) +
+             (sub.trialStart ? sub.trialStart.toString().length : 0) +
+             (sub.trialEnd ? sub.trialEnd.toString().length : 0) +
+             JSON.stringify(sub.metadata).length +
+             sub.items.reduce((itemAcc, item) => itemAcc + item.id.length + item.priceId.length + item.quantity.toString().length, 0);
+    }, 0) +
+    stripeData.transfers.reduce((acc, transfer) => {
+      return acc + transfer.id.length + transfer.currency.length + transfer.status.length +
+             transfer.amount.toString().length + transfer.created.toString().length +
+             JSON.stringify(transfer.metadata).length;
+    }, 0) +
+    (stripeData.customerId ? stripeData.customerId.length : 0) +
+    (stripeData.stripeConnectAccountId ? stripeData.stripeConnectAccountId.length : 0);
+
     const totalBytes = bilanSize + aiResponseSize + activitySize + 
                       activityModificationSize + 
-                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + treasureChestSize + userEventsSize + userProfileSize;
+                      rendezVousSize + deliverySize + emailSize + feedbackSize + openMapSize + treasureChestSize + userEventsSize + userProfileSize + stripeSize;
     return Math.round(totalBytes / (1024 * 1024) * 100) / 100; // Conversion en MB
   }
 }

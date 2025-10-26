@@ -451,6 +451,43 @@ export interface AnonymizedUserDataExport {
     // Rôle utilisateur
     role?: string;
   };
+  stripeData: {
+    customerId?: string;
+    stripeConnectAccountId?: string;
+    paymentMethods: Array<{
+      id: string;
+      type: string;
+      card?: {
+        brand: string;
+        last4: string;
+        expMonth: number;
+        expYear: number;
+      };
+      created: number;
+    }>;
+    subscriptions: Array<{
+      id: string;
+      status: string;
+      cancelAtPeriodEnd: boolean;
+      canceledAt?: number;
+      trialStart?: number;
+      trialEnd?: number;
+      metadata: Record<string, string>;
+      items: Array<{
+        id: string;
+        priceId: string;
+        quantity: number;
+      }>;
+    }>;
+    transfers: Array<{
+      id: string;
+      amount: number;
+      currency: string;
+      status: string;
+      created: number;
+      metadata: Record<string, string>;
+    }>;
+  };
   metadata: {
     totalBilans: number;
     totalActivities: number;
@@ -463,6 +500,9 @@ export interface AnonymizedUserDataExport {
     totalRendezVous: number;
     totalTreasureChestReferrals: number;
     totalUserEvents: number;
+    totalStripePaymentMethods: number;
+    totalStripeSubscriptions: number;
+    totalStripeTransfers: number;
     exportDate: string;
     dataSize: string;
   };
