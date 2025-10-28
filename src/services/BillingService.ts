@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { SupabaseService } from './SupabaseService';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { howpassMonthlyBillingTemplate, howpassAnnualBillingTemplate } from './emails/templates/howpass-billing';
 
 export interface BillingEmailData {
