@@ -59,10 +59,10 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
   /**
    * Informations contextuelles de l'activité
    */
-  protected getActivityContextInfo(context: HowanaActivityContext & HowanaContext): string {
+  protected async getActivityContextInfo(context: HowanaActivityContext & HowanaContext): Promise<string> {
     if (!context.activityData) return '';
 
-    let activityInfo = `\n\nINFORMATIONS DE L'ACTIVITÉ (déclarées par le praticien):
+    let activityInfo = `\n\nINFORMATIONS DE L'ACTIVITÉ (déclarées par le praticien Howel Angel):
     - Titre: "${context.activityData.title}"`;
     
     if (context.activityData.shortDescription) {
@@ -242,12 +242,16 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
 
     // Ajouter le contexte de l'activité et de la pratique si disponible
     if (context.activityData) {
-      contextInfo += this.getActivityContextInfo(context);
+      contextInfo += await this.getActivityContextInfo(context);
       contextInfo += this.getPracticeContextInfo(context);
       contextInfo += this.getCategoryFamilyInstructions(context);
       contextInfo += this.getPractitionerContextInfo(context);
       contextInfo += this.getEditingSessionInstructions(context);
       contextInfo += this.getNormalConversationInstructions(context);
+
+      // Ajouter les pratiques HOW PASS existantes
+      contextInfo += await this.getAvailablePracticesContext();
+
     }
 
     // Règles générales (toujours présentes)

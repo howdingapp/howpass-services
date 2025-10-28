@@ -1038,6 +1038,34 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   }
 
   /**
+   * Récupère et formate les pratiques HOW PASS disponibles
+   */
+  protected async getAvailablePracticesContext(): Promise<string> {
+    try {
+      console.log('🔍 Récupération des pratiques HOW PASS disponibles');
+      
+      const result = await this.supabaseService.getAllAvailablePractices();
+      
+      if (!result.success || !result.data || result.data.length === 0) {
+        console.warn('⚠️ ReWOO: Aucune pratique HOW PASS récupérée');
+        return 'PRATIQUES HOW PASS DISPONIBLES: Aucune pratique disponible pour le moment.';
+      }
+
+      const practicesList = result.data.map(practice => `- ${practice.title}`).join('\n');
+      
+      console.log(`✅ ${result.data.length} pratiques HOW PASS récupérées`);
+      
+      return `PRATIQUES HOW PASS DISPONIBLES:
+A titre d'information, voici la liste complète des pratiques de bien-être disponibles sur la plateforme HOW PASS :
+${practicesList}`;
+
+    } catch (error) {
+      console.error('❌ ReWOO: Erreur lors de la récupération des pratiques HOW PASS:', error);
+      return 'PRATIQUES HOW PASS DISPONIBLES: Erreur lors de la récupération des pratiques.';
+    }
+  }
+  
+  /**
    * Enrichit le contexte avec les données extraites
    * @param context Le contexte de conversation à enrichir
    * @param data Objet contenant les données à ajouter au contexte
