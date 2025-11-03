@@ -60,7 +60,7 @@ app.use('/api/rgpd', rgpdRoutes);
 app.use('/api/videos', videoRoutes);
 
 // Routes billing
-app.use('/api/billing', billingRoutes);
+//app.use('/api/billing', billingRoutes);
 
 
 // Routes des jobs IA supprimées - remplacées par Google Cloud Tasks
