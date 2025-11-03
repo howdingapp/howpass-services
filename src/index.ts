@@ -62,9 +62,6 @@ app.use('/api/videos', videoRoutes);
 // Routes billing
 //app.use('/api/billing', billingRoutes);
 
-
-// Routes des jobs IA supprimées - remplacées par Google Cloud Tasks
-
 // ✅ Endpoint de traitement IA pour Google Cloud Tasks (appelé automatiquement par les tâches)
 const iaController = new IAController();
 app.post('/api/ia/process', validateIAToken, (req, res) => iaController.processIATask(req, res));
