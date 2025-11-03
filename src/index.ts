@@ -7,7 +7,7 @@ import { IAController } from './controllers/IAController';
 import conversationRoutes from './routes/conversationRoutes';
 import rgpdRoutes from './routes/rgpdRoutes';
 import videoRoutes from './routes/videoRoutes';
-import billingRoutes from './routes/billingRoutes';
+//import billingRoutes from './routes/billingRoutes';
 import dotenv from 'dotenv';
 import { validateIAToken } from './middleware/iaAuthMiddleware';
 
