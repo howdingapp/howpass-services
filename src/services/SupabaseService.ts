@@ -678,11 +678,18 @@ export class SupabaseService {
       
       // Générer l'embedding pour la requête
       const queryEmbedding = await this.embeddingService.generateEmbedding(query);
+      
+      // Calculer le nombre de chunks à rechercher (multiplicateur pour garantir assez de résultats uniques)
+      const chunkSearchMultiplier = 8;
+      const chunksToSearch = limit * chunkSearchMultiplier;
+      
       console.log('Query params for vector search', {
         query_embedding: queryEmbedding?.slice(0, 10),
         table_name: table,
         match_threshold: 0.1,
-        match_count: limit
+        requested_results: limit,
+        chunks_to_search: chunksToSearch,
+        note: 'Recherche de chunks multipliée pour garantir assez de résultats uniques après GROUP BY'
       })
 
       // Utiliser la fonction spécifique selon la table
@@ -707,11 +714,16 @@ export class SupabaseService {
           throw new Error(`Table ${table} non supportée pour la recherche vectorielle`);
       }
 
+      // Utiliser le nombre de chunks calculé plus haut pour garantir assez de résultats uniques
+      // Avec le système de chunks, plusieurs chunks peuvent correspondre au même ID
+      // On cherche 8x plus de chunks que le nombre de résultats désirés pour avoir
+      // de meilleures chances d'obtenir le nombre de résultats uniques demandés
+
       const { data, error } = await this.supabase
         .rpc(functionName, {
           query_embedding: queryEmbedding,
           match_threshold: 0.1,
-          match_count: limit
+          match_count: chunksToSearch // Rechercher plus de chunks pour garantir assez de résultats uniques
         });
 
       if (error) {
@@ -735,7 +747,14 @@ export class SupabaseService {
 
       console.log('🔍 Résultats de la recherche vectorielle:', data);
 
-      return data || [];
+      // Limiter les résultats au nombre demandé (car on a recherché plus de chunks)
+      const limitedResults = (data || []).slice(0, limit);
+      
+      if (limitedResults.length < (data || []).length) {
+        console.log(`📊 ${(data || []).length} résultats trouvés, limités à ${limit} pour correspondre à la demande`);
+      }
+
+      return limitedResults;
     } catch (error) {
       console.error(`❌ Erreur inattendue lors de la recherche vectorielle sur ${table}:`, error);
       
