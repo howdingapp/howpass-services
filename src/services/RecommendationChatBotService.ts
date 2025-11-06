@@ -1324,6 +1324,12 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
   protected override async handleIntent(intent: any, _context: HowanaContext): Promise<any | null> {
     const typedIntent = intent as RecommendationIntent;
     
+    // Si l'intent est "know_more", ne rien faire
+    if (typedIntent?.intent === 'know_more') {
+      console.log('ℹ️ Intent "know_more" détecté - aucune action à effectuer');
+      return null;
+    }
+    
     if (!typedIntent || !typedIntent.searchContext) {
       console.log('⚠️ Aucun searchContext dans l\'intent, pas de recherche à effectuer');
       return null;
@@ -1402,7 +1408,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             intent: {
               type: "string",
               description: "Intent principal de l'utilisateur",
-              enum: ["search_hower_angel", "search_activities", "search_advices", "take_rdv", "discover"]
+              enum: ["search_hower_angel", "search_activities", "search_advices", "take_rdv", "discover", "know_more"]
             },
             rdvContext: {
               type: "object",
@@ -1445,7 +1451,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               additionalProperties: false
             }
           },
-          required: ["format", "intent", "rdvContext", "searchContext"],
+          required: ["format", "intent"],
           additionalProperties: false
         },
         strict: true

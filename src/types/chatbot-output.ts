@@ -54,12 +54,12 @@ export interface RecommendationSummary {
  */
 export interface RecommendationIntent {
   format: 'remote' | 'inPerson' | 'any';
-  intent: 'search_hower_angel' | 'search_activities' | 'search_advices' | 'take_rdv' | 'discover';
-  rdvContext: {
+  intent: 'search_hower_angel' | 'search_activities' | 'search_advices' | 'take_rdv' | 'discover' | 'know_more';
+  rdvContext?: {
     type: 'hower_angel' | 'activity' | 'practice';
     id: string;
   };
-  searchContext: {
+  searchContext?: {
     searchChunks: string[];
     searchType: 'activity' | 'hower_angel' | 'practice';
     searchFormat: 'from_user_situation' | 'from_name_query';
