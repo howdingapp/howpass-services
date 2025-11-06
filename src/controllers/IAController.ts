@@ -239,24 +239,33 @@ export class IAController {
     // Obtenir le service de chatbot approprié
     const chatBotService = this.getChatBotService(context);
     
-    // Lancer le calcul d'intent en arrière-plan (fire and forget)
-    chatBotService.computeIntent(context, taskData.userMessage)
-      .then((intent) => {
-        if (intent) {
-          console.log('🎯 Intent calculé avec succès, mise à jour en base de données');
-          // Sauvegarder l'intent en base de données (ne bloque pas si ça échoue)
-          return this.supabaseService.updateIntent(taskData.conversationId, intent);
-        }
-        console.warn('⚠️ Calcul d\'intent retourné null');
-        return undefined;
-      })
-      .catch((error) => {
-        console.error('❌ Erreur lors du calcul ou de la sauvegarde de l\'intent (non bloquant):', error);
-      });
+    // Calculer l'intent avant de générer la réponse
+    console.log('🎯 Calcul de l\'intent avant génération de la réponse...');
+    const intent = await chatBotService.computeIntent(context, taskData.userMessage);
     
-    // Générer la réponse IA (on n'attend pas le calcul d'intent)
-    const aiResponse = await chatBotService.generateAIResponse(context, taskData.userMessage);
+    // Mettre à jour le contexte avec l'intent
+    const contextWithIntent = { ...context };
+    if (intent) {
+      contextWithIntent.metadata = {
+        ...contextWithIntent.metadata,
+        ['intent']: intent
+      };
+      console.log('✅ Intent calculé avec succès et ajouté au contexte');
+    } else {
+      console.warn('⚠️ Calcul d\'intent retourné null, génération de la réponse sans intent');
+    }
+    
+    // Générer la réponse IA avec le contexte mis à jour contenant l'intent
+    const aiResponse = await chatBotService.generateAIResponse(contextWithIntent, taskData.userMessage);
     const updatedContext = aiResponse.updatedContext;
+    
+    // S'assurer que l'intent est préservé dans le contexte mis à jour
+    if (intent && contextWithIntent.metadata?.['intent']) {
+      updatedContext.metadata = {
+        ...updatedContext.metadata,
+        ['intent']: contextWithIntent.metadata['intent']
+      };
+    }
     
     // Utiliser le messageId d'OpenAI si disponible, sinon créer un messageId local
     const messageId = aiResponse.messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
