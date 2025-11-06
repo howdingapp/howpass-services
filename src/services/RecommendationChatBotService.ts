@@ -6,9 +6,9 @@ import {
   RecommendationMessageResponse,
   ExtractedRecommandations,
 } from '../types/chatbot-output';
-import { ReWOOChatbotService } from './ReWOOChatbotService';
+import { BaseChatBotService } from './BaseChatBotService';
 
-export class RecommendationChatBotService extends ReWOOChatbotService<RecommendationMessageResponse> {
+export class RecommendationChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
   
   /**
    * Règles par défaut pour les recommandations (format tableau comme iaRules)
