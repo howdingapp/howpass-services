@@ -13,6 +13,8 @@
     "dev:job": "ts-node src/job-processor.js",
     "dev:job:rgpd": "ts-node src/job-rgpd-processor.ts",
     "dev:job:cleanup": "ts-node src/job-file-cleanup.ts",
+    "test:vector-search": "ts-node src/scripts/test-vector-search.ts",
+    "test:user-data-search": "ts-node src/scripts/test-user-data-search.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix"
   },
