@@ -1428,7 +1428,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                 searchChunks: {
                   type: "array",
                   items: { type: "string" },
-                  description: "Chunks représentant la situation de l'utilisateur (de son point de vue, par exemple: \"Je me sens...\", \"J'ai besoin...\") ou bien la recherche demandée (par exemple: \"sphorologie\", \"activité douce\", ...)"
+                  description: "Chunks représentant la situation de l'utilisateur (de son point de vue, par exemple: \"Je me sens...\", \"J'ai besoin...\") ou bien la recherche demandée (par exemple: \"sphorologie\", \"activité douce\", \"Marie Dupont\" pour rechercher un hower angel par nom, ...)"
                 },
                 searchType: {
                   type: "string",
