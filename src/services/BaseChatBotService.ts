@@ -1194,7 +1194,7 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
    * @param context Le contexte de la conversation
    * @returns Les résultats de recherche ou null si aucune recherche n'est nécessaire
    */
-  protected async handleIntent(intent: any, context: HowanaContext): Promise<any | null> {
+  protected async handleIntent(_intent: any, _context: HowanaContext): Promise<any | null> {
     // Implémentation par défaut : retourne null (aucune recherche)
     // Les services dérivés peuvent surcharger cette méthode
     return null;
