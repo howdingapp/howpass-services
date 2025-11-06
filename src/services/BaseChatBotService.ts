@@ -187,7 +187,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       context: HowanaContext, 
       userMessage: string,
     ): Promise<T> {
-      return this._generateAIResponse(context, userMessage, false, true, false, undefined, true);
+      return this._generateAIResponse(context, userMessage, false, false, false, undefined, true);
   }
 
   /**
@@ -263,10 +263,21 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
       } else {
         // Comportement normal : message utilisateur + consignes système + outils
+        // Vérifier si des intentResults sont présents pour les ajouter après le message utilisateur
+        const intent = context.metadata?.['intent'];
+        const intentResults = context.metadata?.['intentResults'];
+        
+        let intentContextText = '';
+        if (intent && intentResults) {
+          intentContextText = `\n\n[CONTEXTE INTENT ET RÉSULTATS DE RECHERCHE]\n`;
+          intentContextText += `Intent calculé: ${JSON.stringify(intent, null, 2)}\n`;
+          intentContextText += `Résultats de recherche: ${JSON.stringify(intentResults, null, 2)}`;
+        }
+        
         const baseInputs = [
           {
             role: "user",
-            content: [{ type: "input_text", text: userMessage }],
+            content: [{ type: "input_text", text: userMessage + intentContextText }],
           },
           ...(toolUseGuidance
             ? [{
@@ -1175,5 +1186,17 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
       // Ne pas faire échouer la génération de réponse si l'intent échoue
       return null;
     }
+  }
+
+  /**
+   * Traite l'intent calculé et effectue les recherches nécessaires
+   * @param intent L'intent calculé par computeIntent
+   * @param context Le contexte de la conversation
+   * @returns Les résultats de recherche ou null si aucune recherche n'est nécessaire
+   */
+  protected async handleIntent(intent: any, context: HowanaContext): Promise<any | null> {
+    // Implémentation par défaut : retourne null (aucune recherche)
+    // Les services dérivés peuvent surcharger cette méthode
+    return null;
   }
 }

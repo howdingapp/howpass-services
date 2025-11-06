@@ -50,6 +50,23 @@ export interface RecommendationSummary {
 }
 
 /**
+ * Type pour l'intent de recommandation basé sur le schéma JSON
+ */
+export interface RecommendationIntent {
+  format: 'remote' | 'inPerson' | 'any';
+  intent: 'search_hower_angel' | 'search_activities' | 'search_advices' | 'take_rdv' | 'discover';
+  rdvContext: {
+    type: 'hower_angel' | 'activity' | 'practice';
+    id: string;
+  };
+  searchContext: {
+    searchChunks: string[];
+    searchType: 'activity' | 'hower_angel' | 'practice';
+    searchFormat: 'from_user_situation' | 'from_name_query';
+  };
+}
+
+/**
  * Interface pour les réponses de RecommendationChatBot
  */
 export interface RecommendationChatBotResponse extends ChatBotResponseWithQuickReplies {

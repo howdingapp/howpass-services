@@ -251,6 +251,19 @@ export class IAController {
         ['intent']: intent
       };
       console.log('✅ Intent calculé avec succès et ajouté au contexte');
+      
+      // Traiter l'intent et effectuer les recherches nécessaires
+      const intentResults = await chatBotService['handleIntent'](intent, contextWithIntent);
+      if (intentResults) {
+        console.log('✅ Résultats de recherche obtenus depuis l\'intent:', intentResults);
+        // Ajouter les résultats de recherche dans le contexte
+        contextWithIntent.metadata = {
+          ...contextWithIntent.metadata,
+          ['intentResults']: intentResults
+        };
+      } else {
+        console.log('ℹ️ Aucune recherche nécessaire selon l\'intent');
+      }
     } else {
       console.warn('⚠️ Calcul d\'intent retourné null, génération de la réponse sans intent');
     }
@@ -259,12 +272,15 @@ export class IAController {
     const aiResponse = await chatBotService.generateAIResponse(contextWithIntent, taskData.userMessage);
     const updatedContext = aiResponse.updatedContext;
     
-    // S'assurer que l'intent est préservé dans le contexte mis à jour
+    // S'assurer que l'intent et les intentResults sont préservés dans le contexte mis à jour
     if (intent && contextWithIntent.metadata?.['intent']) {
       updatedContext.metadata = {
         ...updatedContext.metadata,
         ['intent']: contextWithIntent.metadata['intent']
       };
+      if (contextWithIntent.metadata?.['intentResults']) {
+        updatedContext.metadata['intentResults'] = contextWithIntent.metadata['intentResults'];
+      }
     }
     
     // Utiliser le messageId d'OpenAI si disponible, sinon créer un messageId local

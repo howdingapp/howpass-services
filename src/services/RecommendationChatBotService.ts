@@ -5,6 +5,7 @@ import {
   OpenAIJsonSchema,
   RecommendationMessageResponse,
   ExtractedRecommandations,
+  RecommendationIntent,
 } from '../types/chatbot-output';
 import { BaseChatBotService } from './BaseChatBotService';
 
@@ -708,7 +709,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
       if (searchTerm && searchTerm.trim()) {
         try {
-          const activitiesResults = await this.supabaseService.searchActivitiesAndPractices(searchTerm);
+          const activitiesResults = await this.supabaseService.searchActivitiesAndPractices([searchTerm]);
           results.activities = activitiesResults.results.filter((item: any) => item.type === 'activity');
           results.practices = activitiesResults.results.filter((item: any) => item.type === 'practice');
         } catch (error) {
@@ -816,7 +817,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     try {
       console.log(`🔍 Recherche de hower angels pour la situation: ${searchTerm}`);
       
-      const result = await this.supabaseService.searchHowerAngelsByUserSituation(searchTerm);
+      const result = await this.supabaseService.searchHowerAngelsByUserSituation([searchTerm]);
       
       if (!result.success) {
         console.error('❌ Erreur lors de la recherche de hower angels:', result.error);
@@ -1318,6 +1319,71 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
   }
 
   /**
+   * Traite l'intent calculé et effectue les recherches nécessaires selon le searchType
+   */
+  protected override async handleIntent(intent: any, _context: HowanaContext): Promise<any | null> {
+    const typedIntent = intent as RecommendationIntent;
+    
+    if (!typedIntent || !typedIntent.searchContext) {
+      console.log('⚠️ Aucun searchContext dans l\'intent, pas de recherche à effectuer');
+      return null;
+    }
+
+    const { searchChunks, searchType } = typedIntent.searchContext;
+
+    if (!searchChunks || searchChunks.length === 0) {
+      console.log('⚠️ Aucun searchChunks dans l\'intent, pas de recherche à effectuer');
+      return null;
+    }
+
+    console.log(`🔍 Traitement de l'intent avec searchType: ${searchType}, searchChunks: ${searchChunks.length} chunks`);
+
+    try {
+      switch (searchType) {
+        case 'activity':
+          // Recherche d'activités uniquement
+          const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunks);
+          const activities = activitiesResults.results || [];
+          console.log(`✅ ${activities.length} activités trouvées`);
+          return {
+            activities,
+            practices: []
+          };
+
+        case 'practice':
+          // Recherche de pratiques uniquement
+          const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunks);
+          const practices = practicesResults.results || [];
+          console.log(`✅ ${practices.length} pratiques trouvées`);
+          return {
+            activities: [],
+            practices
+          };
+
+        case 'hower_angel':
+          // Recherche de hower angels
+          const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunks);
+          if (!howerAngelsResult.success) {
+            console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
+            return null;
+          }
+          console.log(`✅ ${howerAngelsResult.data?.length || 0} hower angels trouvés`);
+          return {
+            howerAngels: howerAngelsResult.data || [],
+            total: howerAngelsResult.total || 0
+          };
+
+        default:
+          console.warn(`⚠️ searchType non reconnu: ${searchType}, pas de recherche à effectuer`);
+          return null;
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors du traitement de l\'intent:', error);
+      return null;
+    }
+  }
+
+  /**
    * Schéma de sortie pour le calcul d'intent spécifique aux recommandations
    */
   protected getIntentSchema(_context: HowanaContext): ChatBotOutputSchema {
@@ -1332,11 +1398,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               type: "string",
               description: "Format de recommandation préféré par l'utilisateur : 'remote' (à distance/en ligne), 'inPerson' (en personne/présentiel), ou 'any' (les deux formats acceptés)",
               enum: ["remote", "inPerson", "any"]
-            },
-            situationChunks: {
-              type: "array",
-              items: { type: "string" },
-              description: "Morceaux de texte pertinents extraits de la conversation indiquant la situation dans laquelle se trouve l'utilisateur"
             },
             intent: {
               type: "string",
@@ -1364,21 +1425,27 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               type: "object",
               description: "Contexte de recherche pour les requêtes sémantiques",
               properties: {
-                semanticQuery: {
-                  type: "string",
-                  description: "Requête sémantique extraite de la conversation pour la recherche vectorielle d'activités et pratiques"
+                searchChunks: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Chunks représentant la situation de l'utilisateur (de son point de vue, par exemple: \"Je me sens...\", \"J'ai besoin...\") ou bien la recherche demandée (par exemple: \"sphorologie\", \"activité douce\", ...)"
                 },
                 searchType: {
                   type: "string",
                   description: "Type de recherche à effectuer",
-                  enum: ["activité", "hower_angel", "pratique"]
+                  enum: ["activity", "hower_angel", "practice"]
+                },
+                searchFormat: {
+                  type: "string",
+                  description: "Format de recherche : 'from_user_situation' pour une recherche basée sur la situation de l'utilisateur, 'from_name_query' pour une recherche par nom",
+                  enum: ["from_user_situation", "from_name_query"]
                 }
               },
-              required: ["semanticQuery", "searchType"],
+              required: ["searchChunks", "searchType", "searchFormat"],
               additionalProperties: false
             }
           },
-          required: ["format", "situationChunks", "intent", "rdvContext", "searchContext"],
+          required: ["format", "intent", "rdvContext", "searchContext"],
           additionalProperties: false
         },
         strict: true

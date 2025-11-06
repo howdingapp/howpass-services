@@ -821,30 +821,33 @@ export class SupabaseService {
    * Recherche d'activités et pratiques avec recherche vectorielle
    */
   async searchActivitiesAndPractices(
-    searchTerm: string,
+    situationChunks: string[],
   ): Promise<{
     results: any[];
     searchTerm: string;
     total: number;
   }> {
     try {
-      console.log(`🔍 Recherche d'activités et pratiques pour: "${searchTerm}"`);
+      console.log(`🔍 Recherche d'activités et pratiques pour ${situationChunks.length} chunks de situation`);
       
-      // Recherche vectorielle sur les activités (4 meilleures)
-      const activitiesResults = await this.searchVectorSimilarity(
-        'activities',
-        'vector_summary',
-        searchTerm,
-        4
+      // Faire les appels en parallèle pour chaque chunk
+      const searchPromises = situationChunks.map(chunk => 
+        Promise.all([
+          this.searchVectorSimilarity('activities', 'vector_summary', chunk, 4),
+          this.searchVectorSimilarity('practices', 'vector_summary', chunk, 4)
+        ])
       );
       
-      // Recherche vectorielle sur les pratiques (4 meilleures)
-      const practicesResults = await this.searchVectorSimilarity(
-        'practices',
-        'vector_summary',
-        searchTerm,
-        4
-      );
+      const allResults = await Promise.all(searchPromises);
+      
+      // Combiner tous les résultats
+      let activitiesResults: any[] = [];
+      let practicesResults: any[] = [];
+      
+      allResults.forEach(([activities, practices]) => {
+        activitiesResults = [...activitiesResults, ...(activities || [])];
+        practicesResults = [...practicesResults, ...(practices || [])];
+      });
       
       // Mapper les résultats pour ne retourner que les champs utiles à l'IA
       const mapActivity = (r: any) => {
@@ -891,15 +894,143 @@ export class SupabaseService {
       combinedResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
       
       return {
-        results: combinedResults, // Retourner tous les résultats (max 8)
-        searchTerm,
+        results: combinedResults, // Retourner tous les résultats
+        searchTerm: situationChunks.join(' '),
         total: combinedResults.length
       };
     } catch (error) {
       console.error(`❌ Erreur lors de la recherche d'activités et pratiques:`, error);
       return {
         results: [],
-        searchTerm,
+        searchTerm: situationChunks.join(' '),
+        total: 0
+      };
+    }
+  }
+
+  /**
+   * Recherche uniquement des pratiques basée sur des chunks de situation
+   */
+  async searchPracticesBySituationChunks(
+    situationChunks: string[],
+  ): Promise<{
+    results: any[];
+    searchTerm: string;
+    total: number;
+  }> {
+    try {
+      console.log(`🔍 Recherche de pratiques pour ${situationChunks.length} chunks de situation`);
+      
+      // Faire les appels en parallèle pour chaque chunk
+      const searchPromises = situationChunks.map(chunk => 
+        this.searchVectorSimilarity('practices', 'vector_summary', chunk, 4)
+      );
+      
+      const allResults = await Promise.all(searchPromises);
+      
+      // Combiner tous les résultats
+      let practicesResults: any[] = [];
+      allResults.forEach(practices => {
+        practicesResults = [...practicesResults, ...(practices || [])];
+      });
+      
+      // Mapper les résultats
+      const mapPractice = (r: any) => {
+        const relevanceScore = r?.similarity ?? 0.8;
+        return {
+          type: 'practice',
+          id: r?.id,
+          title: r?.title,
+          shortDescription: r?.short_description,
+          longDescription: r?.long_description,
+          benefits: r?.benefits,
+          relevanceScore
+        };
+      };
+
+      const practicesWithType = practicesResults.map(mapPractice);
+      
+      // Trier par score de pertinence
+      practicesWithType.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      
+      return {
+        results: practicesWithType,
+        searchTerm: situationChunks.join(' '),
+        total: practicesWithType.length
+      };
+    } catch (error) {
+      console.error(`❌ Erreur lors de la recherche de pratiques:`, error);
+      return {
+        results: [],
+        searchTerm: situationChunks.join(' '),
+        total: 0
+      };
+    }
+  }
+
+  /**
+   * Recherche uniquement des activités basée sur des chunks de situation
+   */
+  async searchActivitiesBySituationChunks(
+    situationChunks: string[],
+  ): Promise<{
+    results: any[];
+    searchTerm: string;
+    total: number;
+  }> {
+    try {
+      console.log(`🔍 Recherche d'activités pour ${situationChunks.length} chunks de situation`);
+      
+      // Faire les appels en parallèle pour chaque chunk
+      const searchPromises = situationChunks.map(chunk => 
+        this.searchVectorSimilarity('activities', 'vector_summary', chunk, 4)
+      );
+      
+      const allResults = await Promise.all(searchPromises);
+      
+      // Combiner tous les résultats
+      let activitiesResults: any[] = [];
+      allResults.forEach(activities => {
+        activitiesResults = [...activitiesResults, ...(activities || [])];
+      });
+      
+      // Mapper les résultats
+      const mapActivity = (r: any) => {
+        const relevanceScore = r?.similarity ?? 0.8;
+        return {
+          type: 'activity',
+          id: r?.id,
+          title: r?.title,
+          shortDescription: r?.short_description,
+          longDescription: r?.long_description,
+          durationMinutes: r?.duration_minutes,
+          participants: r?.participants,
+          rating: r?.rating,
+          price: r?.price,
+          benefits: r?.benefits,
+          typicalSituations: r?.typical_situations,
+          locationType: r?.location_type,
+          address: r?.address,
+          selectedKeywords: r?.selected_keywords,
+          relevanceScore
+        };
+      };
+
+      const activitiesWithType = activitiesResults.map(mapActivity);
+      
+      // Trier par score de pertinence
+      activitiesWithType.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      
+      return {
+        results: activitiesWithType,
+        searchTerm: situationChunks.join(' '),
+        total: activitiesWithType.length
+      };
+    } catch (error) {
+      console.error(`❌ Erreur lors de la recherche d'activités:`, error);
+      return {
+        results: [],
+        searchTerm: situationChunks.join(' '),
         total: 0
       };
     }
@@ -1379,7 +1510,7 @@ export class SupabaseService {
    * Recherche vectorielle des hower angels par situation utilisateur
    */
   async searchHowerAngelsByUserSituation(
-    searchTerm: string,
+    situationChunks: string[],
     limit: number = 2
   ): Promise<{
     success: boolean;
@@ -1405,15 +1536,20 @@ export class SupabaseService {
     error?: string;
   }> {
     try {
-      console.log(`🔍 Recherche de hower angels pour la situation: "${searchTerm}"`);
+      console.log(`🔍 Recherche de hower angels pour ${situationChunks.length} chunks de situation`);
 
-      // Recherche vectorielle sur le champ typical_situations de la table user_data
-      const howerAngelsResults = await this.searchVectorSimilarity(
-        'user_data',
-        'vector_summary',
-        searchTerm,
-        limit
+      // Faire les appels en parallèle pour chaque chunk
+      const searchPromises = situationChunks.map(chunk => 
+        this.searchVectorSimilarity('user_data', 'vector_summary', chunk, limit)
       );
+      
+      const allResults = await Promise.all(searchPromises);
+      
+      // Combiner tous les résultats
+      let howerAngelsResults: any[] = [];
+      allResults.forEach(results => {
+        howerAngelsResults = [...howerAngelsResults, ...(results || [])];
+      });
 
       // Filtrer les résultats pour ne garder que les hower angels
       const howerAngels = (howerAngelsResults || [])
@@ -1440,7 +1576,7 @@ export class SupabaseService {
       return {
         success: true,
         data: howerAngels,
-        searchTerm,
+        searchTerm: situationChunks.join(' '),
         total: howerAngels.length
       };
 
@@ -1449,7 +1585,7 @@ export class SupabaseService {
       return {
         success: false,
         data: [],
-        searchTerm,
+        searchTerm: situationChunks.join(' '),
         total: 0,
         error: 'Erreur interne du service'
       };
