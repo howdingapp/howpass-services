@@ -1361,7 +1361,7 @@ export class RecommendationChatBotService extends ReWOOChatbotService<Recommenda
               additionalProperties: false
             }
           },
-          required: [],
+          required: ["format", "situationChunks", "intent", "rdvContext"],
           additionalProperties: false
         },
         strict: true
