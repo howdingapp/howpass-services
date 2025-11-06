@@ -1,6 +1,6 @@
 import { BaseChatBotService } from './BaseChatBotService';
 import { HowanaActivityContext, HowanaContext } from '../types/repositories';
-import { IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
+import { IAMessageResponse, ExtractedRecommandations, ChatBotOutputSchema } from '../types/chatbot-output';
 
 export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse> {
   
@@ -375,5 +375,49 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
   protected extractRecommandationsFromToolResponse(_toolId: string, _response: any): ExtractedRecommandations {
     // ActivityChatBotService n'utilise pas d'outils, donc rien à extraire
     return { activities: [], practices: [] };
+  }
+
+  /**
+   * Schéma de sortie pour le calcul d'intent spécifique aux activités
+   */
+  protected getIntentSchema(_context: HowanaContext): ChatBotOutputSchema {
+    return {
+      format: { 
+        type: "json_schema",
+        name: "ActivityIntent",
+        schema: {
+          type: "object",
+          properties: {
+            primaryIntent: {
+              type: "string",
+              description: "Intent principal de l'utilisateur (ex: 'collect_title', 'collect_description', 'collect_keywords', 'collect_benefits', 'collect_typical_situations', 'editing', 'clarification', 'validation')",
+              enum: ["collect_title", "collect_description", "collect_keywords", "collect_benefits", "collect_typical_situations", "editing", "clarification", "validation", "other"]
+            },
+            secondaryIntent: {
+              type: "string",
+              description: "Intent secondaire ou nuance de l'intent principal"
+            },
+            confidence: {
+              type: "number",
+              description: "Niveau de confiance dans l'identification de l'intent (0-1)",
+              minimum: 0,
+              maximum: 1
+            },
+            contextElements: {
+              type: "array",
+              items: { type: "string" },
+              description: "Éléments de contexte mentionnés dans le message (ex: 'practice', 'category', 'benefits', 'target_audience')"
+            },
+            isEditing: {
+              type: "boolean",
+              description: "Indique si l'utilisateur est en train de modifier/améliorer des informations existantes"
+            }
+          },
+          required: ["primaryIntent", "confidence"],
+          additionalProperties: false
+        },
+        strict: true
+      }
+    };
   }
 }

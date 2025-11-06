@@ -1212,6 +1212,49 @@ export class SupabaseService {
   }
 
   /**
+   * Met à jour l'intent de la conversation
+   * @param conversationId ID de la conversation
+   * @param intent L'intent calculé à sauvegarder
+   * @returns Résultat de la mise à jour
+   */
+  async updateIntent(conversationId: string, intent: any): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      console.log(`🎯 Mise à jour de l'intent pour la conversation: ${conversationId}`);
+
+      const { error } = await this.supabase
+        .from('howana_conversations')
+        .update({ 
+          intent: intent,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour de l\'intent:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log(`✅ Intent mis à jour avec succès pour la conversation: ${conversationId}`);
+      return {
+        success: true
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la mise à jour de l\'intent:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
    * Fonction centralisée pour finaliser une tâche IA
    * Met à jour le contexte et la réponse IA en une seule opération
    */

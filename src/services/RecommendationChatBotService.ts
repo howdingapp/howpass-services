@@ -1317,4 +1317,56 @@ export class RecommendationChatBotService extends ReWOOChatbotService<Recommenda
     };
   }
 
+  /**
+   * Schéma de sortie pour le calcul d'intent spécifique aux recommandations
+   */
+  protected getIntentSchema(_context: HowanaContext): ChatBotOutputSchema {
+    return {
+      format: { 
+        type: "json_schema",
+        name: "RecommendationIntent",
+        schema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Format de recommandation préféré par l'utilisateur : 'remote' (à distance/en ligne), 'inPerson' (en personne/présentiel), ou 'any' (les deux formats acceptés)",
+              enum: ["remote", "inPerson", "any"]
+            },
+            situationChunks: {
+              type: "array",
+              items: { type: "string" },
+              description: "Morceaux de texte pertinents extraits de la conversation indiquant la situation dans laquelle se trouve l'utilisateur"
+            },
+            intent: {
+              type: "string",
+              description: "Intent principal de l'utilisateur",
+              enum: ["search_hower_angel", "search_activities", "search_advices", "take_rdv", "discover"]
+            },
+            rdvContext: {
+              type: "object",
+              description: "Contexte de rendez-vous si l'intent est 'take_rdv'",
+              properties: {
+                type: {
+                  type: "string",
+                  description: "Type de rendez-vous",
+                  enum: ["hower_angel", "activity", "practice"]
+                },
+                id: {
+                  type: "string",
+                  description: "ID associé au type de rendez-vous (ID du hower_angel, de l'activité ou de la pratique)"
+                }
+              },
+              required: ["type", "id"],
+              additionalProperties: false
+            }
+          },
+          required: [],
+          additionalProperties: false
+        },
+        strict: true
+      }
+    };
+  }
+
 }

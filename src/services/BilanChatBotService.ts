@@ -189,4 +189,57 @@ export class BilanChatBotService extends RecommendationChatBotService {
    protected override getSchemaByUsedTool(_toolName: string, context: HowanaContext, forceSummaryToolCall:boolean = false): ChatBotOutputSchema {
       return this.getAddMessageOutputSchema(context, forceSummaryToolCall);
    }
+
+  /**
+   * Schéma de sortie pour le calcul d'intent spécifique aux bilans
+   */
+  protected override getIntentSchema(_context: HowanaContext): ChatBotOutputSchema {
+    return {
+      format: { 
+        type: "json_schema",
+        name: "BilanIntent",
+        schema: {
+          type: "object",
+          properties: {
+            primaryIntent: {
+              type: "string",
+              description: "Intent principal de l'utilisateur (ex: 'understand_scores', 'analyze_bilan', 'request_recommendations', 'discuss_improvements', 'ask_about_category', 'clarify_needs', 'other')",
+              enum: ["understand_scores", "analyze_bilan", "request_recommendations", "discuss_improvements", "ask_about_category", "clarify_needs", "other"]
+            },
+            secondaryIntent: {
+              type: "string",
+              description: "Intent secondaire ou nuance de l'intent principal"
+            },
+            confidence: {
+              type: "number",
+              description: "Niveau de confiance dans l'identification de l'intent (0-1)",
+              minimum: 0,
+              maximum: 1
+            },
+            focusArea: {
+              type: "string",
+              description: "Domaine de bien-être sur lequel l'utilisateur se concentre (ex: 'confort_physique', 'equilibre_emotionnel', 'qualite_sommeil', 'niveau_energie', 'douleurs', 'other')",
+              enum: ["confort_physique", "equilibre_emotionnel", "qualite_sommeil", "niveau_energie", "douleurs", "other"]
+            },
+            mentionedScores: {
+              type: "array",
+              items: { type: "string" },
+              description: "Scores de bilan mentionnés dans le message (ex: 'confortPhysique', 'equilibreEmotionnel', 'qualiteSommeil', 'niveauEnergie')"
+            },
+            wantsRecommendations: {
+              type: "boolean",
+              description: "Indique si l'utilisateur demande explicitement des recommandations"
+            },
+            needsClarification: {
+              type: "boolean",
+              description: "Indique si l'utilisateur a besoin de clarifications sur son bilan"
+            }
+          },
+          required: ["primaryIntent", "confidence"],
+          additionalProperties: false
+        },
+        strict: true
+      }
+    };
+  }
 }

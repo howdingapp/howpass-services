@@ -194,6 +194,39 @@ export class IAController {
   }
 
   /**
+   * Traiter la génération d'une première réponse IA
+   */
+  private async processGenerateFirstResponse(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
+    console.log(`👋 Génération d'une première réponse IA pour: ${taskData.conversationId}`);
+    
+    // Obtenir le service de chatbot approprié
+    const chatBotService = this.getChatBotService(context);
+    
+    const firstResponseResult = await chatBotService.generateFirstResponse(context);
+    
+    // Mettre à jour le contexte avec les nouvelles informations
+    const updatedContext = { ...context };
+    updatedContext.previousCallId = firstResponseResult.messageId;
+    updatedContext.previousResponse = firstResponseResult.response;
+
+    // Créer l'objet de réponse IA
+    const iaResponse = {
+      ...firstResponseResult,
+      messageId: firstResponseResult.messageId || `msg_${Date.now()}`,
+      type: 'first_response',
+      recommendations: context.recommendations || { activities: [], practices: [] },
+      hasRecommendations: context.hasRecommendations || false
+    };
+
+    console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
+
+    return {
+      updatedContext,
+      iaResponse
+    };
+  }
+  
+  /**
    * Traiter la génération d'une réponse IA
    */
   private async processGenerateResponse(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
@@ -206,7 +239,22 @@ export class IAController {
     // Obtenir le service de chatbot approprié
     const chatBotService = this.getChatBotService(context);
     
-    // Générer la réponse IA
+    // Lancer le calcul d'intent en arrière-plan (fire and forget)
+    chatBotService.computeIntent(context, taskData.userMessage)
+      .then((intent) => {
+        if (intent) {
+          console.log('🎯 Intent calculé avec succès, mise à jour en base de données');
+          // Sauvegarder l'intent en base de données (ne bloque pas si ça échoue)
+          return this.supabaseService.updateIntent(taskData.conversationId, intent);
+        }
+        console.warn('⚠️ Calcul d\'intent retourné null');
+        return undefined;
+      })
+      .catch((error) => {
+        console.error('❌ Erreur lors du calcul ou de la sauvegarde de l\'intent (non bloquant):', error);
+      });
+    
+    // Générer la réponse IA (on n'attend pas le calcul d'intent)
     const aiResponse = await chatBotService.generateAIResponse(context, taskData.userMessage);
     const updatedContext = aiResponse.updatedContext;
     
@@ -280,41 +328,6 @@ export class IAController {
       iaResponse
     };
   }
-
-  /**
-   * Traiter la génération d'une première réponse IA
-   */
-  private async processGenerateFirstResponse(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
-    console.log(`👋 Génération d'une première réponse IA pour: ${taskData.conversationId}`);
-    
-    // Obtenir le service de chatbot approprié
-    const chatBotService = this.getChatBotService(context);
-    
-    const firstResponseResult = await chatBotService.generateFirstResponse(context);
-    
-    // Mettre à jour le contexte avec les nouvelles informations
-    const updatedContext = { ...context };
-    updatedContext.previousCallId = firstResponseResult.messageId;
-    updatedContext.previousResponse = firstResponseResult.response;
-
-    // Créer l'objet de réponse IA
-    const iaResponse = {
-      ...firstResponseResult,
-      messageId: firstResponseResult.messageId || `msg_${Date.now()}`,
-      type: 'first_response',
-      recommendations: context.recommendations || { activities: [], practices: [] },
-      hasRecommendations: context.hasRecommendations || false
-    };
-
-    console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
-
-    return {
-      updatedContext,
-      iaResponse
-    };
-  }
-
-
 
   /**
    * Traiter la génération d'un échange non fini

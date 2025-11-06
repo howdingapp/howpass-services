@@ -588,6 +588,12 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   protected abstract getStartConversationOutputSchema(context: HowanaContext): ChatBotOutputSchema;
   
   /**
+   * Schéma de sortie pour le calcul d'intent (null si pas de schéma spécifique)
+   * Chaque service doit définir sa propre structure d'intent
+   */
+  protected abstract getIntentSchema(context: HowanaContext): ChatBotOutputSchema;
+  
+  /**
    * Schéma de sortie pour addMessage (par défaut avec un champ response obligatoire)
    */
   protected getFirstMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
@@ -1091,5 +1097,83 @@ ${practicesList}`;
 
     return context;
 
+  }
+
+  /**
+   * Calcule l'intent de la conversation en parallèle de la génération de réponse
+   * @param context Le contexte de la conversation
+   * @param userMessage Le dernier message de l'utilisateur
+   * @returns L'intent calculé selon le schéma défini par le service
+   */
+  public async computeIntent(context: HowanaContext, userMessage: string): Promise<any> {
+    try {
+      console.log('🎯 Calcul de l\'intent pour la conversation:', context.id);
+      
+      // Récupérer le schéma d'intent spécifique au service
+      const intentSchema = this.getIntentSchema(context);
+      
+      if (!intentSchema) {
+        console.warn('⚠️ Aucun schéma d\'intent défini pour ce service, retour d\'un intent vide');
+        return null;
+      }
+
+      // Construire le prompt pour l'analyse d'intent
+      const conversationText = (context.messages || [])
+        .map((msg: any) => `${msg.type === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`)
+        .join('\n');
+      
+      const intentPrompt = `Analyse cette conversation et le dernier message de l'utilisateur pour déterminer l'intent actuel de la conversation.
+
+CONVERSATION:
+${conversationText}
+
+DERNIER MESSAGE UTILISATEUR:
+${userMessage}
+
+Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversation et son dernier message.`;
+
+      // Utiliser l'API responses pour calculer l'intent
+      const result = await this.openai.responses.create({
+        model: this.AI_MODEL,
+        input: [
+          {
+            role: "user",
+            content: [{ type: "input_text", text: intentPrompt }],
+          },
+        ],
+        ...(intentSchema && { text: intentSchema })
+      });
+
+      // Extraire le texte de la réponse
+      const messageOutput = result.output.find((output: any) => output.type === "message") as any;
+      let resultText = "";
+      
+      if (messageOutput?.content?.[0]) {
+        const content = messageOutput.content[0];
+        if ('text' in content) {
+          resultText = content.text;
+        }
+      }
+
+      if (!resultText) {
+        console.warn('⚠️ Aucune réponse générée pour l\'intent');
+        return null;
+      }
+
+      // Parser le JSON de l'intent
+      try {
+        const parsedIntent = JSON.parse(resultText);
+        console.log('✅ Intent calculé avec succès:', parsedIntent);
+        return parsedIntent;
+      } catch (parseError) {
+        console.error('❌ Erreur de parsing JSON de l\'intent:', parseError);
+        return null;
+      }
+
+    } catch (error) {
+      console.error('❌ Erreur lors du calcul de l\'intent:', error);
+      // Ne pas faire échouer la génération de réponse si l'intent échoue
+      return null;
+    }
   }
 }
