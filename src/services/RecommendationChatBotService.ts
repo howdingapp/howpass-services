@@ -1359,9 +1359,26 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               },
               required: ["type", "id"],
               additionalProperties: false
+            },
+            searchContext: {
+              type: "object",
+              description: "Contexte de recherche pour les requêtes sémantiques",
+              properties: {
+                semanticQuery: {
+                  type: "string",
+                  description: "Requête sémantique extraite de la conversation pour la recherche vectorielle d'activités et pratiques"
+                },
+                searchType: {
+                  type: "string",
+                  description: "Type de recherche à effectuer",
+                  enum: ["activité", "hower_angel", "pratique"]
+                }
+              },
+              required: ["semanticQuery", "searchType"],
+              additionalProperties: false
             }
           },
-          required: ["format", "situationChunks", "intent", "rdvContext"],
+          required: ["format", "situationChunks", "intent", "rdvContext", "searchContext"],
           additionalProperties: false
         },
         strict: true
