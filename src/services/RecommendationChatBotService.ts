@@ -1400,11 +1400,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         schema: {
           type: "object",
           properties: {
-            format: {
-              type: "string",
-              description: "Format de recommandation préféré par l'utilisateur : 'remote' (à distance/en ligne), 'inPerson' (en personne/présentiel), ou 'any' (les deux formats acceptés)",
-              enum: ["remote", "inPerson", "any"]
-            },
             intent: {
               type: "string",
               description: "Intent principal de l'utilisateur",
@@ -1422,9 +1417,14 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                 id: {
                   type: "string",
                   description: "ID associé au type de rendez-vous (ID du hower_angel, de l'activité ou de la pratique)"
+                },
+                format: {
+                  type: "string",
+                  description: "Format de recommandation préféré par l'utilisateur : 'remote' (à distance/en ligne), 'inPerson' (en personne/présentiel), ou 'any' (les deux formats acceptés)",
+                  enum: ["remote", "inPerson", "any"]
                 }
               },
-              required: ["type", "id"],
+              required: ["type", "id", "format"],
               additionalProperties: false
             },
             searchContext: {
@@ -1451,7 +1451,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               additionalProperties: false
             }
           },
-          required: ["format", "intent"],
+          required: ["intent"],
           additionalProperties: false
         },
         strict: true
