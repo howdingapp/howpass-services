@@ -1409,7 +1409,13 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           properties: {
             intent: {
               type: "string",
-              description: "Intent principal de l'utilisateur",
+              description: `Intent principal de l'utilisateur. Valeurs possibles:
+- "search_hower_angel": Demande explicite d'information sur une personne ou bien sur une catégorie de personne
+- "search_activities": Recherche d'une activité particulière ou un type d'activité
+- "search_advices": Recherche de conseil explicite sur une problématique
+- "take_rdv": Demande explicite de prendre un rendez-vous avec une personne précise ou une activité (déduite du contexte)
+- "discover": Demande de découverte de nouveaux horizons
+- "know_more": Demande plus d'information par rapport à un précédent résultat de la conversation`,
               enum: ["search_hower_angel", "search_activities", "search_advices", "take_rdv", "discover", "know_more"]
             },
             rdvContext: {
