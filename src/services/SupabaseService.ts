@@ -1092,7 +1092,6 @@ export class SupabaseService {
         question: r?.question,
         answer: r?.reponse,
         keywords: r?.keywords,
-        typicalSituation: r?.typical_situation,
         faqType: r?.type,
         active: r?.active,
         relevanceScore: r?.similarity ?? 0.8
@@ -1134,7 +1133,6 @@ export class SupabaseService {
       rating?: number;
       price?: number;
       benefits?: any;
-      typicalSituations?: string;
       locationType?: string;
       address?: any;
       selectedKeywords?: any;
@@ -1172,7 +1170,6 @@ export class SupabaseService {
               rating,
               price,
               benefits,
-              typical_situations,
               location_type,
               address,
               selected_keywords,
@@ -1210,7 +1207,6 @@ export class SupabaseService {
           rating: activity?.rating,
           price: activity?.price,
           benefits: activity?.benefits,
-          typicalSituations: activity?.typical_situations,
           locationType: activity?.location_type,
           address: activity?.address,
           selectedKeywords: activity?.selected_keywords,
@@ -1698,6 +1694,7 @@ export class SupabaseService {
 
   /**
    * Recherche vectorielle des hower angels par situation utilisateur
+   * Utilise match_user_data pour récupérer les données enrichies (activités, spécialités transformées)
    */
   async searchHowerAngelsByUserSituation(
     situationChunks: string[],
@@ -1710,15 +1707,31 @@ export class SupabaseService {
       firstName?: string;
       lastName?: string;
       email?: string;
-      specialties?: {
-        choice: Array<{
-          id: string;
-          name: string;
-        }>;
-      };
+      specialties?: Array<{
+        id: string;
+        title: string;
+        shortDescription?: string;
+      }>;
       experience?: string;
-      typicalSituations?: string;
       profile: string;
+      activities?: Array<{
+        id: string;
+        title: string;
+        shortDescription?: string;
+        longDescription?: string;
+        durationMinutes?: number;
+        participants?: number;
+        rating?: number;
+        price?: number;
+        benefits?: any;
+        locationType?: string;
+        address?: any;
+        selectedKeywords?: any;
+        presentationImagePublicUrl?: string;
+        presentationVideoPublicUrl?: string;
+        status?: string;
+        isActive?: boolean;
+      }>;
       relevanceScore: number;
     }>;
     searchTerm: string;
@@ -1728,10 +1741,26 @@ export class SupabaseService {
     try {
       console.log(`🔍 Recherche de hower angels pour ${situationChunks.length} chunks de situation`);
 
-      // Faire les appels en parallèle pour chaque chunk
-      const searchPromises = situationChunks.map(chunk => 
-        this.searchVectorSimilarity('user_data', 'vector_summary', chunk, limit)
-      );
+      // Faire les appels en parallèle pour chaque chunk en utilisant directement match_user_data
+      const searchPromises = situationChunks.map(async (chunk) => {
+        // Générer l'embedding pour la requête
+        const queryEmbedding = await this.embeddingService.generateEmbedding(chunk);
+        
+        // Appeler directement match_user_data via RPC pour récupérer les données enrichies
+        const { data, error } = await this.supabase
+          .rpc('match_user_data', {
+            query_embedding: queryEmbedding,
+            match_threshold: 0.7,
+            match_count: limit * 2 // Chercher plus de résultats pour avoir assez après déduplication
+          });
+
+        if (error) {
+          console.error(`❌ Erreur lors de l'appel à match_user_data pour le chunk "${chunk}":`, error);
+          return [];
+        }
+
+        return data || [];
+      });
       
       const allResults = await Promise.all(searchPromises);
       
@@ -1741,32 +1770,60 @@ export class SupabaseService {
         howerAngelsResults = [...howerAngelsResults, ...(results || [])];
       });
 
-      // Filtrer les résultats pour ne garder que les hower angels
-      const howerAngels = (howerAngelsResults || [])
-        .filter((user: any) => user.profil === 'hower_angel')
+      // Dédupliquer par ID en gardant le meilleur score de similarité
+      const uniqueHowerAngels = new Map<string, any>();
+      howerAngelsResults.forEach((user: any) => {
+        const existing = uniqueHowerAngels.get(user.id);
+        if (!existing || (user.similarity > existing.similarity)) {
+          uniqueHowerAngels.set(user.id, user);
+        }
+      });
+
+      // Mapper les résultats avec les données enrichies de match_user_data
+      const howerAngels = Array.from(uniqueHowerAngels.values())
         .map((user: any) => ({
           id: user.id,
           userId: user.user_id,
           firstName: user.first_name,
           lastName: user.last_name,
           email: user.email,
-          specialties: user.specialties, // Maintenant avec les noms des pratiques
+          specialties: user.specialties || [], // Tableau d'objets {id, title, short_description} depuis match_user_data
           experience: user.experience,
-          typicalSituations: user.typical_situations,
           profile: user.profil,
+          activities: (user.activities || []).map((activity: any) => ({
+            id: activity.id,
+            title: activity.title,
+            shortDescription: activity.short_description,
+            longDescription: activity.long_description,
+            durationMinutes: activity.duration_minutes,
+            participants: activity.participants,
+            rating: activity.rating,
+            price: activity.price,
+            benefits: activity.benefits,
+            locationType: activity.location_type,
+            address: activity.address,
+            selectedKeywords: activity.selected_keywords,
+            presentationImagePublicUrl: activity.presentation_image_public_url,
+            presentationVideoPublicUrl: activity.presentation_video_public_url,
+            status: activity.status,
+            isActive: activity.is_active
+          })),
           relevanceScore: user.similarity
         }));
 
       // Trier par score de pertinence
       howerAngels.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-      console.log(`✅ ${howerAngels.length} hower angels trouvés`);
+      // Limiter au nombre demandé
+      const limitedResults = howerAngels.slice(0, limit);
+
+      console.log(`✅ ${limitedResults.length} hower angels trouvés`);
 
       return {
         success: true,
-        data: howerAngels,
+        data: limitedResults,
         searchTerm: situationChunks.join(' '),
-        total: howerAngels.length
+        total: limitedResults.length
       };
 
     } catch (error) {
