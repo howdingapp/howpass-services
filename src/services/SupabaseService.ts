@@ -23,6 +23,7 @@ export interface AIResponse {
   message_type: string;
   next_response_id?: string | null;
   cost?: number | null; // Nombre de tokens utilisés
+  user_input_text?: string | null; // Message utilisateur qui a déclenché cette réponse
   metadata?: Record<string, any>;
   created_at?: string;
 }
@@ -370,6 +371,7 @@ export class SupabaseService {
     metadata?: Record<string, any>;
     next_response_id?: string | null;
     cost?: number | null; // Nombre de tokens utilisés
+    user_input_text?: string | null; // Message utilisateur qui a déclenché cette réponse
   }): Promise<{
     success: boolean;
     data?: AIResponse;
@@ -398,6 +400,11 @@ export class SupabaseService {
       // Ajouter cost (nombre de tokens) si fourni
       if (updateData.cost !== undefined) {
         updatePayload.cost = updateData.cost;
+      }
+
+      // Ajouter user_input_text si fourni
+      if (updateData.user_input_text !== undefined) {
+        updatePayload.user_input_text = updateData.user_input_text;
       }
 
       const { data, error } = await this.supabase

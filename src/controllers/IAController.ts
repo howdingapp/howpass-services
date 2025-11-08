@@ -184,6 +184,7 @@ export class IAController {
         response_text: JSON.stringify(iaResponse),
         next_response_id: null, // Dernière réponse, pas de suivant
         cost: tokens, // Nombre de tokens utilisés
+        user_input_text: taskData.userMessage || null, // Message utilisateur qui a déclenché cette réponse
         metadata: {
           source: 'ai',
           model: chatBotService.getAIModel(),
@@ -303,6 +304,7 @@ export class IAController {
         response_text: JSON.stringify(iaResponse),
         next_response_id: nextResponseId,
         cost: tokens, // Nombre de tokens utilisés
+        user_input_text: taskData.userMessage || null, // Message utilisateur qui a déclenché cette réponse
         metadata: {
           source: 'ai',
           model: chatBotService.getAIModel(),
