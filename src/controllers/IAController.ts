@@ -414,11 +414,12 @@ export class IAController {
       console.log('✅ Intent calculé avec succès et ajouté au contexte');
     } else {
       console.warn('⚠️ Calcul d\'intent retourné null, génération de la réponse sans intent');
-      // Mettre l'intent et intentCost à null dans le contexte
+      // Mettre l'intent, intentCost et intentContextText à null dans le contexte
       contextWithIntent.metadata = {
         ...contextWithIntent.metadata,
         ['intent']: null,
-        ['intentCost']: null
+        ['intentCost']: null,
+        ['intentContextText']: null
       };
     }
     

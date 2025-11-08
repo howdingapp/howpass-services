@@ -262,7 +262,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       // Déterminer les paramètres d'appel à l'IA selon le contexte
       let apiCallParams: any;
       
-      console.log("Heve toolsResults: ", toolResults && toolResults.length > 0);
+      console.log("Have toolsResults: ", toolResults && toolResults.length > 0);
 
       if (toolResults && toolResults.length > 0) {
         // Enchaînement : utiliser uniquement les résultats d'outils
@@ -276,17 +276,24 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
       } else {
         // Comportement normal : message utilisateur + consignes système + outils
-        // Vérifier si des intentResults sont présents pour les ajouter après le message utilisateur
+        // Vérifier si des intentResults sont présents pour les ajouter aux métadonnées
         const intent = context.metadata?.['intent'];
         const intentResults = context.metadata?.['intentResults'];
         
+        // Construire le texte de contexte intent et l'ajouter au message ET dans les métadonnées pour le tracing
         let intentContextText = '';
         if (intent && intentResults) {
-          intentContextText = `\n\n[CONTEXTE INTENT ET RÉSULTATS DE RECHERCHE]\n`;
-          intentContextText += `Intent calculé: ${JSON.stringify(intent, null, 2)}\n`;
-          intentContextText += `Résultats de recherche: ${JSON.stringify(intentResults, null, 2)}`;
+          intentContextText = `\n\n[CONTEXTE INTENT ET RÉSULTATS DE RECHERCHE]\n` +
+            `Intent calculé: ${JSON.stringify(intent, null, 2)}\n` +
+            `Résultats de recherche: ${JSON.stringify(intentResults, null, 2)}`;
+          
+          // Ajouter dans les métadonnées pour le tracing
+          context.metadata = {
+            ...context.metadata,
+            ['intentContextText']: intentContextText
+          };
         }
-        
+
         const baseInputs = [
           {
             role: "user",

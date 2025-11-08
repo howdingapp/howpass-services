@@ -1703,8 +1703,7 @@ export class SupabaseService {
       howerAngels.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
       console.log(`✅ ${howerAngels.length} hower angels trouvés`);
-      console.log(`📋 Exemple de spécialités avec noms:`, howerAngels[0]?.specialties);
-      
+
       return {
         success: true,
         data: howerAngels,
