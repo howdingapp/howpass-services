@@ -31,75 +31,29 @@ class VectorSearchTester {
   }
 
   /**
-   * Récupère les données complètes des pratiques (incluant typical_situation) via Supabase
-   */
-  async getPracticeDetails(practiceIds: string[]): Promise<Map<string, any>> {
-    if (practiceIds.length === 0) {
-      return new Map();
-    }
-
-    try {
-      const supabase = this.supabaseService.getSupabaseClient();
-      const { data, error } = await supabase
-        .from('practices')
-        .select('id, title, typical_situation')
-        .in('id', practiceIds);
-
-      if (error) {
-        console.error('❌ Erreur lors de la récupération des détails:', error);
-        return new Map();
-      }
-
-      const detailsMap = new Map();
-      (data || []).forEach((practice: any) => {
-        detailsMap.set(practice.id, {
-          title: practice.title,
-          typical_situation: practice.typical_situation
-        });
-      });
-
-      return detailsMap;
-    } catch (error: any) {
-      console.error(`❌ Erreur lors de la récupération des détails: ${error.message}`);
-      return new Map();
-    }
-  }
-
-  /**
    * Recherche de pratiques avec une phrase en français et retourne les résultats formatés
    */
   async searchPracticesWithDetails(searchTerm: string, limit: number = 4): Promise<PracticeResult[]> {
     try {
-      // Recherche vectorielle
-      const results = await this.supabaseService.searchVectorSimilarity(
-        'practices',
-        'vector_summary',
-        searchTerm,
-        limit
+      // Recherche vectorielle avec withMatchInfos pour récupérer typical_situations
+      const searchResult = await this.supabaseService.searchPracticesBySituationChunks(
+        [searchTerm],
+        true // withMatchInfos = true pour récupérer typicalSituations
       );
 
-      if (results.length === 0) {
+      if (!searchResult.results || searchResult.results.length === 0) {
         return [];
       }
 
-      // Récupérer les IDs des pratiques trouvées (filtrer les undefined)
-      const practiceIds = results.map((p: any) => p.id).filter((id: any): id is string => id !== undefined && id !== null);
-
-      // Récupérer les détails complets via Supabase
-      const detailsMap = await this.getPracticeDetails(practiceIds);
-
-      // Combiner les résultats (filtrer les pratiques sans ID)
-      const formattedResults: PracticeResult[] = results
-        .filter((practice: any) => practice.id)
-        .map((practice: any) => {
-          const details = detailsMap.get(practice.id) || {};
-          return {
-            id: practice.id,
-            similarity: practice.similarity || 0,
-            title: details.title || practice.title || 'Sans titre',
-            typical_situation: details.typical_situation || null
-          };
-        });
+      // Mapper les résultats au format attendu
+      const formattedResults: PracticeResult[] = searchResult.results
+        .slice(0, limit) // Limiter au nombre demandé
+        .map((practice: any) => ({
+          id: practice.id,
+          similarity: practice.relevanceScore || 0,
+          title: practice.title || 'Sans titre',
+          typical_situation: practice.typicalSituations || null
+        }));
 
       return formattedResults;
     } catch (error: any) {

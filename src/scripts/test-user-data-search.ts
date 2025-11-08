@@ -35,83 +35,33 @@ class UserDataVectorSearchTester {
   }
 
   /**
-   * Récupère les données complètes des user_data via Supabase
-   */
-  async getUserDataDetails(userDataIds: string[]): Promise<Map<string, any>> {
-    if (userDataIds.length === 0) {
-      return new Map();
-    }
-
-    try {
-      const supabase = this.supabaseService.getSupabaseClient();
-      const { data, error } = await supabase
-        .from('user_data')
-        .select('id, first_name, last_name, email, user_id, data_folder, summary')
-        .in('id', userDataIds);
-
-      if (error) {
-        console.error('❌ Erreur lors de la récupération des détails:', error);
-        return new Map();
-      }
-
-      const detailsMap = new Map();
-      (data || []).forEach((userData: any) => {
-        detailsMap.set(userData.id, {
-          first_name: userData.first_name,
-          last_name: userData.last_name,
-          email: userData.email,
-          user_id: userData.user_id,
-          data_folder: userData.data_folder,
-          summary: userData.summary
-        });
-      });
-
-      return detailsMap;
-    } catch (error: any) {
-      console.error(`❌ Erreur lors de la récupération des détails: ${error.message}`);
-      return new Map();
-    }
-  }
-
-  /**
    * Recherche de user_data avec une phrase en français et retourne les résultats formatés
    */
   async searchUserDataWithDetails(searchTerm: string, limit: number = 10): Promise<UserDataResult[]> {
     try {
-      // Recherche vectorielle
-      const results = await this.supabaseService.searchVectorSimilarity(
-        'user_data',
-        'vector_summary',
-        searchTerm,
-        limit
+      // Recherche vectorielle avec withMatchInfos pour récupérer typical_situations
+      const searchResult = await this.supabaseService.searchHowerAngelsByUserSituation(
+        [searchTerm],
+        limit,
+        true // withMatchInfos = true pour récupérer typicalSituations
       );
 
-      if (results.length === 0) {
+      if (!searchResult.success || !searchResult.data || searchResult.data.length === 0) {
         return [];
       }
 
-      // Récupérer les IDs des user_data trouvés (filtrer les undefined)
-      const userDataIds = results.map((u: any) => u.id).filter((id: any): id is string => id !== undefined && id !== null);
-
-      // Récupérer les détails complets via Supabase
-      const detailsMap = await this.getUserDataDetails(userDataIds);
-
-      // Combiner les résultats (filtrer les user_data sans ID)
-      const formattedResults: UserDataResult[] = results
-        .filter((userData: any) => userData.id)
-        .map((userData: any) => {
-          const details = detailsMap.get(userData.id) || {};
-          return {
-            id: userData.id,
-            similarity: userData.similarity || 0,
-            first_name: details.first_name || userData.first_name || null,
-            last_name: details.last_name || userData.last_name || null,
-            email: details.email || userData.email || null,
-            user_id: details.user_id || userData.user_id || null,
-            data_folder: details.data_folder || userData.data_folder || null,
-            summary: details.summary || userData.summary || null
-          };
-        });
+      // Mapper les résultats au format attendu
+      const formattedResults: UserDataResult[] = searchResult.data
+        .map((user: any) => ({
+          id: user.id,
+          similarity: user.relevanceScore || 0,
+          first_name: user.firstName || null,
+          last_name: user.lastName || null,
+          email: user.email || null,
+          user_id: user.userId || null,
+          data_folder: null, // Non disponible dans searchHowerAngelsByUserSituation
+          summary: null // Non disponible dans searchHowerAngelsByUserSituation
+        }));
 
       return formattedResults;
     } catch (error: any) {
