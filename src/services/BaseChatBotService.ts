@@ -1245,7 +1245,7 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
       // Parser le JSON de l'intent
       try {
         const parsedIntent = JSON.parse(resultText);
-        console.log('✅ Intent calculé avec succès:', parsedIntent);
+        console.log('✅ Intent calculé avec succès:', JSON.stringify(parsedIntent, null, 2));
         return { intent: parsedIntent, intentCost: intentCost };
       } catch (parseError) {
         console.error('❌ Erreur de parsing JSON de l\'intent:', parseError);
