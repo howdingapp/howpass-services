@@ -22,6 +22,7 @@ export interface AIResponse {
   response_text: string;
   message_type: string;
   next_response_id?: string | null;
+  cost?: number | null; // Nombre de tokens utilisés
   metadata?: Record<string, any>;
   created_at?: string;
 }
@@ -368,6 +369,7 @@ export class SupabaseService {
     response_text?: string;
     metadata?: Record<string, any>;
     next_response_id?: string | null;
+    cost?: number | null; // Nombre de tokens utilisés
   }): Promise<{
     success: boolean;
     data?: AIResponse;
@@ -391,6 +393,11 @@ export class SupabaseService {
       // Ajouter next_response_id si fourni
       if (updateData.next_response_id !== undefined) {
         updatePayload.next_response_id = updateData.next_response_id;
+      }
+
+      // Ajouter cost (nombre de tokens) si fourni
+      if (updateData.cost !== undefined) {
+        updatePayload.cost = updateData.cost;
       }
 
       const { data, error } = await this.supabase
@@ -1355,6 +1362,107 @@ export class SupabaseService {
       return {
         success: false,
         error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Mettre à jour le total_cost d'une conversation (somme des tokens)
+   * @param conversationId ID de la conversation
+   * @param tokensToAdd Nombre de tokens à ajouter au total_cost existant
+   */
+  async updateConversationTotalCost(conversationId: string, tokensToAdd: number): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      console.log(`💰 Mise à jour du total_cost pour la conversation: ${conversationId}, tokens à ajouter: ${tokensToAdd}`);
+
+      // Récupérer le total_cost actuel
+      const { data: conversation, error: fetchError } = await this.supabase
+        .from('howana_conversations')
+        .select('total_cost')
+        .eq('id', conversationId)
+        .single();
+
+      if (fetchError) {
+        console.error('❌ Erreur lors de la récupération de la conversation:', fetchError);
+        return {
+          success: false,
+          error: fetchError.message
+        };
+      }
+
+      const currentTotalCost = conversation?.total_cost || 0;
+      const newTotalCost = currentTotalCost + tokensToAdd;
+
+      // Mettre à jour le total_cost
+      const { error } = await this.supabase
+        .from('howana_conversations')
+        .update({ 
+          total_cost: newTotalCost,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour du total_cost:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log(`✅ Total_cost mis à jour: ${currentTotalCost} + ${tokensToAdd} = ${newTotalCost}`);
+      return {
+        success: true
+      };
+    } catch (error) {
+      console.error('❌ Erreur lors de la mise à jour du total_cost:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erreur inconnue'
+      };
+    }
+  }
+
+  /**
+   * Mettre à jour le status d'une conversation
+   * @param conversationId ID de la conversation
+   * @param status Nouveau status ('active' | 'completed' | 'expired')
+   */
+  async updateConversationStatus(conversationId: string, status: 'active' | 'completed' | 'expired'): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      console.log(`🔄 Mise à jour du status de la conversation: ${conversationId} -> ${status}`);
+
+      const { error } = await this.supabase
+        .from('howana_conversations')
+        .update({ 
+          status: status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour du status:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log(`✅ Status de la conversation mis à jour: ${status}`);
+      return {
+        success: true
+      };
+    } catch (error) {
+      console.error('❌ Erreur lors de la mise à jour du status:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erreur inconnue'
       };
     }
   }

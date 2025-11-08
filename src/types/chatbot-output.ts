@@ -100,6 +100,7 @@ export type ChatBotOutputSchema = OpenAIJsonSchema | null;
  * Type de base pour toutes les réponses IA avec les champs communs
  */
 export interface IAMessageResponse {
+  cost?: number | null; // Nombre de tokens utilisés
   messageId: string;
   response: string;
   extractedData?: ExtractedRecommandations;

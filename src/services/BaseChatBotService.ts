@@ -3,6 +3,7 @@ import { SupabaseService } from './SupabaseService';
 import { StartConversationRequest, OpenAIToolsDescription } from '../types/conversation';
 import { HowanaContext } from '../types/repositories';
 import { ChatBotOutputSchema, IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
+import type { Response } from 'openai/resources/responses/responses';
 import OpenAI from 'openai';
 
 export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessageResponse> {
@@ -131,6 +132,12 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       const messageOutput = result.output.find(output => output.type === "message");
       const messageId = result.id;
       
+      // Extraire le nombre de tokens depuis la réponse OpenAI
+      const totalTokens = result.usage?.total_tokens || null;
+      if (totalTokens) {
+        console.log(`💰 Nombre de tokens utilisés: ${totalTokens}`);
+      }
+      
       // Extraire le texte de la réponse
        let resultText = "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
        if (messageOutput?.content?.[0]) {
@@ -155,7 +162,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
              ...parsedResponse,
              messageId,
              updatedContext: context,
-           } as T;
+             cost: totalTokens, // Stocker le nombre de tokens dans le champ cost
+             haveNext: false,
+           } as unknown as T;
          } catch (parseError) {
            console.warn('⚠️ Erreur de parsing JSON, fallback vers réponse simple:', parseError);
          }
@@ -169,14 +178,18 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
          response: resultText, 
          messageId,
          updatedContext: context,
-       } as T;  
+         cost: totalTokens, // Stocker le nombre de tokens dans le champ cost
+         haveNext: false,
+       } as unknown as T;  
          } catch (error) {
        console.error('❌ Erreur lors de la génération de la première réponse:', error);
        return { 
          response: "Bonjour ! Je suis Howana, votre assistant personnel. Comment puis-je vous aider aujourd'hui ?",
          messageId: "error",
          updatedContext: context,
-       } as T;
+         cost: null, // Pas de tokens en cas d'erreur
+         haveNext: false,
+       } as unknown as T;
     }
   }
 
@@ -307,6 +320,10 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
       const messageId = result.id;
 
+      // Extraire le coût (nombre de tokens) de cet appel
+      const currentCallTokens = result.usage?.total_tokens ?? 0;
+      let totalTokens = currentCallTokens;
+
       // Vérifier si l'IA demande l'exécution d'un outil (seulement si les outils sont autorisés)
       const toolCalls = toolsAllowed ? result.output.filter(output => output.type === "function_call") : [];
       let extractedData:ExtractedRecommandations|undefined = undefined;
@@ -357,15 +374,21 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
                 )
               );
               
+              // Cumuler le coût de l'appel récursif
+              const recursiveTokens = finalResponse.cost ?? 0;
+              totalTokens += recursiveTokens;
+              
               console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
               console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
+              console.log(`💰 Coût cumulé: ${currentCallTokens} + ${recursiveTokens} = ${totalTokens} tokens`);
 
               return {
                 ...finalResponse,
                 response: finalResponse.response,
                 messageId: finalResponse.messageId,
                 extractedData: this.mergeExtractedData(extractedData, finalResponse.extractedData),
-                updatedContext: finalResponse.updatedContext
+                updatedContext: finalResponse.updatedContext,
+                cost: totalTokens, // Coût total cumulé
               } as T;
             } else {
               // Aucun outil de type "response" - refaire un appel avec le contexte enrichi
@@ -388,15 +411,21 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
                 useSchemaWithToolResults // Pas de schéma avec toolResults
               );
               
+              // Cumuler le coût de l'appel récursif
+              const recursiveTokens = finalResponse.cost ?? 0;
+              totalTokens += recursiveTokens;
+              
               console.log('🔍 Réponse finale IA avec contexte enrichi:', finalResponse.response);
               console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
+              console.log(`💰 Coût cumulé: ${currentCallTokens} + ${recursiveTokens} = ${totalTokens} tokens`);
 
               return {
                 ...finalResponse,
                 response: finalResponse.response,
                 messageId: finalResponse.messageId,
                 extractedData: this.mergeExtractedData(extractedData, finalResponse.extractedData),
-                updatedContext: finalResponse.updatedContext
+                updatedContext: finalResponse.updatedContext,
+                cost: totalTokens, // Coût total cumulé
               } as T;
             }
           }
@@ -404,7 +433,13 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       }
 
       // Traitement unifié de la réponse (avec ou sans outils exécutés)
-      return this.processAIResponse(result, messageId, extractedData, context);
+      const processedResponse = this.processAIResponse(result, messageId, extractedData, context);
+      
+      // Remplacer le coût par le coût total cumulé (qui inclut déjà les appels récursifs s'il y en a eu)
+      return {
+        ...processedResponse,
+        cost: totalTokens, // Coût total cumulé (inclut les appels récursifs)
+      } as T;
 
     } catch (error) {
       console.error('❌ Erreur lors de la génération de la réponse IA:', error);
@@ -415,7 +450,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer un résumé structuré de la conversation
    */
-  async generateConversationSummary(context: HowanaContext): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined, updatedContext: HowanaContext}> {
+  async generateConversationSummary(context: HowanaContext): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined, updatedContext: HowanaContext, cost?: number | null}> {
+    let totalTokens = 0; // Coût total cumulé (déclaré en dehors du try pour être accessible dans le catch)
     try {
       // Vérifier si des recommandations sont requises pour le résumé
       const needsRecommendations = this.recommendationRequiredForSummary(context);
@@ -436,7 +472,13 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           // Appeler generateIAResponse avec la demande explicite
           recommendationResponse = await this._generateAIResponse(context, explicitRequest, true);
           extractedData = recommendationResponse?.extractedData;
+          
+          // Cumuler le coût de l'appel de recommandations
+          const recommendationTokens = recommendationResponse?.cost ?? 0;
+          totalTokens += recommendationTokens;
+          
           console.log('🔧 Réponse IA avec recommandations générée (we will only use tool data):', recommendationResponse);
+          console.log(`💰 Coût des recommandations: ${recommendationTokens} tokens`);
           
           // Ajouter immédiatement les extractedData au contexte pour que getSummaryOutputSchema puisse y accéder
           if (extractedData) {
@@ -488,6 +530,11 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
           ...(summarySchema && { text: summarySchema })
         });
 
+        // Cumuler le coût de l'appel de résumé
+        const summaryTokens = result.usage?.total_tokens ?? 0;
+        totalTokens += summaryTokens;
+        console.log(`💰 Coût du résumé: ${summaryTokens} tokens, coût total: ${totalTokens} tokens`);
+
         const resultText = result.output
           .filter((output) => output.type === "message")
           .map((output) => (output as any).content?.[0]?.text)[0];
@@ -500,6 +547,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
               summary: parsedSummary,
               extractedData,
               updatedContext: context,
+              cost: totalTokens, // Coût total cumulé
             };
           } catch (parseError) {
             console.warn('⚠️ Erreur de parsing JSON, fallback vers résumé simple:', parseError, resultText);
@@ -513,6 +561,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
         summary: "Résumé de la conversation généré automatiquement.",
         extractedData,
         updatedContext: context,
+        cost: totalTokens, // Coût total cumulé (peut être 0 si aucune recommandation n'a été générée)
       };
       
     } catch (error) {
@@ -521,6 +570,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
         summary: "Résumé de la conversation généré automatiquement.",
         extractedData: { activities: [], practices: [] },
         updatedContext: context,
+        cost: totalTokens, // Coût cumulé jusqu'à l'erreur
       };
     }
   }
@@ -1005,12 +1055,12 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
    * @returns Réponse IA formatée
    */
   protected processAIResponse(
-    result: any, 
+    result: Response, 
     messageId: string, 
     extractedData: ExtractedRecommandations | undefined, 
     context: HowanaContext
   ): T {
-    const messageOutput = result.output.find((output: any) => output.type === "message");
+    const messageOutput = result.output.find((output) => output.type === "message");
     
     if (!messageOutput) {
       throw new Error('Aucun message de réponse trouvé dans la sortie de l\'API');
@@ -1045,13 +1095,20 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     console.log('🔍 Réponse IA via API responses:', parsedResponse);
     console.log('🔍 OutputID OpenAI:', messageId);
 
-    // Retourner la réponse parsée avec le messageId
+    // Extraire le nombre de tokens depuis la réponse OpenAI
+    const totalTokens = result.usage?.total_tokens ?? null;
+    if (totalTokens) {
+      console.log(`💰 Nombre de tokens utilisés: ${totalTokens}`);
+    }
+
+    // Retourner la réponse parsée avec le messageId et le nombre de tokens
     return {
       ...parsedResponse,
       extractedData,
       messageId,
       updatedContext: context,
       haveNext: false,
+      cost: totalTokens, // Stocker le nombre de tokens dans le champ cost
     } as T;
   }
 
