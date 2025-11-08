@@ -1413,7 +1413,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               enum: ["search_hower_angel", "search_activities", "search_advices", "take_rdv", "discover", "know_more"]
             },
             rdvContext: {
-              type: "object",
+              type: ["object", "null"],
               description: "Contexte de rendez-vous si l'intent est 'take_rdv'",
               properties: {
                 type: {
@@ -1435,7 +1435,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               additionalProperties: false
             },
             searchContext: {
-              type: "object",
+              type: ["object", "null"],
               description: "Contexte de recherche pour les requêtes sémantiques",
               properties: {
                 searchChunks: {
@@ -1458,7 +1458,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               additionalProperties: false
             }
           },
-          required: ["intent"],
+          required: ["intent", "rdvContext", "searchContext"],
           additionalProperties: false
         },
         strict: true
