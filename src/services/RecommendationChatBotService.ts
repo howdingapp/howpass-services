@@ -1477,8 +1477,13 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     properties: {
                       type: {
                         type: "string",
-                        description: "Type du chunk : 'hower_angel_name_info' pour une recherche par nom complet, 'user_situation_chunk' pour un fragment de situation utilisateur",
-                        enum: ["hower_angel_name_info", "user_situation_chunk"]
+                        description: `Type du chunk. Valeurs possibles:
+- "hower_angel_name_info": Recherche par nom complet d'un hower angel
+- "user_situation_chunk": Fragment de situation utilisateur (de son point de vue, par exemple: "Je me sens...", "J'ai besoin...")
+- "i_have_symptome_chunk": Fragment décrivant un symptôme que l'utilisateur a (par exemple: "J'ai des maux de tête", "Je ressens de la fatigue")
+- "with_benefit_chunk": Fragment décrivant un bénéfice recherché (par exemple: "pour me détendre", "pour réduire le stress")
+- "category_name_info": Nom d'une catégorie d'activité ou de pratique`,
+                        enum: ["hower_angel_name_info", "user_situation_chunk", "i_have_symptome_chunk", "with_benefit_chunk", "category_name_info"]
                       },
                       text: {
                         type: "string",
