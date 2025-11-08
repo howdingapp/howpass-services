@@ -1434,6 +1434,66 @@ export class SupabaseService {
   }
 
   /**
+   * Mettre à jour le compute_time d'une conversation (temps de traitement cumulé)
+   * @param conversationId ID de la conversation
+   * @param timeToAdd Temps en secondes à ajouter au compute_time
+   */
+  async updateConversationComputeTime(conversationId: string, timeToAdd: number): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      console.log(`⏱️ Mise à jour du compute_time pour la conversation: ${conversationId}, temps à ajouter: ${timeToAdd}s`);
+
+      // Récupérer le compute_time actuel
+      const { data: conversation, error: fetchError } = await this.supabase
+        .from('howana_conversations')
+        .select('compute_time')
+        .eq('id', conversationId)
+        .single();
+
+      if (fetchError) {
+        console.error('❌ Erreur lors de la récupération de la conversation:', fetchError);
+        return {
+          success: false,
+          error: fetchError.message
+        };
+      }
+
+      const currentComputeTime = conversation?.compute_time || 0;
+      const newComputeTime = currentComputeTime + timeToAdd;
+
+      // Mettre à jour le compute_time
+      const { error } = await this.supabase
+        .from('howana_conversations')
+        .update({ 
+          compute_time: newComputeTime,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la mise à jour du compute_time:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log(`✅ Compute_time mis à jour: ${currentComputeTime}s + ${timeToAdd}s = ${newComputeTime}s`);
+      return {
+        success: true
+      };
+    } catch (error) {
+      console.error('❌ Erreur lors de la mise à jour du compute_time:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erreur inconnue'
+      };
+    }
+  }
+
+  /**
    * Mettre à jour le status d'une conversation
    * @param conversationId ID de la conversation
    * @param status Nouveau status ('active' | 'completed' | 'expired')

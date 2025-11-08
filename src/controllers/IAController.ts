@@ -92,6 +92,9 @@ export class IAController {
 
       console.log('🔍 Contexte de la conversation:', context);
 
+      // Mesurer le temps de traitement
+      const startTime = Date.now();
+
       // Traiter selon le type de tâche
       let result: { updatedContext: HowanaContext; iaResponse: any };
       
@@ -120,8 +123,12 @@ export class IAController {
       // Obtenir le service de chatbot pour onTaskFinish
       const chatBotService = this.getChatBotService(result.updatedContext);
 
+      // Calculer le temps de traitement en secondes
+      const endTime = Date.now();
+      const processingTimeSeconds = (endTime - startTime) / 1000;
+
       // Finaliser la tâche avec la mise à jour de la base de données
-      await this.finalizeTask(taskData, result.updatedContext, result.iaResponse, chatBotService);
+      await this.finalizeTask(taskData, result.updatedContext, result.iaResponse, chatBotService, processingTimeSeconds);
 
       console.log(`✅ Tâche IA traitée avec succès: ${taskData.type}`);
       res.status(200).json({
@@ -148,7 +155,8 @@ export class IAController {
     taskData: IATaskRequest, 
     updatedContext: HowanaContext, 
     iaResponse: any, 
-    chatBotService: BaseChatBotService
+    chatBotService: BaseChatBotService,
+    processingTimeSeconds: number
   ): Promise<void> {
     try {
       console.log(`🔄 Finalisation de la tâche ${taskData.type} pour ${taskData.conversationId}`);
@@ -211,7 +219,19 @@ export class IAController {
         }
       }
 
-      // 5. Marquer la conversation comme terminée si c'est un résumé ou un échange non fini
+      // 5. Mettre à jour le compute_time de la conversation
+      const computeTimeUpdateResult = await this.supabaseService.updateConversationComputeTime(
+        taskData.conversationId,
+        processingTimeSeconds
+      );
+      if (!computeTimeUpdateResult.success) {
+        console.error('❌ Erreur lors de la mise à jour du compute_time:', computeTimeUpdateResult.error);
+        // Ne pas faire échouer la requête si la mise à jour du compute_time échoue
+      } else {
+        console.log(`✅ Compute_time mis à jour: +${processingTimeSeconds}s`);
+      }
+
+      // 6. Marquer la conversation comme terminée si c'est un résumé ou un échange non fini
       if (taskData.type === 'generate_summary' || taskData.type === 'generate_unfinished_exchange') {
         const statusUpdateResult = await this.supabaseService.updateConversationStatus(taskData.conversationId, 'completed');
         if (!statusUpdateResult.success) {
