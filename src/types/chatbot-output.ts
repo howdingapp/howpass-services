@@ -60,7 +60,10 @@ export interface RecommendationIntent {
     id: string;
   };
   searchContext?: {
-    searchChunks: string[];
+    searchChunks: Array<{
+      type: 'hower_angel_name_info' | 'user_situation_chunk';
+      text: string;
+    }>;
     searchType: 'activity' | 'hower_angel' | 'practice';
     searchFormat: 'from_user_situation' | 'from_name_query';
   };

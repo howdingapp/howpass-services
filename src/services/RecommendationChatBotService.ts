@@ -1351,13 +1351,16 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       return super.handleIntent(intent, context, userMessage, onIaResponse);
     }
 
+    // Extraire les textes des chunks (les méthodes de recherche attendent un tableau de strings)
+    const searchChunksTexts = searchChunks.map(chunk => chunk.text);
+
     console.log(`🔍 Traitement de l'intent avec searchType: ${searchType}, searchChunks: ${searchChunks.length} chunks`);
 
     try {
       switch (searchType) {
         case 'activity':
           // Recherche d'activités uniquement
-          const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunks);
+          const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunksTexts);
           const activities = activitiesResults.results || [];
           console.log(`✅ ${activities.length} activités trouvées`);
           // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
@@ -1369,7 +1372,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
         case 'practice':
           // Recherche de pratiques uniquement
-          const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunks);
+          const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunksTexts);
           const practices = practicesResults.results || [];
           console.log(`✅ ${practices.length} pratiques trouvées`);
           // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
@@ -1381,7 +1384,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
         case 'hower_angel':
           // Recherche de hower angels
-          const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunks);
+          const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunksTexts);
           if (!howerAngelsResult.success) {
             console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
             return super.handleIntent(intent, context, userMessage, onIaResponse);
@@ -1457,11 +1460,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               type: ["object", "null"],
               description: "Contexte de recherche pour les requêtes sémantiques",
               properties: {
-                searchChunks: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "Chunks représentant la situation de l'utilisateur (de son point de vue, par exemple: \"Je me sens...\", \"J'ai besoin...\") ou bien la recherche demandée (par exemple: \"sphorologie\", \"activité douce\", \"Marie Dupont\" pour rechercher un hower angel par nom, ...)"
-                },
                 searchType: {
                   type: "string",
                   description: "Type de recherche à effectuer",
@@ -1471,7 +1469,27 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                   type: "string",
                   description: "Format de recherche : 'from_user_situation' pour une recherche basée sur la situation de l'utilisateur, 'from_name_query' pour une recherche par nom",
                   enum: ["from_user_situation", "from_name_query"]
-                }
+                },
+                searchChunks: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: {
+                        type: "string",
+                        description: "Type du chunk : 'hower_angel_name_info' pour une recherche par nom complet, 'user_situation_chunk' pour un fragment de situation utilisateur",
+                        enum: ["hower_angel_name_info", "user_situation_chunk"]
+                      },
+                      text: {
+                        type: "string",
+                        description: "Texte du chunk (par exemple: \"Marie Dupont\" pour un nom complet, ou \"Je me sens...\" pour un fragment de situation)"
+                      }
+                    },
+                    required: ["type", "text"],
+                    additionalProperties: false
+                  },
+                  description: "Chunks représentant la situation de l'utilisateur (de son point de vue, par exemple: \"Je me sens...\", \"J'ai besoin...\") ou bien la recherche demandée (par exemple: \"sphorologie\", \"activité douce\", \"Marie Dupont\" pour rechercher un hower angel par nom, ...). Chaque chunk doit avoir un type pour indiquer s'il s'agit d'un nom complet ou d'un fragment de situation utilisateur."
+                },
               },
               required: ["searchChunks", "searchType", "searchFormat"],
               additionalProperties: false
