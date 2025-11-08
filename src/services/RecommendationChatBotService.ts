@@ -1360,7 +1360,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunks);
           const activities = activitiesResults.results || [];
           console.log(`✅ ${activities.length} activités trouvées`);
-          // Les résultats seront ajoutés au contexte et utilisés par generateAIResponse
+          // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+          context.metadata = {
+            ...context.metadata,
+            ['intentResults']: { activities, practices: [], howerAngels: [] }
+          };
           break;
 
         case 'practice':
@@ -1368,7 +1372,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunks);
           const practices = practicesResults.results || [];
           console.log(`✅ ${practices.length} pratiques trouvées`);
-          // Les résultats seront ajoutés au contexte et utilisés par generateAIResponse
+          // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+          context.metadata = {
+            ...context.metadata,
+            ['intentResults']: { activities: [], practices, howerAngels: [] }
+          };
           break;
 
         case 'hower_angel':
@@ -1378,8 +1386,13 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
             return super.handleIntent(intent, context, userMessage, onIaResponse);
           }
-          console.log(`✅ ${howerAngelsResult.data?.length || 0} hower angels trouvés`);
-          // Les résultats seront ajoutés au contexte et utilisés par generateAIResponse
+          const howerAngels = howerAngelsResult.data || [];
+          console.log(`✅ ${howerAngels.length} hower angels trouvés`);
+          // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+          context.metadata = {
+            ...context.metadata,
+            ['intentResults']: { activities: [], practices: [], howerAngels }
+          };
           break;
 
         default:
