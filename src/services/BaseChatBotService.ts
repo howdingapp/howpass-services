@@ -1172,9 +1172,9 @@ ${practicesList}`;
    * Calcule l'intent de la conversation en parallèle de la génération de réponse
    * @param context Le contexte de la conversation
    * @param userMessage Le dernier message de l'utilisateur
-   * @returns L'intent calculé selon le schéma défini par le service
+   * @returns L'intent calculé selon le schéma défini par le service et le coût (nombre de tokens)
    */
-  public async computeIntent(context: HowanaContext, userMessage: string): Promise<any> {
+  public async computeIntent(context: HowanaContext, userMessage: string): Promise<{ intent: any; intentCost: number | null }> {
     try {
       console.log('🎯 Calcul de l\'intent pour la conversation:', context.id);
       
@@ -1183,7 +1183,7 @@ ${practicesList}`;
       
       if (!intentSchema) {
         console.warn('⚠️ Aucun schéma d\'intent défini pour ce service, retour d\'un intent vide');
-        return null;
+        return { intent: null, intentCost: null };
       }
 
       // Construire le prompt pour l'analyse d'intent
@@ -1213,6 +1213,12 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
         ...(intentSchema && { text: intentSchema })
       });
 
+      // Extraire le coût (nombre de tokens) de l'appel d'intent
+      const intentCost = result.usage?.total_tokens ?? null;
+      if (intentCost) {
+        console.log(`💰 Coût du calcul d'intent: ${intentCost} tokens`);
+      }
+
       // Extraire le texte de la réponse
       const messageOutput = result.output.find((output: any) => output.type === "message") as any;
       let resultText = "";
@@ -1226,23 +1232,23 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
 
       if (!resultText) {
         console.warn('⚠️ Aucune réponse générée pour l\'intent');
-        return null;
+        return { intent: null, intentCost: intentCost };
       }
 
       // Parser le JSON de l'intent
       try {
         const parsedIntent = JSON.parse(resultText);
         console.log('✅ Intent calculé avec succès:', parsedIntent);
-        return parsedIntent;
+        return { intent: parsedIntent, intentCost: intentCost };
       } catch (parseError) {
         console.error('❌ Erreur de parsing JSON de l\'intent:', parseError);
-        return null;
+        return { intent: null, intentCost: intentCost };
       }
 
     } catch (error) {
       console.error('❌ Erreur lors du calcul de l\'intent:', error);
       // Ne pas faire échouer la génération de réponse si l'intent échoue
-      return null;
+      return { intent: null, intentCost: null };
     }
   }
 

@@ -174,8 +174,10 @@ export class IAController {
         throw new Error('❌ Aucun aiResponseId disponible (ni dans taskData, ni dans le contexte)');
       }
 
-      // 2. Extraire le nombre de tokens depuis iaResponse
-      const tokens = iaResponse.cost !== undefined && iaResponse.cost !== null ? iaResponse.cost : null;
+      // 2. Extraire le nombre de tokens depuis iaResponse et ajouter le coût de l'intent
+      const responseTokens = iaResponse.cost !== undefined && iaResponse.cost !== null ? iaResponse.cost : 0;
+      const intentCost = updatedContext.metadata?.['intentCost'] as number | undefined ?? 0;
+      const tokens = responseTokens + intentCost; // Coût total = réponse + intent
 
       // 3. Faire un appel de mise à jour globale
       const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, {
@@ -291,8 +293,10 @@ export class IAController {
         };
       }
 
-      // 4. Extraire le nombre de tokens depuis iaResponse
-      const tokens = iaResponse.cost !== undefined && iaResponse.cost !== null ? iaResponse.cost : null;
+      // 4. Extraire le nombre de tokens depuis iaResponse et ajouter le coût de l'intent (seulement pour la première réponse)
+      const responseTokens = iaResponse.cost !== undefined && iaResponse.cost !== null ? iaResponse.cost : 0;
+      const intentCost = isFirstResponse ? (updatedContext.metadata?.['intentCost'] as number | undefined ?? 0) : 0;
+      const tokens = responseTokens + intentCost; // Coût total = réponse + intent (intent seulement pour la première réponse)
 
       // 5. Mettre à jour les informations de la réponse actuelle
       const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, {
@@ -391,7 +395,9 @@ export class IAController {
     
     // Calculer l'intent avant de générer la réponse
     console.log('🎯 Calcul de l\'intent avant génération de la réponse...');
-    const intent = await chatBotService.computeIntent(context, taskData.userMessage);
+    const intentResult = await chatBotService.computeIntent(context, taskData.userMessage);
+    const intent = intentResult.intent;
+    const intentCost = intentResult.intentCost;
     
     // Mettre à jour le contexte avec l'intent
     let contextWithIntent = { ...context };
@@ -400,11 +406,18 @@ export class IAController {
     if (intent) {
       contextWithIntent.metadata = {
         ...contextWithIntent.metadata,
-        ['intent']: intent
+        ['intent']: intent,
+        ['intentCost']: intentCost
       };
       console.log('✅ Intent calculé avec succès et ajouté au contexte');
     } else {
       console.warn('⚠️ Calcul d\'intent retourné null, génération de la réponse sans intent');
+      // Mettre l'intent et intentCost à null dans le contexte
+      contextWithIntent.metadata = {
+        ...contextWithIntent.metadata,
+        ['intent']: null,
+        ['intentCost']: null
+      };
     }
     
     // Créer le callback pour traiter chaque réponse générée par handleIntent
