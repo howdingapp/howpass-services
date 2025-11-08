@@ -853,6 +853,7 @@ export class SupabaseService {
    */
   async searchActivitiesAndPractices(
     situationChunks: string[],
+    withMatchInfos: boolean = false
   ): Promise<{
     results: any[];
     searchTerm: string;
@@ -883,7 +884,7 @@ export class SupabaseService {
       // Mapper les résultats pour ne retourner que les champs utiles à l'IA
       const mapActivity = (r: any) => {
         const relevanceScore = r?.similarity ?? 0.8;
-        return {
+        const result: any = {
           type: 'activity',
           id: r?.id,
           title: r?.title,
@@ -899,11 +900,15 @@ export class SupabaseService {
           selectedKeywords: r?.selected_keywords,
           relevanceScore
         };
+        if (withMatchInfos) {
+          result.typicalSituations = r?.typical_situations;
+        }
+        return result;
       };
 
       const mapPractice = (r: any) => {
         const relevanceScore = r?.similarity ?? 0.8;
-        return {
+        const result: any = {
           type: 'practice',
           id: r?.id,
           title: r?.title,
@@ -912,6 +917,10 @@ export class SupabaseService {
           benefits: r?.benefits,
           relevanceScore
         };
+        if (withMatchInfos) {
+          result.typicalSituations = r?.typical_situations;
+        }
+        return result;
       };
 
       const activitiesWithType = (activitiesResults || []).map(mapActivity);
@@ -943,6 +952,7 @@ export class SupabaseService {
    */
   async searchPracticesBySituationChunks(
     situationChunks: string[],
+    withMatchInfos: boolean = false
   ): Promise<{
     results: any[];
     searchTerm: string;
@@ -967,7 +977,7 @@ export class SupabaseService {
       // Mapper les résultats
       const mapPractice = (r: any) => {
         const relevanceScore = r?.similarity ?? 0.8;
-        return {
+        const result: any = {
           type: 'practice',
           id: r?.id,
           title: r?.title,
@@ -976,6 +986,10 @@ export class SupabaseService {
           benefits: r?.benefits,
           relevanceScore
         };
+        if (withMatchInfos) {
+          result.typicalSituations = r?.typical_situations;
+        }
+        return result;
       };
 
       const practicesWithType = practicesResults.map(mapPractice);
@@ -1003,6 +1017,7 @@ export class SupabaseService {
    */
   async searchActivitiesBySituationChunks(
     situationChunks: string[],
+    withMatchInfos: boolean = false
   ): Promise<{
     results: any[];
     searchTerm: string;
@@ -1027,7 +1042,7 @@ export class SupabaseService {
       // Mapper les résultats
       const mapActivity = (r: any) => {
         const relevanceScore = r?.similarity ?? 0.8;
-        return {
+        const result: any = {
           type: 'activity',
           id: r?.id,
           title: r?.title,
@@ -1043,6 +1058,10 @@ export class SupabaseService {
           selectedKeywords: r?.selected_keywords,
           relevanceScore
         };
+        if (withMatchInfos) {
+          result.typicalSituations = r?.typical_situations;
+        }
+        return result;
       };
 
       const activitiesWithType = activitiesResults.map(mapActivity);
@@ -1070,7 +1089,8 @@ export class SupabaseService {
    */
   async searchFAQ(
     searchTerm: string,
-    limit: number = 5
+    limit: number = 5,
+    withMatchInfos: boolean = false
   ): Promise<{
     results: any[];
     searchTerm: string;
@@ -1086,16 +1106,22 @@ export class SupabaseService {
         limit
       );
 
-      const mapped = (faqResults || []).map((r: any) => ({
-        type: 'faq',
-        id: r?.id,
-        question: r?.question,
-        answer: r?.reponse,
-        keywords: r?.keywords,
-        faqType: r?.type,
-        active: r?.active,
-        relevanceScore: r?.similarity ?? 0.8
-      }));
+      const mapped = (faqResults || []).map((r: any) => {
+        const result: any = {
+          type: 'faq',
+          id: r?.id,
+          question: r?.question,
+          answer: r?.reponse,
+          keywords: r?.keywords,
+          faqType: r?.type,
+          active: r?.active,
+          relevanceScore: r?.similarity ?? 0.8
+        };
+        if (withMatchInfos) {
+          result.typicalSituation = r?.typical_situation;
+        }
+        return result;
+      });
 
       // Tri décroissant selon pertinence
       mapped.sort((a: any, b: any) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0));
@@ -1698,7 +1724,8 @@ export class SupabaseService {
    */
   async searchHowerAngelsByUserSituation(
     situationChunks: string[],
-    limit: number = 2
+    limit: number = 2,
+    withMatchInfos: boolean = false
   ): Promise<{
     success: boolean;
     data?: Array<{
@@ -1781,35 +1808,41 @@ export class SupabaseService {
 
       // Mapper les résultats avec les données enrichies de match_user_data
       const howerAngels = Array.from(uniqueHowerAngels.values())
-        .map((user: any) => ({
-          id: user.id,
-          userId: user.user_id,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          email: user.email,
-          specialties: user.specialties || [], // Tableau d'objets {id, title, short_description} depuis match_user_data
-          experience: user.experience,
-          profile: user.profil,
-          activities: (user.activities || []).map((activity: any) => ({
-            id: activity.id,
-            title: activity.title,
-            shortDescription: activity.short_description,
-            longDescription: activity.long_description,
-            durationMinutes: activity.duration_minutes,
-            participants: activity.participants,
-            rating: activity.rating,
-            price: activity.price,
-            benefits: activity.benefits,
-            locationType: activity.location_type,
-            address: activity.address,
-            selectedKeywords: activity.selected_keywords,
-            presentationImagePublicUrl: activity.presentation_image_public_url,
-            presentationVideoPublicUrl: activity.presentation_video_public_url,
-            status: activity.status,
-            isActive: activity.is_active
-          })),
-          relevanceScore: user.similarity
-        }));
+        .map((user: any) => {
+          const result: any = {
+            id: user.id,
+            userId: user.user_id,
+            firstName: user.first_name,
+            lastName: user.last_name,
+            email: user.email,
+            specialties: user.specialties || [], // Tableau d'objets {id, title, short_description} depuis match_user_data
+            experience: user.experience,
+            profile: user.profil,
+            activities: (user.activities || []).map((activity: any) => ({
+              id: activity.id,
+              title: activity.title,
+              shortDescription: activity.short_description,
+              longDescription: activity.long_description,
+              durationMinutes: activity.duration_minutes,
+              participants: activity.participants,
+              rating: activity.rating,
+              price: activity.price,
+              benefits: activity.benefits,
+              locationType: activity.location_type,
+              address: activity.address,
+              selectedKeywords: activity.selected_keywords,
+              presentationImagePublicUrl: activity.presentation_image_public_url,
+              presentationVideoPublicUrl: activity.presentation_video_public_url,
+              status: activity.status,
+              isActive: activity.is_active
+            })),
+            relevanceScore: user.similarity
+          };
+          if (withMatchInfos) {
+            result.typicalSituations = user.typical_situations;
+          }
+          return result;
+        });
 
       // Trier par score de pertinence
       howerAngels.sort((a, b) => b.relevanceScore - a.relevanceScore);
