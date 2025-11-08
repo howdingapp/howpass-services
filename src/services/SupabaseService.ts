@@ -21,6 +21,8 @@ export interface AIResponse {
   user_id: string;
   response_text: string;
   message_type: string;
+  next_response_id?: string | null;
+  metadata?: Record<string, any>;
   created_at?: string;
 }
 
@@ -363,8 +365,9 @@ export class SupabaseService {
    * Mettre à jour une réponse IA existante
    */
   async updateAIResponse(aiResponseId: string, updateData: {
-    response_text: string;
+    response_text?: string;
     metadata?: Record<string, any>;
+    next_response_id?: string | null;
   }): Promise<{
     success: boolean;
     data?: AIResponse;
@@ -373,12 +376,26 @@ export class SupabaseService {
     try {
       console.log('🔍 Mise à jour de la réponse IA:', aiResponseId);
 
+      const updatePayload: any = {};
+
+      // Ajouter response_text si fourni
+      if (updateData.response_text !== undefined) {
+        updatePayload.response_text = updateData.response_text;
+      }
+
+      // Ajouter metadata si fourni
+      if (updateData.metadata !== undefined) {
+        updatePayload.metadata = updateData.metadata;
+      }
+
+      // Ajouter next_response_id si fourni
+      if (updateData.next_response_id !== undefined) {
+        updatePayload.next_response_id = updateData.next_response_id;
+      }
+
       const { data, error } = await this.supabase
         .from('ai_responses')
-        .update({
-          response_text: updateData.response_text,
-          metadata: updateData.metadata || {},
-        })
+        .update(updatePayload)
         .eq('id', aiResponseId)
         .select()
         .single();

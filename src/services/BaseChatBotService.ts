@@ -1051,6 +1051,7 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       extractedData,
       messageId,
       updatedContext: context,
+      haveNext: false,
     } as T;
   }
 
@@ -1190,13 +1191,21 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
 
   /**
    * Traite l'intent calculé et effectue les recherches nécessaires
+   * Peut générer plusieurs réponses consécutives en appelant onIaResponse pour chaque réponse
    * @param intent L'intent calculé par computeIntent
    * @param context Le contexte de la conversation
-   * @returns Les résultats de recherche ou null si aucune recherche n'est nécessaire
+   * @param userMessage Le message de l'utilisateur
+   * @param onIaResponse Callback appelé pour chaque réponse IA générée (peut être appelé plusieurs fois pour des messages consécutifs)
+   * @returns Promise<void> - La méthode doit attendre que toutes les réponses soient générées
    */
-  protected async handleIntent(_intent: any, _context: HowanaContext): Promise<any | null> {
-    // Implémentation par défaut : retourne null (aucune recherche)
-    // Les services dérivés peuvent surcharger cette méthode
-    return null;
+  protected async handleIntent(
+    _intent: any, 
+    context: HowanaContext,
+    userMessage: string,
+    onIaResponse: (response: any) => Promise<void>
+  ): Promise<void> {
+    // Implémentation par défaut : génère une réponse IA et la passe au callback
+    const aiResponse = await this.generateAIResponse(context, userMessage);
+    await onIaResponse(aiResponse);
   }
 }

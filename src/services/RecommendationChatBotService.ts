@@ -1320,26 +1320,35 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
   /**
    * Traite l'intent calculé et effectue les recherches nécessaires selon le searchType
+   * Peut générer plusieurs réponses consécutives en appelant onIaResponse pour chaque réponse
+   * @param intent L'intent calculé
+   * @param context Le contexte de la conversation
+   * @param onIaResponse Callback appelé pour chaque réponse IA générée
    */
-  protected override async handleIntent(intent: any, _context: HowanaContext): Promise<any | null> {
+  protected override async handleIntent(
+    intent: any, 
+    context: HowanaContext,
+    userMessage: string,
+    onIaResponse: (response: any) => Promise<void>
+  ): Promise<void> {
     const typedIntent = intent as RecommendationIntent;
     
-    // Si l'intent est "know_more", ne rien faire
+    // Si l'intent est "know_more", utiliser le comportement par défaut
     if (typedIntent?.intent === 'know_more') {
-      console.log('ℹ️ Intent "know_more" détecté - aucune action à effectuer');
-      return null;
+      console.log('ℹ️ Intent "know_more" détecté - utilisation du comportement par défaut');
+      return super.handleIntent(intent, context, userMessage, onIaResponse);
     }
     
     if (!typedIntent || !typedIntent.searchContext) {
-      console.log('⚠️ Aucun searchContext dans l\'intent, pas de recherche à effectuer');
-      return null;
+      console.log('⚠️ Aucun searchContext dans l\'intent, utilisation du comportement par défaut');
+      return super.handleIntent(intent, context, userMessage, onIaResponse);
     }
 
     const { searchChunks, searchType } = typedIntent.searchContext;
 
     if (!searchChunks || searchChunks.length === 0) {
-      console.log('⚠️ Aucun searchChunks dans l\'intent, pas de recherche à effectuer');
-      return null;
+      console.log('⚠️ Aucun searchChunks dans l\'intent, utilisation du comportement par défaut');
+      return super.handleIntent(intent, context, userMessage, onIaResponse);
     }
 
     console.log(`🔍 Traitement de l'intent avec searchType: ${searchType}, searchChunks: ${searchChunks.length} chunks`);
@@ -1351,41 +1360,39 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunks);
           const activities = activitiesResults.results || [];
           console.log(`✅ ${activities.length} activités trouvées`);
-          return {
-            activities,
-            practices: []
-          };
+          // Les résultats seront ajoutés au contexte et utilisés par generateAIResponse
+          break;
 
         case 'practice':
           // Recherche de pratiques uniquement
           const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunks);
           const practices = practicesResults.results || [];
           console.log(`✅ ${practices.length} pratiques trouvées`);
-          return {
-            activities: [],
-            practices
-          };
+          // Les résultats seront ajoutés au contexte et utilisés par generateAIResponse
+          break;
 
         case 'hower_angel':
           // Recherche de hower angels
           const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunks);
           if (!howerAngelsResult.success) {
             console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
-            return null;
+            return super.handleIntent(intent, context, userMessage, onIaResponse);
           }
           console.log(`✅ ${howerAngelsResult.data?.length || 0} hower angels trouvés`);
-          return {
-            howerAngels: howerAngelsResult.data || [],
-            total: howerAngelsResult.total || 0
-          };
+          // Les résultats seront ajoutés au contexte et utilisés par generateAIResponse
+          break;
 
         default:
-          console.warn(`⚠️ searchType non reconnu: ${searchType}, pas de recherche à effectuer`);
-          return null;
+          console.warn(`⚠️ searchType non reconnu: ${searchType}, utilisation du comportement par défaut`);
+          return super.handleIntent(intent, context, userMessage, onIaResponse);
       }
+
+      // Après avoir effectué les recherches, utiliser le comportement par défaut pour générer la réponse
+      return super.handleIntent(intent, context, userMessage, onIaResponse);
     } catch (error) {
       console.error('❌ Erreur lors du traitement de l\'intent:', error);
-      return null;
+      // En cas d'erreur, utiliser le comportement par défaut
+      return super.handleIntent(intent, context, userMessage, onIaResponse);
     }
   }
 

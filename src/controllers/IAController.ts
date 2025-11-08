@@ -161,34 +161,147 @@ export class IAController {
       }
       console.log('✅ Contexte mis à jour en base de données');
 
-      // Mettre à jour l'entrée ai_response si un ID est fourni
-      if (taskData.aiResponseId) {
-        const updateResult = await this.supabaseService.updateAIResponse(taskData.aiResponseId, {
-          response_text: JSON.stringify(iaResponse),
-          metadata: {
-            source: 'ai',
-            model: chatBotService.getAIModel(),
-            type: taskData.type,
-            messageId: iaResponse.messageId,
-            status: 'completed',
-            recommendations: iaResponse.recommendations || updatedContext.recommendations || { activities: [], practices: [] },
-            hasRecommendations: iaResponse.hasRecommendations || ((updatedContext.recommendations?.activities?.length || 0) > 0 || (updatedContext.recommendations?.practices?.length || 0) > 0),
-            recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](updatedContext)
-          }
-        });
-
-        if (!updateResult.success) {
-          console.error('❌ Erreur lors de la mise à jour de la réponse IA:', updateResult.error);
-          throw new Error(`Erreur lors de la mise à jour de la réponse IA: ${updateResult.error}`);
-        }
-        console.log(`✅ aiResponse mise à jour: ${taskData.aiResponseId}`);
-      } else {
-        console.warn(`⚠️ Aucun aiResponseId fourni pour la tâche: ${taskData.type}`);
+      // 1. Récupérer l'ID de la réponse (soit celui de la tâche, soit celui du contexte)
+      // finalizeTask ne crée jamais, elle utilise uniquement l'ID existant
+      let aiResponseId: string | undefined = taskData.aiResponseId;
+      
+      // Si pas d'ID dans la tâche, essayer de le récupérer depuis le contexte
+      if (!aiResponseId && updatedContext.metadata?.['lastIntermediateAiResponseId']) {
+        aiResponseId = updatedContext.metadata['lastIntermediateAiResponseId'] as string;
       }
+      
+      if (!aiResponseId) {
+        throw new Error('❌ Aucun aiResponseId disponible (ni dans taskData, ni dans le contexte)');
+      }
+
+      // 2. Faire un appel de mise à jour globale
+      const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, {
+        response_text: JSON.stringify(iaResponse),
+        next_response_id: null, // Dernière réponse, pas de suivant
+        metadata: {
+          source: 'ai',
+          model: chatBotService.getAIModel(),
+          type: taskData.type,
+          messageId: iaResponse.messageId,
+          status: 'completed',
+          recommendations: iaResponse.recommendations || updatedContext.recommendations || { activities: [], practices: [] },
+          hasRecommendations: iaResponse.hasRecommendations || ((updatedContext.recommendations?.activities?.length || 0) > 0 || (updatedContext.recommendations?.practices?.length || 0) > 0),
+          recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](updatedContext)
+        }
+      });
+
+      if (!updateResult.success) {
+        console.error('❌ Erreur lors de la mise à jour de la réponse IA:', updateResult.error);
+        throw new Error(`Erreur lors de la mise à jour de la réponse IA: ${updateResult.error}`);
+      }
+      
+      console.log(`✅ aiResponse mise à jour: ${aiResponseId}`);
 
       console.log(`✅ Tâche ${taskData.type} finalisée avec succès`);
     } catch (error) {
       console.error(`❌ Erreur lors de la finalisation de la tâche ${taskData.type}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fonction pour finaliser une réponse IA intermédiaire (avec next_response_id)
+   * Met à jour le contexte et crée/met à jour l'entrée ai_response
+   * Ne doit être appelée que pour les réponses intermédiaires
+   */
+  private async finalizeIntermediateResponse(
+    taskData: IATaskRequest,
+    iaResponse: any,
+    updatedContext: HowanaContext,
+    chatBotService: BaseChatBotService,
+    isFirstResponse: boolean
+  ): Promise<string> {
+    try {
+      console.log(`🔄 Finalisation de la réponse IA intermédiaire (première: ${isFirstResponse})`);
+
+      // 1. Récupérer la dernière réponse en cours de construction
+      // Soit lastIntermediateAiResponseId du contexte, soit taskData.aiResponseId
+      let aiResponseId: string | undefined = updatedContext.metadata?.['lastIntermediateAiResponseId'] as string | undefined;
+      if (!aiResponseId) {
+        aiResponseId = taskData.aiResponseId;
+      }
+
+      // On doit toujours avoir un aiResponseId à ce stade
+      if (!aiResponseId) {
+        throw new Error('❌ Aucun aiResponseId disponible (ni dans lastIntermediateAiResponseId du contexte, ni dans taskData.aiResponseId)');
+      }
+
+      // 2. Détecter s'il y aura une réponse suivante
+      const hasNext = iaResponse.haveNext === true;
+      
+      let nextResponseId: string | null = null;
+      let newIntermediateResponseId: string | undefined = undefined;
+
+      // 3. Si on détecte qu'il y aura un next, créer une nouvelle réponse intermédiaire
+      if (hasNext) {
+        const createNextResult = await this.supabaseService.createAIResponse({
+          conversation_id: taskData.conversationId,
+          user_id: taskData.userId,
+          response_text: null, // Réponse vide pour l'instant
+          message_type: 'text',
+          next_response_id: null
+        } as any);
+
+        if (!createNextResult.success) {
+          console.error('❌ Erreur lors de la création de la prochaine réponse IA:', createNextResult.error);
+          throw new Error(`Erreur lors de la création de la prochaine réponse IA: ${createNextResult.error}`);
+        }
+
+        if (!createNextResult.data?.id) {
+          throw new Error('❌ ID non retourné après création de la prochaine réponse IA');
+        }
+
+        newIntermediateResponseId = createNextResult.data.id;
+        nextResponseId = newIntermediateResponseId;
+        console.log(`✅ Prochaine réponse intermédiaire créée: ${newIntermediateResponseId}`);
+
+        // Mettre à jour le contexte avec le nouvel ID
+        updatedContext.metadata = {
+          ...updatedContext.metadata,
+          ['lastIntermediateAiResponseId']: newIntermediateResponseId
+        };
+      }
+
+      // 4. Mettre à jour les informations de la réponse actuelle
+      const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, {
+        response_text: JSON.stringify(iaResponse),
+        next_response_id: nextResponseId,
+        metadata: {
+          source: 'ai',
+          model: chatBotService.getAIModel(),
+          type: isFirstResponse ? taskData.type : 'generate_response',
+          messageId: iaResponse.messageId,
+          status: 'completed',
+          recommendations: iaResponse.recommendations || updatedContext.recommendations || { activities: [], practices: [] },
+          hasRecommendations: iaResponse.hasRecommendations || ((updatedContext.recommendations?.activities?.length || 0) > 0 || (updatedContext.recommendations?.practices?.length || 0) > 0),
+          recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](updatedContext)
+        }
+      });
+
+      if (!updateResult.success) {
+        console.error('❌ Erreur lors de la mise à jour de la réponse IA:', updateResult.error);
+        throw new Error(`Erreur lors de la mise à jour de la réponse IA: ${updateResult.error}`);
+      }
+
+      // 5. Mettre à jour le contexte en base de données
+      const contextUpdateResult = await this.supabaseService.updateContext(taskData.conversationId, updatedContext);
+      if (!contextUpdateResult.success) {
+        console.error('❌ Erreur lors de la mise à jour du contexte:', contextUpdateResult.error);
+        throw new Error(`Erreur lors de la mise à jour du contexte: ${contextUpdateResult.error}`);
+      }
+      console.log('✅ Contexte mis à jour en base de données');
+      
+      console.log(`✅ aiResponse mise à jour: ${aiResponseId}${hasNext ? `, prochaine réponse préparée: ${newIntermediateResponseId}` : ''}`);
+      
+      // Retourner l'ID de cette réponse pour la chaîne suivante
+      return aiResponseId;
+    } catch (error) {
+      console.error('❌ Erreur lors de la finalisation de la réponse IA intermédiaire:', error);
       throw error;
     }
   }
@@ -244,75 +357,97 @@ export class IAController {
     const intent = await chatBotService.computeIntent(context, taskData.userMessage);
     
     // Mettre à jour le contexte avec l'intent
-    const contextWithIntent = { ...context };
+    let contextWithIntent = { ...context };
+    let lastUpdatedContext = contextWithIntent;
+    
     if (intent) {
       contextWithIntent.metadata = {
         ...contextWithIntent.metadata,
         ['intent']: intent
       };
       console.log('✅ Intent calculé avec succès et ajouté au contexte');
-      
-      // Traiter l'intent et effectuer les recherches nécessaires
-      const intentResults = await chatBotService['handleIntent'](intent, contextWithIntent);
-      if (intentResults) {
-        console.log('✅ Résultats de recherche obtenus depuis l\'intent:', intentResults);
-        // Ajouter les résultats de recherche dans le contexte
-        contextWithIntent.metadata = {
-          ...contextWithIntent.metadata,
-          ['intentResults']: intentResults
-        };
-      } else {
-        console.log('ℹ️ Aucune recherche nécessaire selon l\'intent');
-      }
     } else {
       console.warn('⚠️ Calcul d\'intent retourné null, génération de la réponse sans intent');
     }
     
-    // Générer la réponse IA avec le contexte mis à jour contenant l'intent
-    const aiResponse = await chatBotService.generateAIResponse(contextWithIntent, taskData.userMessage);
-    const updatedContext = aiResponse.updatedContext;
-    
-    // S'assurer que l'intent et les intentResults sont préservés dans le contexte mis à jour
-    if (intent && contextWithIntent.metadata?.['intent']) {
-      updatedContext.metadata = {
-        ...updatedContext.metadata,
-        ['intent']: contextWithIntent.metadata['intent']
-      };
-      if (contextWithIntent.metadata?.['intentResults']) {
-        updatedContext.metadata['intentResults'] = contextWithIntent.metadata['intentResults'];
-      }
-    }
-    
-    // Utiliser le messageId d'OpenAI si disponible, sinon créer un messageId local
-    const messageId = aiResponse.messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Mettre à jour le contexte avec le nouveau messageId pour les futures réponses
-    updatedContext.previousCallId = messageId;
-    updatedContext.previousResponse = aiResponse.response;
-    
-    // Récupérer les extractedData depuis la réponse IA
-    const extractedData = aiResponse.extractedData;
-    
-    // Construire les recommandations à partir des extractedData
-    const recommendations = extractedData ? {
-      activities: extractedData.activities || [],
-      practices: extractedData.practices || []
-    } : (context.recommendations || { activities: [], practices: [] });
+    // Créer le callback pour traiter chaque réponse générée par handleIntent
+    let responseCount = 0;
+    let lastIaResponse: any = null;
+    const onIaResponse = async (iaResponse: any): Promise<void> => {
+      responseCount++;
+      console.log(`📨 handleIntent a généré une réponse #${responseCount}, traitement...`);
+      
+      // Utiliser la réponse de handleIntent
+      const updatedContext = iaResponse.updatedContext || lastUpdatedContext;
+      
+      // Mettre à jour le contexte avec le nouveau messageId pour les futures réponses
+      updatedContext.previousCallId = iaResponse.messageId;
+      updatedContext.previousResponse = iaResponse.response;
+      
+      // Récupérer les extractedData depuis la réponse IA
+      const extractedData = iaResponse.extractedData;
+      
+      // Construire les recommandations à partir des extractedData
+      const recommendations = extractedData ? {
+        activities: extractedData.activities || [],
+        practices: extractedData.practices || []
+      } : (lastUpdatedContext.recommendations || { activities: [], practices: [] });
 
-    // Créer l'objet de réponse IA
-    const iaResponse = {
-      ...aiResponse,
-      messageId: messageId,
-      recommendations: recommendations,
-      hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0)
+      // Créer l'objet de réponse IA complet
+      const completeIaResponse = {
+        ...iaResponse,
+        messageId: iaResponse.messageId,
+        recommendations: recommendations,
+        hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0)
+      };
+
+      console.log(`📋 Recommandations extraites: ${recommendations.activities.length} activités, ${recommendations.practices.length} pratiques`);
+
+      // Vérifier si handleIntent indique qu'il y a une réponse suivante
+      const hasNextResponse = iaResponse.haveNext === true;
+      
+      if (hasNextResponse) {
+        // C'est une réponse intermédiaire, finaliser immédiatement
+        const isFirstResponse = responseCount === 1;
+        await this.finalizeIntermediateResponse(
+          taskData,
+          completeIaResponse,
+          updatedContext,
+          chatBotService,
+          isFirstResponse
+        );
+        // Mettre à jour lastUpdatedContext avec le contexte modifié (qui contient lastIntermediateAiResponseId)
+        lastUpdatedContext = updatedContext;
+      } else {
+        // C'est la dernière réponse, on la sauvegarde pour la retourner
+        lastIaResponse = completeIaResponse;
+      }
+
+      // Mettre à jour le contexte local pour les prochaines réponses
+      lastUpdatedContext = updatedContext;
     };
 
-    console.log(`📋 Recommandations extraites: ${recommendations.activities.length} activités, ${recommendations.practices.length} pratiques`);
-    console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
-
+    // Appeler handleIntent avec le callback et attendre qu'il se termine
+    await chatBotService['handleIntent'](intent, contextWithIntent, taskData.userMessage, onIaResponse);
+    
+    // Mettre à jour le contexte avec le dernier contexte mis à jour par handleIntent
+    if (lastUpdatedContext !== contextWithIntent) {
+      contextWithIntent = lastUpdatedContext;
+    }
+    
+    // handleIntent a déjà généré et traité les réponses via le callback
+    // Si c'était la dernière réponse (sans have_next), on la retourne et on laisse finalizeTask s'en occuper
+    if (lastIaResponse) {
+      return {
+        updatedContext: contextWithIntent,
+        iaResponse: lastIaResponse
+      };
+    }
+    
+    // Si aucune réponse n'a été générée (cas théorique), retourner un objet vide
     return {
-      updatedContext,
-      iaResponse
+      updatedContext: contextWithIntent,
+      iaResponse: {}
     };
   }
 
