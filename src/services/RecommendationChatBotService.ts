@@ -374,7 +374,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     };
   }
 
-  protected override getAddMessageOutputSchema(_context: HowanaContext, forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
+  protected override getAddMessageOutputSchema(context: HowanaContext, forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
     if (forceSummaryToolCall) {
       // Si on force un summaryToolCall, utiliser le format idsOnly sans contraintes
       const activitiesAndPracticesSchema = this.getActivitiesAndPracticesResponseSchema(
@@ -399,6 +399,39 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       };
     }
 
+    // Lire l'intent depuis le contexte
+    const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
+    const intent = currentIntentInfos?.intent as RecommendationIntent | undefined;
+
+    // Adapter le schéma selon l'intent
+    if (intent?.intent === 'take_rdv') {
+      // Schéma générique pour tous les cas de take_rdv
+      return {
+        format: { 
+          type: "json_schema",
+          name: "TakeRdvResponse",
+          schema: {
+            type: "object",
+            properties: {
+              response: {
+                type: "string",
+                description: "Message court (≤ 30 mots) adapté au contexte de prise de rendez-vous selon les informations disponibles dans intentResults."
+              },
+              quickReplies: this.getRdvQuickRepliesSchema(
+                "0 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur avec URLs de redirection",
+                0,
+                3
+              )
+            },
+            required: ["response", "quickReplies"],
+            additionalProperties: false
+          },
+          strict: true
+        }
+      };
+    }
+
+    // Schéma par défaut pour les autres cas
     return {
       format: { 
         type: "json_schema",
@@ -1061,6 +1094,42 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
   }
 
   /**
+   * Génère le schéma pour les quickReplies de rendez-vous avec URLs de redirection
+   */
+  protected getRdvQuickRepliesSchema(
+    description: string = "Suggestions de réponses courtes pour l'utilisateur avec URLs de redirection",
+    minItems: number = 0,
+    maxItems: number = 4
+  ): any {
+    return {
+      type: "array",
+      minItems,
+      maxItems,
+      items: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["text", "url"],
+            description: "Type de quick reply: 'text' pour une réponse simple, 'url' pour une redirection avec URL"
+          },
+          text: {
+            type: "string",
+            description: "Texte de la suggestion (max 5 mots)"
+          },
+          redirectionUrl: {
+            type: "string",
+            description: "URL de redirection (requis si type='url')"
+          }
+        },
+        required: ["type", "text"],
+        additionalProperties: false
+      },
+      description
+    };
+  }
+
+  /**
    * Schéma pour les réponses avec activités et pratiques (format idsOnly sans contraintes)
    * @param description Description personnalisée du champ
    * @param maxItems Nombre maximum d'éléments par array (défaut: 3)
@@ -1360,6 +1429,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         context = await this.handleKnowMoreIntent(intent, context, userMessage, globalIntentInfos);
         break;
       
+      case 'take_rdv':
+        context = await this.handleTakeRdvIntent(intent, context, userMessage, globalIntentInfos);
+        break;
+      
       case 'search_activities':
       case 'search_hower_angel':
       case 'search_advices':
@@ -1504,6 +1577,110 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       ...context.metadata,
       ['intentResults']: intentResultsText
     };
+
+    return context;
+  }
+
+  /**
+   * Gère l'intent "take_rdv" - valorise intentResults avec les informations de rendez-vous et les URLs
+   */
+  private async handleTakeRdvIntent(
+    intent: RecommendationIntent,
+    context: HowanaContext,
+    _userMessage: string,
+    globalIntentInfos: GlobalRecommendationIntentInfos | undefined
+  ): Promise<HowanaContext> {
+    if (!globalIntentInfos) {
+      return context;
+    }
+    console.log('ℹ️ Intent "take_rdv" détecté - valorisation de intentResults avec les informations de rendez-vous');
+    
+    if (!intent.rdvContext) {
+      console.warn('⚠️ rdvContext manquant dans l\'intent take_rdv');
+      return context;
+    }
+
+    const { type, designation } = intent.rdvContext;
+    let intentResultsText = '';
+    let rdvUrl: string | null = null;
+
+    // Construire le message contextuel selon le type
+    if (type === 'hower_angel') {
+      if (globalIntentInfos.focusedHowerAngel) {
+        const howerAngel = globalIntentInfos.focusedHowerAngel;
+        
+        // Si on n'a pas de focusedActivity, fournir l'objet howerAngel complet
+        if (!globalIntentInfos.focusedActivity) {
+          intentResultsText = `L'utilisateur souhaite prendre rendez-vous avec le hower angel suivant : ${JSON.stringify(howerAngel, null, 2)}\n\n`;
+          intentResultsText += `IMPORTANT: Tu dois choisir les 2 activités les plus pertinentes parmi celles disponibles dans l'objet ci-dessus (en utilisant les URLs /activity/{id}) et mentionner l'option "voir toutes les activités" (URL: /activity/creator/${howerAngel.userId}) comme 3ème choix.`;
+        } else {
+          // On a une focusedActivity, utiliser son URL
+          const activity = globalIntentInfos.focusedActivity;
+          rdvUrl = `/activity/${activity.id}?tab=booking`;
+          
+          intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour l'activité suivante : ${JSON.stringify({
+            id: activity.id,
+            title: activity.title,
+            shortDescription: activity.shortDescription,
+            longDescription: activity.longDescription,
+          }, null, 2)}\n\n`;
+          
+          intentResultsText += `URL de rendez-vous: ${rdvUrl}`;
+        }
+      } else if (globalIntentInfos.pendingConfirmations.focusedHowerAngel) {
+        const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
+        const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
+        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais ce hower angel n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}" pour lequel il veut prendre rendez-vous.`;
+      } else {
+        intentResultsText = `L'utilisateur mentionne "${designation}" mais ce hower angel n'a pas pu être identifié avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, spécialité, etc.).`;
+      }
+    } else if (type === 'activity') {
+      if (globalIntentInfos.focusedActivity) {
+        const activity = globalIntentInfos.focusedActivity;
+        rdvUrl = `/activity/${activity.id}`;
+        
+        intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour l'activité suivante : ${JSON.stringify({
+          id: activity.id,
+          title: activity.title,
+          shortDescription: activity.shortDescription,
+          longDescription: activity.longDescription,
+        }, null, 2)}\n\n`;
+        
+        intentResultsText += `URL de rendez-vous: ${rdvUrl}`;
+      } else if (globalIntentInfos.pendingConfirmations.focusedActivity) {
+        const pendingActivity = globalIntentInfos.pendingConfirmations.focusedActivity;
+        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingActivity.title}" pour laquelle il veut prendre rendez-vous.`;
+      } else {
+        intentResultsText = `L'utilisateur mentionne "${designation}" mais cette activité n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type d'activité, etc.).`;
+      }
+    } else if (type === 'practice') {
+      if (globalIntentInfos.focusedPractice) {
+        const practice = globalIntentInfos.focusedPractice;
+        rdvUrl = `/practitioners?practice=${practice.id}`;
+        
+        intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour la pratique suivante : ${JSON.stringify({
+          id: practice.id,
+          title: practice.title,
+          shortDescription: practice.shortDescription,
+          longDescription: practice.longDescription,
+        }, null, 2)}\n\n`;
+        
+        intentResultsText += `URL de rendez-vous: ${rdvUrl}`;
+      } else if (globalIntentInfos.pendingConfirmations.focusedPractice) {
+        const pendingPractice = globalIntentInfos.pendingConfirmations.focusedPractice;
+        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette pratique n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingPractice.title}" pour laquelle il veut prendre rendez-vous.`;
+      } else {
+        intentResultsText = `L'utilisateur mentionne "${designation}" mais cette pratique n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type de pratique, etc.).`;
+      }
+    }
+
+    // Mettre à jour le contexte avec intentResults (string) et rdv_url si disponible
+    const updatedMetadata: any = {
+      ...context.metadata,
+      ['intentResults']: intentResultsText
+    };
+    
+    context.metadata = updatedMetadata;
 
     return context;
   }
