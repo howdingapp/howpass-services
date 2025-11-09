@@ -204,8 +204,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     // Appeler _generateAIResponse pour obtenir la réponse
     const response = await this._generateAIResponse(context, userMessage, false, false, false, undefined, true);
     
-    // Valider la réponse
-    const validation = await this.validateResponse(response, context);
+    // Valider la réponse en utilisant le contexte de la réponse (qui peut être mis à jour)
+    const validation = await this.validateResponse(response, response.updatedContext);
     
     if (validation.isValid) {
       // Si un finalObject est fourni, l'utiliser
@@ -256,8 +256,8 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
       true   // useSchemaWithToolResults
     );
 
-    // Valider à nouveau la réponse du retry
-    const retryValidation = await this.validateResponse(retryResponse, context);
+    // Valider à nouveau la réponse du retry en utilisant le contexte de la réponse
+    const retryValidation = await this.validateResponse(retryResponse, retryResponse.updatedContext);
     
     if (retryValidation.isValid) {
       if (retryValidation.finalObject) {
