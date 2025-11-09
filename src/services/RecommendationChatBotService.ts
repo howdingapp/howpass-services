@@ -1517,7 +1517,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         // Élément en attente de confirmation
         const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
         const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
-        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cet élément n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}" (ID: ${pendingHowerAngel.userId}) dont il veut en savoir plus.`;
+        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cet élément n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}"dont il veut en savoir plus.`;
       } else {
         // Élément non trouvé, demander des précisions
         intentResultsText = `L'utilisateur mentionne "${designation}" mais cet élément n'a pas pu être identifié avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, spécialité, etc.).`;
@@ -1535,7 +1535,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       } else if (globalIntentInfos.pendingConfirmations.focusedActivity) {
         // Élément en attente de confirmation
         const pendingActivity = globalIntentInfos.pendingConfirmations.focusedActivity;
-        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingActivity.title}" (ID: ${pendingActivity.id}) dont il veut en savoir plus.`;
+        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingActivity.title}" dont il veut en savoir plus.`;
       } else {
         // Élément non trouvé, demander des précisions
         intentResultsText = `L'utilisateur mentionne "${designation}" mais cette activité n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type d'activité, etc.).`;
@@ -1553,7 +1553,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       } else if (globalIntentInfos.pendingConfirmations.focusedPractice) {
         // Élément en attente de confirmation
         const pendingPractice = globalIntentInfos.pendingConfirmations.focusedPractice;
-        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette pratique n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingPractice.title}" (ID: ${pendingPractice.id}) dont il veut en savoir plus.`;
+        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette pratique n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingPractice.title}" dont il veut en savoir plus.`;
       } else {
         // Élément non trouvé, demander des précisions
         intentResultsText = `L'utilisateur mentionne "${designation}" mais cette pratique n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type de pratique, etc.).`;
