@@ -418,7 +418,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                 description: "Message court (≤ 30 mots) adapté au contexte de prise de rendez-vous selon les informations disponibles dans intentResults."
               },
               quickReplies: this.getRdvQuickRepliesSchema(
-                "0 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur avec URLs de redirection",
+                "0 à 3 suggestions de réponses courtes (max 5 mots chacune) pour l'utilisateur avec IDs pour redirection (activityId pour type='activity_rdv', practiceId pour type='practice_rdv', howerAngelId pour type='hower_angel_rdv')",
                 0,
                 3
               )
@@ -1094,10 +1094,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
   }
 
   /**
-   * Génère le schéma pour les quickReplies de rendez-vous avec URLs de redirection
+   * Génère le schéma pour les quickReplies de rendez-vous avec IDs pour redirection
    */
   protected getRdvQuickRepliesSchema(
-    description: string = "Suggestions de réponses courtes pour l'utilisateur avec URLs de redirection",
+    description: string = "Suggestions de réponses courtes pour l'utilisateur avec IDs pour redirection",
     minItems: number = 0,
     maxItems: number = 4
   ): any {
@@ -1110,19 +1110,27 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         properties: {
           type: {
             type: "string",
-            enum: ["text", "url"],
-            description: "Type de quick reply: 'text' pour une réponse simple, 'url' pour une redirection avec URL"
+            enum: ["activity_rdv", "practice_rdv", "hower_angel_rdv"],
+            description: "Type de quick reply pour rendez-vous: 'activity_rdv' pour une redirection vers une activité, 'practice_rdv' pour une redirection vers une pratique, 'hower_angel_rdv' pour des actions liées à un hower angel (ex: 'voir toutes les activités', 'voir profil')"
           },
           text: {
             type: "string",
-            description: "Texte de la suggestion (max 5 mots)"
+            description: "Texte de la suggestion (max 5 mots). Pour type='hower_angel_rdv', utiliser des textes comme 'Voir toutes les activités', 'Voir profil', etc."
           },
-          redirectionUrl: {
+          activityId: {
             type: ["string", "null"],
-            description: "URL de redirection (requis si type='url', peut être null si type='text')"
+            description: "ID de l'activité pour redirection (requis si type='activity_rdv', doit être null sinon)"
+          },
+          practiceId: {
+            type: ["string", "null"],
+            description: "ID de la pratique pour redirection (requis si type='practice_rdv', doit être null sinon)"
+          },
+          howerAngelId: {
+            type: ["string", "null"],
+            description: "ID du hower angel (userId) pour redirection (requis si type='hower_angel_rdv', doit être null sinon)"
           }
         },
-        required: ["type", "text", "redirectionUrl"],
+        required: ["type", "text", "activityId", "practiceId", "howerAngelId"],
         additionalProperties: false
       },
       description
@@ -1663,7 +1671,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       designation = intent.rdvContext.designation || '';
     }
     let intentResultsText = '';
-    let rdvUrl: string | null = null;
 
     // Construire le message contextuel selon le type
     if (type === 'hower_angel') {
@@ -1673,11 +1680,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         // Si on n'a pas de focusedActivity, fournir l'objet howerAngel complet
         if (!globalIntentInfos.focusedActivity) {
           intentResultsText = `L'utilisateur souhaite prendre rendez-vous avec le hower angel suivant : ${JSON.stringify(howerAngel, null, 2)}\n\n`;
-          intentResultsText += `IMPORTANT: Tu dois choisir les 2 activités les plus pertinentes parmi celles disponibles dans l'objet ci-dessus (en utilisant les URLs /activity/{id}) et mentionner l'option "voir toutes les activités" (URL: /activity/creator/${howerAngel.userId}) comme 3ème choix.`;
+          intentResultsText += `IMPORTANT: Tu dois choisir les 2 activités les plus pertinentes parmi celles disponibles dans l'objet ci-dessus (en utilisant leurs IDs dans les quickReplies de type 'activity_rdv' avec activityId) et mentionner l'option "voir toutes les activités" comme 3ème choix (en utilisant un quickReply de type 'hower_angel_rdv' avec howerAngelId=${howerAngel.userId} et text='Voir toutes les activités').`;
         } else {
-          // On a une focusedActivity, utiliser son URL
+          // On a une focusedActivity, utiliser son ID
           const activity = globalIntentInfos.focusedActivity;
-          rdvUrl = `/activity/${activity.id}?tab=booking`;
           
           intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour l'activité suivante : ${JSON.stringify({
             id: activity.id,
@@ -1686,7 +1692,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             longDescription: activity.longDescription,
           }, null, 2)}\n\n`;
           
-          intentResultsText += `URL de rendez-vous: ${rdvUrl}`;
+          intentResultsText += `ID de l'activité pour rendez-vous: ${activity.id}`;
         }
       } else if (globalIntentInfos.pendingConfirmations.focusedHowerAngel) {
         const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
@@ -1702,8 +1708,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       if (activity) {
         // On a une activité, comportement normal
         if (globalIntentInfos.focusedActivity) {
-          rdvUrl = `/activity/${activity.id}`;
-          
           intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour l'activité suivante : ${JSON.stringify({
             id: activity.id,
             title: activity.title,
@@ -1711,7 +1715,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             longDescription: activity.longDescription,
           }, null, 2)}\n\n`;
           
-          intentResultsText += `URL de rendez-vous: ${rdvUrl}`;
+          intentResultsText += `ID de l'activité pour rendez-vous: ${activity.id}`;
         } else {
           // Activité en pending
           intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${activity.title}" pour laquelle il veut prendre rendez-vous.`;
@@ -1799,8 +1803,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           })), null, 2)}`;
         } else {
           // Aucune activité ne correspond, utiliser le comportement par défaut
-          rdvUrl = `/practitioners?practice=${practice.id}`;
-          
           intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour la pratique suivante : ${JSON.stringify({
             id: practice.id,
             title: practice.title,
@@ -1808,12 +1810,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             longDescription: practice.longDescription,
           }, null, 2)}\n\n`;
           
-          intentResultsText += `URL de rendez-vous: ${rdvUrl}`;
+          intentResultsText += `ID de la pratique pour rendez-vous: ${practice.id}`;
         }
       } else if (globalIntentInfos.focusedPractice) {
         // Pratique focused mais pas de hower angel
         const practice = globalIntentInfos.focusedPractice;
-        rdvUrl = `/practitioners?practice=${practice.id}`;
         
         intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour la pratique suivante : ${JSON.stringify({
           id: practice.id,
@@ -1822,7 +1823,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           longDescription: practice.longDescription,
         }, null, 2)}\n\n`;
         
-        intentResultsText += `URL de rendez-vous: ${rdvUrl}`;
+        intentResultsText += `ID de la pratique pour rendez-vous: ${practice.id}`;
       } else if (globalIntentInfos.pendingConfirmations.focusedPractice) {
         const pendingPractice = globalIntentInfos.pendingConfirmations.focusedPractice;
         intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette pratique n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingPractice.title}" pour laquelle il veut prendre rendez-vous.`;
@@ -1831,7 +1832,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       }
     }
 
-    // Mettre à jour le contexte avec intentResults (string) et rdv_url si disponible
+    // Mettre à jour le contexte avec intentResults (string)
     const updatedMetadata: any = {
       ...context.metadata,
       ['intentResults']: intentResultsText
