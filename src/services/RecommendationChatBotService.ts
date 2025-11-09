@@ -2158,50 +2158,50 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               });
             }
           } else if (contextType === 'hower_angel') {
-            focusedHowerAngel = item as HowerAngelItem;
-            if (focusedHowerAngel) {
-              // Si l'élément n'était pas présent et que ce n'est pas take_rdv, le mettre dans pendingConfirmations
-              if (!present && intent?.intent !== 'take_rdv') {
-                pendingConfirmations.focusedHowerAngel = focusedHowerAngel;
+            const howerAngelItem = item as HowerAngelItem;
+            if (howerAngelItem) {
+              // Si l'élément n'était pas présent, le mettre dans pendingConfirmations (peu importe l'intent)
+              // On ne valorise pas focused dans ce cas
+              if (!present) {
+                pendingConfirmations.focusedHowerAngel = howerAngelItem;
               } else {
-                // Pour take_rdv, si l'élément n'était pas présent, l'ajouter explicitement à la liste
-                if (!present && intent?.intent === 'take_rdv' && !howerAngelsMap.has(focusedHowerAngel.userId)) {
-                  howerAngelsMap.set(focusedHowerAngel.userId, focusedHowerAngel);
-                } else if (!howerAngelsMap.has(focusedHowerAngel.userId)) {
+                // Si présent, valoriser focused et ajouter à la Map si nécessaire
+                focusedHowerAngel = howerAngelItem;
+                if (!howerAngelsMap.has(howerAngelItem.userId)) {
                   // Ajouter à la Map si pas déjà présent (indexé par userId)
-                  howerAngelsMap.set(focusedHowerAngel.userId, focusedHowerAngel);
+                  howerAngelsMap.set(howerAngelItem.userId, howerAngelItem);
                 }
               }
             }
           } else if (contextType === 'activity') {
-            focusedActivity = item as ActivityItem;
-            if (focusedActivity) {
-              // Si l'élément n'était pas présent et que ce n'est pas take_rdv, le mettre dans pendingConfirmations
-              if (!present && intent?.intent !== 'take_rdv') {
-                pendingConfirmations.focusedActivity = focusedActivity;
+            const activityItem = item as ActivityItem;
+            if (activityItem) {
+              // Si l'élément n'était pas présent, le mettre dans pendingConfirmations (peu importe l'intent)
+              // On ne valorise pas focused dans ce cas
+              if (!present) {
+                pendingConfirmations.focusedActivity = activityItem;
               } else {
-                // Pour take_rdv, si l'élément n'était pas présent, l'ajouter explicitement à la liste
-                if (!present && intent?.intent === 'take_rdv' && !activitiesMap.has(focusedActivity.id)) {
-                  activitiesMap.set(focusedActivity.id, focusedActivity);
-                } else if (!activitiesMap.has(focusedActivity.id)) {
+                // Si présent, valoriser focused et ajouter à la Map si nécessaire
+                focusedActivity = activityItem;
+                if (!activitiesMap.has(activityItem.id)) {
                   // Ajouter à la Map si pas déjà présent
-                  activitiesMap.set(focusedActivity.id, focusedActivity);
+                  activitiesMap.set(activityItem.id, activityItem);
                 }
               }
             }
           } else if (contextType === 'practice') {
-            focusedPractice = item as PracticeItem;
-            if (focusedPractice) {
-              // Si l'élément n'était pas présent et que ce n'est pas take_rdv, le mettre dans pendingConfirmations
-              if (!present && intent?.intent !== 'take_rdv') {
-                pendingConfirmations.focusedPractice = focusedPractice;
+            const practiceItem = item as PracticeItem;
+            if (practiceItem) {
+              // Si l'élément n'était pas présent, le mettre dans pendingConfirmations (peu importe l'intent)
+              // On ne valorise pas focused dans ce cas
+              if (!present) {
+                pendingConfirmations.focusedPractice = practiceItem;
               } else {
-                // Pour take_rdv, si l'élément n'était pas présent, l'ajouter explicitement à la liste
-                if (!present && intent?.intent === 'take_rdv' && !practicesMap.has(focusedPractice.id)) {
-                  practicesMap.set(focusedPractice.id, focusedPractice);
-                } else if (!practicesMap.has(focusedPractice.id)) {
+                // Si présent, valoriser focused et ajouter à la Map si nécessaire
+                focusedPractice = practiceItem;
+                if (!practicesMap.has(practiceItem.id)) {
                   // Ajouter à la Map si pas déjà présent
-                  practicesMap.set(focusedPractice.id, focusedPractice);
+                  practicesMap.set(practiceItem.id, practiceItem);
                 }
               }
             }
