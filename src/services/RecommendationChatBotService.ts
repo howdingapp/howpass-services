@@ -1335,90 +1335,158 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     intent: any, 
     context: HowanaContext,
     userMessage: string,
+    globalIntentInfos: any,
     onIaResponse: (response: any) => Promise<void>
   ): Promise<void> {
     const typedIntent = intent as RecommendationIntent;
     
-    // Si l'intent est "know_more", utiliser le comportement par défaut
+    // Router vers la fonction appropriée selon le type d'intent
     if (typedIntent?.intent === 'know_more') {
-      console.log('ℹ️ Intent "know_more" détecté - utilisation du comportement par défaut');
-      return super.handleIntent(intent, context, userMessage, onIaResponse);
+      return this.handleKnowMoreIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
     }
     
-    if (!typedIntent || !typedIntent.searchContext) {
+    if (!typedIntent?.searchContext) {
       console.log('⚠️ Aucun searchContext dans l\'intent, utilisation du comportement par défaut');
-      return super.handleIntent(intent, context, userMessage, onIaResponse);
+      return this.handleDefaultIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
     }
 
     const { searchChunks, searchType } = typedIntent.searchContext;
 
     if (!searchChunks || searchChunks.length === 0) {
       console.log('⚠️ Aucun searchChunks dans l\'intent, utilisation du comportement par défaut');
-      return super.handleIntent(intent, context, userMessage, onIaResponse);
+      return this.handleDefaultIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
     }
-
-    // Extraire les textes des chunks (les méthodes de recherche attendent un tableau de strings)
-    const searchChunksTexts = searchChunks.map(chunk => chunk.text);
-
-    console.log(`🔍 Traitement de l'intent avec searchType: ${searchType}, searchChunks: ${searchChunks.length} chunks`);
 
     try {
       switch (searchType) {
         case 'activity':
-          // Recherche d'activités uniquement
-          const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunksTexts);
-          const activities: ActivityItem[] = activitiesResults.results || [];
-          console.log(`✅ ${activities.length} activités trouvées`);
-          // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
-          const activityIntentResults: IntentResults = { activities, practices: [], howerAngels: [] };
-          context.metadata = {
-            ...context.metadata,
-            ['intentResults']: activityIntentResults
-          };
+          await this.handleSearchActivityIntent(searchChunks, context);
           break;
-
         case 'practice':
-          // Recherche de pratiques uniquement
-          const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunksTexts);
-          const practices: PracticeItem[] = practicesResults.results || [];
-          console.log(`✅ ${practices.length} pratiques trouvées`);
-          // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
-          const practiceIntentResults: IntentResults = { activities: [], practices, howerAngels: [] };
-          context.metadata = {
-            ...context.metadata,
-            ['intentResults']: practiceIntentResults
-          };
+          await this.handleSearchPracticeIntent(searchChunks, context);
           break;
-
         case 'hower_angel':
-          // Recherche de hower angels
-          const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunksTexts);
-          if (!howerAngelsResult.success) {
-            console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
-            return super.handleIntent(intent, context, userMessage, onIaResponse);
-          }
-          const howerAngels: HowerAngelItem[] = howerAngelsResult.data || [];
-          console.log(`✅ ${howerAngels.length} hower angels trouvés`);
-          // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
-          const howerAngelIntentResults: IntentResults = { activities: [], practices: [], howerAngels };
-          context.metadata = {
-            ...context.metadata,
-            ['intentResults']: howerAngelIntentResults
-          };
+          const handled = await this.handleSearchHowerAngelIntent(searchChunks, context, intent, userMessage, globalIntentInfos, onIaResponse);
+          if (handled) return; // Si une erreur s'est produite, elle a déjà été gérée
           break;
-
         default:
           console.warn(`⚠️ searchType non reconnu: ${searchType}, utilisation du comportement par défaut`);
-          return super.handleIntent(intent, context, userMessage, onIaResponse);
+          return this.handleDefaultIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
       }
 
       // Après avoir effectué les recherches, utiliser le comportement par défaut pour générer la réponse
-      return super.handleIntent(intent, context, userMessage, onIaResponse);
+      return this.handleDefaultIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
     } catch (error) {
       console.error('❌ Erreur lors du traitement de l\'intent:', error);
       // En cas d'erreur, utiliser le comportement par défaut
-      return super.handleIntent(intent, context, userMessage, onIaResponse);
+      return this.handleDefaultIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
     }
+  }
+
+  /**
+   * Gère l'intent "know_more" - utilise le comportement par défaut
+   */
+  private async handleKnowMoreIntent(
+    intent: any,
+    context: HowanaContext,
+    userMessage: string,
+    globalIntentInfos: any,
+    onIaResponse: (response: any) => Promise<void>
+  ): Promise<void> {
+    console.log('ℹ️ Intent "know_more" détecté - utilisation du comportement par défaut');
+    return super.handleIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
+  }
+
+  /**
+   * Gère la recherche d'activités
+   */
+  private async handleSearchActivityIntent(
+    searchChunks: Array<{ type: string; text: string }>,
+    context: HowanaContext
+  ): Promise<void> {
+    const searchChunksTexts = searchChunks.map(chunk => chunk.text);
+    console.log(`🔍 Recherche d'activités avec ${searchChunks.length} chunks`);
+    
+    const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunksTexts);
+    const activities: ActivityItem[] = activitiesResults.results || [];
+    console.log(`✅ ${activities.length} activités trouvées`);
+    
+    // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+    const activityIntentResults: IntentResults = { activities, practices: [], howerAngels: [] };
+    context.metadata = {
+      ...context.metadata,
+      ['intentResults']: activityIntentResults
+    };
+  }
+
+  /**
+   * Gère la recherche de pratiques
+   */
+  private async handleSearchPracticeIntent(
+    searchChunks: Array<{ type: string; text: string }>,
+    context: HowanaContext
+  ): Promise<void> {
+    const searchChunksTexts = searchChunks.map(chunk => chunk.text);
+    console.log(`🔍 Recherche de pratiques avec ${searchChunks.length} chunks`);
+    
+    const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunksTexts);
+    const practices: PracticeItem[] = practicesResults.results || [];
+    console.log(`✅ ${practices.length} pratiques trouvées`);
+    
+    // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+    const practiceIntentResults: IntentResults = { activities: [], practices, howerAngels: [] };
+    context.metadata = {
+      ...context.metadata,
+      ['intentResults']: practiceIntentResults
+    };
+  }
+
+  /**
+   * Gère la recherche de hower angels
+   * @returns true si une erreur s'est produite et que le comportement par défaut a déjà été appelé
+   */
+  private async handleSearchHowerAngelIntent(
+    searchChunks: Array<{ type: string; text: string }>,
+    context: HowanaContext,
+    intent: any,
+    userMessage: string,
+    globalIntentInfos: any,
+    onIaResponse: (response: any) => Promise<void>
+  ): Promise<boolean> {
+    const searchChunksTexts = searchChunks.map(chunk => chunk.text);
+    console.log(`🔍 Recherche de hower angels avec ${searchChunks.length} chunks`);
+    
+    const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunksTexts);
+    if (!howerAngelsResult.success) {
+      console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
+      await super.handleIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
+      return true; // Erreur gérée
+    }
+    
+    const howerAngels: HowerAngelItem[] = howerAngelsResult.data || [];
+    console.log(`✅ ${howerAngels.length} hower angels trouvés`);
+    
+    // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+    const howerAngelIntentResults: IntentResults = { activities: [], practices: [], howerAngels };
+    context.metadata = {
+      ...context.metadata,
+      ['intentResults']: howerAngelIntentResults
+    };
+    
+    return false; // Pas d'erreur
+  }
+
+  /**
+   * Utilise le comportement par défaut pour générer la réponse
+   */
+  private async handleDefaultIntent(
+    intent: any,
+    context: HowanaContext,
+    userMessage: string,
+    globalIntentInfos: any,
+    onIaResponse: (response: any) => Promise<void>
+  ): Promise<void> {
+    return super.handleIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
   }
 
   /**

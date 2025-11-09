@@ -1288,6 +1288,7 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
     _intent: any, 
     context: HowanaContext,
     userMessage: string,
+    _globalIntentInfos: any,
     onIaResponse: (response: any) => Promise<void>
   ): Promise<void> {
     // Implémentation par défaut : génère une réponse IA et la passe au callback

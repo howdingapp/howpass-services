@@ -503,7 +503,7 @@ export class IAController {
     };
 
     // Appeler handleIntent avec le callback et attendre qu'il se termine
-    await chatBotService['handleIntent'](intent, contextWithIntent, taskData.userMessage, onIaResponse);
+    await chatBotService['handleIntent'](intent, contextWithIntent, taskData.userMessage, globalIntentInfos, onIaResponse);
     
     // Mettre à jour le contexte avec le dernier contexte mis à jour par handleIntent
     if (lastUpdatedContext !== contextWithIntent) {
