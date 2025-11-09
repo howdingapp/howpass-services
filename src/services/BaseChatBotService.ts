@@ -195,12 +195,81 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
   /**
    * Générer une réponse IA basée sur le contexte de la conversation
+   * Gère la validation et le retry si nécessaire
    */
-    public async generateAIResponse(
-      context: HowanaContext, 
-      userMessage: string,
-    ): Promise<T> {
-      return this._generateAIResponse(context, userMessage, false, false, false, undefined, true);
+  public async generateAIResponse(
+    context: HowanaContext, 
+    userMessage: string,
+  ): Promise<T> {
+    // Appeler _generateAIResponse pour obtenir la réponse
+    const response = await this._generateAIResponse(context, userMessage, false, false, false, undefined, true);
+    
+    // Valider la réponse
+    const validation = await this.validateResponse(response, context);
+    
+    if (validation.isValid) {
+      // Si un finalObject est fourni, l'utiliser
+      if (validation.finalObject) {
+        console.log('✅ Validation réussie avec finalObject fourni');
+        return validation.finalObject;
+      }
+      // Sinon, retourner la réponse initiale
+      console.log('✅ Validation réussie');
+      return response;
+    }
+
+    // Validation échouée
+    console.warn('⚠️ Validation échouée:', validation.reason);
+    
+    // Si un finalObject est fourni, l'utiliser même si la validation a échoué
+    if (validation.finalObject) {
+      console.log('✅ Utilisation du finalObject fourni malgré l\'échec de validation');
+      return validation.finalObject;
+    }
+
+    // Réessayer une seule fois avec les erreurs détectées
+    console.log('🔄 Retry de la génération avec les erreurs détectées');
+    
+    // Construire le message enrichi avec les erreurs de validation
+    const validationErrorsText = `\n\n[ERREURS DE VALIDATION DÉTECTÉES]
+La réponse précédente n'a pas passé la validation. Voici les erreurs détectées :
+
+${validation.reason || 'Erreur de validation non spécifiée'}
+
+Merci de corriger la réponse en tenant compte de ces erreurs.`;
+
+    // Enrichir le message utilisateur original avec les erreurs
+    const enrichedUserMessage = userMessage + validationErrorsText;
+
+    // Mettre à jour le contexte avec le previousCallId de la réponse qui a échoué
+    context.previousCallId = response.messageId;
+
+    // Relancer via _generateAIResponse avec le message enrichi
+    // On désactive la récursion pour éviter les boucles infinies
+    const retryResponse = await this._generateAIResponse(
+      context,
+      enrichedUserMessage,
+      false, // forceSummaryToolCall
+      true,  // toolsAllowed
+      false, // recursionAllowed (pour éviter les boucles)
+      undefined, // toolResults
+      true   // useSchemaWithToolResults
+    );
+
+    // Valider à nouveau la réponse du retry
+    const retryValidation = await this.validateResponse(retryResponse, context);
+    
+    if (retryValidation.isValid) {
+      if (retryValidation.finalObject) {
+        return retryValidation.finalObject;
+      }
+      return retryResponse;
+    }
+
+    // Si le retry échoue aussi, lancer une erreur au lieu de retourner une réponse invalide
+    const errorMessage = `La validation a échoué après retry. Raison: ${retryValidation.reason || validation.reason || 'Erreur de validation non spécifiée'}`;
+    console.error('❌ Validation échouée après retry:', errorMessage);
+    throw new Error(errorMessage);
   }
 
   /**
@@ -661,6 +730,18 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   protected abstract buildFirstUserPrompt(context: HowanaContext): string;
   protected abstract buildSummarySystemPrompt(context: HowanaContext): string;
   protected abstract getSummaryOutputSchema(context: HowanaContext): ChatBotOutputSchema;
+  
+  /**
+   * Valide une réponse IA générée
+   * @param response La réponse IA à valider
+   * @param context Le contexte de la conversation
+   * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (T optionnel)
+   */
+  protected abstract validateResponse(response: T, context: HowanaContext): Promise<{
+    isValid: boolean;
+    reason?: string;
+    finalObject?: T;
+  }>;
   
   /**
    * Schéma de sortie pour startConversation (null si pas de schéma spécifique)

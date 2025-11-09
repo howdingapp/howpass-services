@@ -428,4 +428,25 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
     // Implémentation par défaut - peut être surchargée selon les besoins
     return intent;
   }
+
+  /**
+   * Valide une réponse IA générée
+   * @param response La réponse IA à valider
+   * @param context Le contexte de la conversation
+   * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (T optionnel)
+   */
+  protected async validateResponse(
+    _response: IAMessageResponse, 
+    _context: HowanaContext
+  ): Promise<{
+    isValid: boolean;
+    reason?: string;
+    finalObject?: IAMessageResponse;
+  }> {
+    // Pour l'instant, on accepte toutes les réponses valides
+    // Les validations spécifiques peuvent être ajoutées ici
+    return {
+      isValid: true
+    };
+  }
 }

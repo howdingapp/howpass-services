@@ -449,4 +449,17 @@ Pour chaque outil pertinent, fournis des paramètres qui maximiseront la pertine
     }
   }
 
+  /**
+   * Valide une réponse IA générée
+   * Méthode abstraite à implémenter dans les classes filles
+   * @param response La réponse IA à valider
+   * @param context Le contexte de la conversation
+   * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (T optionnel)
+   */
+  protected abstract override validateResponse(response: T, context: HowanaContext): Promise<{
+    isValid: boolean;
+    reason?: string;
+    finalObject?: T;
+  }>;
+
 }

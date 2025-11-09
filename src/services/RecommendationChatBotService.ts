@@ -1763,8 +1763,60 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                 selectedKeywords: activity.selectedKeywords
               })), null, 2)}`;
             } else {
-              // Aucune activité ne correspond
-              intentResultsText = `L'utilisateur mentionne "${designation}" mais aucune activité correspondant à la pratique "${practice.title}" n'a été trouvée pour ce hower angel. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement.`;
+              // Aucune activité ne correspond - récupérer toutes les activités du hower angel
+              const howerAngelFullName = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
+              const allActivities = howerAngel.activities || [];
+              
+              // Mapper les activités en ActivityItem
+              const activityItems: ActivityItem[] = allActivities.map((activity: any) => ({
+                type: 'activity' as const,
+                id: activity.id,
+                title: activity.title,
+                shortDescription: activity.shortDescription,
+                longDescription: activity.longDescription,
+                durationMinutes: activity.durationMinutes,
+                participants: activity.participants,
+                rating: activity.rating,
+                price: activity.price,
+                benefits: activity.benefits,
+                locationType: activity.locationType,
+                address: activity.address,
+                selectedKeywords: activity.selectedKeywords,
+                typicalSituations: activity.typicalSituations,
+                relevanceScore: 0.5 // Score par défaut pour les activités disponibles
+              }));
+              
+              // Ajouter les activités dans le contexte via intentResults
+              const activityIntentResults: IntentResults = { 
+                activities: activityItems, 
+                practices: [], 
+                howerAngels: [] 
+              };
+              context.metadata = {
+                ...context.metadata,
+                ['intentResults']: activityIntentResults
+              };
+              
+              // Construire le message pour l'IA
+              intentResultsText = `L'utilisateur mentionne "${designation}" mais le hower angel "${howerAngelFullName}" ne propose pas encore d'activité spécifique pour la pratique "${practice.title}". `;
+              intentResultsText += `Cependant, ce hower angel propose ${allActivities.length} autre(s) activité(s) disponible(s). `;
+              intentResultsText += `Tu dois informer l'utilisateur que ce hower angel ne propose pas encore d'activité pour cette pratique, mais qu'il peut :\n`;
+              intentResultsText += `1. Voir les autres activités disponibles de ce hower angel (tu dois proposer les 2 activités les plus pertinentes parmi celles disponibles dans le contexte, en utilisant des quickReplies de type 'activity_rdv' avec activityId)\n`;
+              intentResultsText += `2. Contacter directement le hower angel (en utilisant un quickReply de type 'hower_angel_rdv' avec howerAngelId=${howerAngel.userId} et text='Voir le profil')\n\n`;
+              intentResultsText += `Voici toutes les activités disponibles du hower angel "${howerAngelFullName}" : ${JSON.stringify(activityItems.map(activity => ({
+                id: activity.id,
+                title: activity.title,
+                shortDescription: activity.shortDescription,
+                longDescription: activity.longDescription,
+                durationMinutes: activity.durationMinutes,
+                participants: activity.participants,
+                rating: activity.rating,
+                price: activity.price,
+                benefits: activity.benefits,
+                locationType: activity.locationType,
+                address: activity.address,
+                selectedKeywords: activity.selectedKeywords
+              })), null, 2)}`;
             }
           } else {
             // Pas d'activité, pas de pratique avec hower angel
@@ -1846,10 +1898,16 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       }
     }
 
-    // Mettre à jour le contexte avec intentResults (string)
+    // Mettre à jour le contexte avec intentResults
+    // Si intentResults est déjà un objet (IntentResults), ne pas l'écraser avec le texte
+    // mais mettre le texte dans intentResultsText pour le prompt
+    const existingIntentResults = context.metadata?.['intentResults'];
+    const isIntentResultsObject = existingIntentResults && typeof existingIntentResults === 'object' && !Array.isArray(existingIntentResults) && 'activities' in existingIntentResults;
+    
     const updatedMetadata: any = {
       ...context.metadata,
-      ['intentResults']: intentResultsText
+      // Ne pas écraser l'objet IntentResults si on l'a déjà mis, mais mettre le texte dans intentResultsText
+      ...(isIntentResultsObject ? { ['intentResultsText']: intentResultsText } : { ['intentResults']: intentResultsText })
     };
     
     context.metadata = updatedMetadata;
@@ -2560,6 +2618,189 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       focusedFaqs,
       pendingConfirmations,
       unknownFocused
+    };
+  }
+
+  /**
+   * Valide une réponse IA générée
+   * @param response La réponse IA à valider
+   * @param context Le contexte de la conversation
+   * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (T optionnel)
+   */
+  protected async validateResponse(
+    response: RecommendationMessageResponse, 
+    context: HowanaContext
+  ): Promise<{
+    isValid: boolean;
+    reason?: string;
+    finalObject?: RecommendationMessageResponse;
+  }> {
+    // Validation de base : vérifier que la réponse contient le champ response
+    if (!response || !response.response) {
+      return {
+        isValid: false,
+        reason: 'La réponse ne contient pas le champ "response" requis'
+      };
+    }
+
+    // Validation de base : vérifier que la réponse n'est pas vide
+    if (typeof response.response !== 'string' || response.response.trim().length === 0) {
+      return {
+        isValid: false,
+        reason: 'La réponse est vide'
+      };
+    }
+
+    // Vérifier les IDs des quickReplies si présents
+    if (response.quickReplies && Array.isArray(response.quickReplies) && response.quickReplies.length > 0) {
+      // Regexp pour extraire un UUID valide depuis une chaîne (même avec d'autres caractères)
+      // Format UUID: "d1e210f7-3f60-4151-83b5-12ec51e21b67"
+      const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+      
+      // Récupérer le globalIntentInfos depuis le contexte pour vérifier les IDs
+      const globalIntentInfos = context.metadata?.['globalIntentInfos'] as GlobalRecommendationIntentInfos | undefined;
+      
+      if (!globalIntentInfos) {
+        return {
+          isValid: false,
+          reason: 'Impossible de valider les quickReplies : globalIntentInfos non disponible dans le contexte'
+        };
+      }
+
+      // Créer des Sets pour vérifier rapidement l'existence des IDs
+      const activityIds = new Set(globalIntentInfos.activities.map(a => a.id));
+      const practiceIds = new Set(globalIntentInfos.practices.map(p => p.id));
+      const howerAngelUserIds = new Set(globalIntentInfos.howerAngels.map(h => h.userId));
+
+      // Copie de la réponse pour modification si nécessaire
+      const correctedResponse: RecommendationMessageResponse = { 
+        ...response,
+        quickReplies: response.quickReplies.map(qr => ({ ...qr }))
+      };
+      let hasCorrections = false;
+
+      // Vérifier chaque quickReply
+      for (let i = 0; i < response.quickReplies.length; i++) {
+        const quickReply = response.quickReplies[i];
+        
+        if (!quickReply) {
+          continue;
+        }
+        
+        const correctedQuickReply = correctedResponse.quickReplies[i];
+        if (!correctedQuickReply) {
+          continue;
+        }
+        
+        // Vérifier activityId si présent
+        if (quickReply.activityId) {
+          const originalActivityId = quickReply.activityId;
+          const trimmedId = originalActivityId.trim();
+          
+          // Essayer d'extraire un UUID valide depuis la chaîne
+          const uuidMatch = trimmedId.match(uuidRegex);
+          if (!uuidMatch) {
+            return {
+              isValid: false,
+              reason: `Impossible d'extraire un activityId valide (format UUID) depuis "${trimmedId}" dans la quickReply ${i + 1}`
+            };
+          }
+          
+          const activityId = uuidMatch[0];
+          
+          // Vérifier l'existence dans le contexte
+          if (!activityIds.has(activityId)) {
+            return {
+              isValid: false,
+              reason: `L'activityId "${activityId}" dans la quickReply ${i + 1} n'existe pas dans le contexte`
+            };
+          }
+          
+          // Corriger l'ID si nécessaire (utiliser l'UUID extrait)
+          if (originalActivityId !== activityId) {
+            correctedQuickReply.activityId = activityId;
+            hasCorrections = true;
+          }
+        }
+
+        // Vérifier practiceId si présent
+        if (quickReply.practiceId) {
+          const originalPracticeId = quickReply.practiceId;
+          const trimmedId = originalPracticeId.trim();
+          
+          // Essayer d'extraire un UUID valide depuis la chaîne
+          const uuidMatch = trimmedId.match(uuidRegex);
+          if (!uuidMatch) {
+            return {
+              isValid: false,
+              reason: `Impossible d'extraire un practiceId valide (format UUID) depuis "${trimmedId}" dans la quickReply ${i + 1}`
+            };
+          }
+          
+          const practiceId = uuidMatch[0];
+          
+          // Vérifier l'existence dans le contexte
+          if (!practiceIds.has(practiceId)) {
+            return {
+              isValid: false,
+              reason: `Le practiceId "${practiceId}" dans la quickReply ${i + 1} n'existe pas dans le contexte`
+            };
+          }
+          
+          // Corriger l'ID si nécessaire (utiliser l'UUID extrait)
+          if (originalPracticeId !== practiceId) {
+            correctedQuickReply.practiceId = practiceId;
+            hasCorrections = true;
+          }
+        }
+
+        // Vérifier les autres types de quickReplies qui pourraient avoir des IDs
+        // (par exemple howerAngelId pour les quickReplies de type 'hower_angel_rdv')
+        const quickReplyAny = quickReply as any;
+        const correctedQuickReplyAny = correctedQuickReply as any;
+        if (quickReplyAny.howerAngelId) {
+          const originalHowerAngelId = String(quickReplyAny.howerAngelId);
+          const trimmedId = originalHowerAngelId.trim();
+          
+          // Essayer d'extraire un UUID valide depuis la chaîne
+          const uuidMatch = trimmedId.match(uuidRegex);
+          if (!uuidMatch) {
+            return {
+              isValid: false,
+              reason: `Impossible d'extraire un howerAngelId valide (format UUID) depuis "${trimmedId}" dans la quickReply ${i + 1}`
+            };
+          }
+          
+          const howerAngelId = uuidMatch[0];
+          
+          // Vérifier l'existence dans le contexte
+          if (!howerAngelUserIds.has(howerAngelId)) {
+            return {
+              isValid: false,
+              reason: `Le howerAngelId "${howerAngelId}" dans la quickReply ${i + 1} n'existe pas dans le contexte`
+            };
+          }
+          
+          // Corriger l'ID si nécessaire (utiliser l'UUID extrait)
+          if (originalHowerAngelId !== howerAngelId) {
+            correctedQuickReplyAny.howerAngelId = howerAngelId;
+            hasCorrections = true;
+          }
+        }
+      }
+
+      // Si des corrections ont été faites, retourner la réponse corrigée
+      if (hasCorrections) {
+        return {
+          isValid: true,
+          finalObject: correctedResponse
+        };
+      }
+    }
+
+    // Toutes les validations sont passées
+    return {
+      isValid: true
     };
   }
 
