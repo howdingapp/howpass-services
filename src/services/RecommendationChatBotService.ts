@@ -2377,6 +2377,51 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           
           case 'activity':
           case 'practice': {
+            // Si il n'y a pas de focusedHowerAngel, gérer la logique des hower angels
+            if (!focusedHowerAngel) {
+              const howerAngelsArray = Array.from(howerAngelsMap.values());
+              
+              if (howerAngelsArray.length === 1) {
+                // Si il n'y a qu'un seul hower angel, on le met en focused
+                focusedHowerAngel = howerAngelsArray[0] || null;
+              } else if (howerAngelsArray.length > 1) {
+                // Si il y en a plusieurs, on ne cherche pas les practices ni activités
+                // On utilise contextDesignation pour rechercher un hower_angel
+                if (contextDesignation) {
+                  const howerAngelResult = await resolveFocusedItem('hower_angel', null, contextDesignation);
+                  
+                  if (howerAngelResult.item && !howerAngelResult.isUnknown) {
+                    const foundHowerAngel = howerAngelResult.item as HowerAngelItem;
+                    
+                    // Si on a un match avec un des howerangel qui est déjà présent dans le contextGlobal
+                    const matchingHowerAngel = howerAngelsMap.get(foundHowerAngel.userId) || 
+                      Array.from(howerAngelsMap.values()).find(ha => ha.id === foundHowerAngel.id);
+                    
+                    if (matchingHowerAngel) {
+                      // On le met dans pendingConfirmation
+                      pendingConfirmations.focusedHowerAngel = matchingHowerAngel;
+                    } else {
+                      // Sinon on prend le 1er disponible parmi les howerAngelsMap (on ne prend jamais le résultat de recherche s'il ne match pas)
+                      pendingConfirmations.focusedHowerAngel = howerAngelsArray[0] || null;
+                    }
+                  } else {
+                    // Si la recherche ne trouve rien, on prend le 1er disponible parmi les howerAngelsMap
+                    pendingConfirmations.focusedHowerAngel = howerAngelsArray[0] || null;
+                  }
+                } else {
+                  // Si pas de contextDesignation, on prend le 1er disponible parmi les howerAngelsMap
+                  pendingConfirmations.focusedHowerAngel = howerAngelsArray[0] || null;
+                }
+                // Sortir de la fonction sans chercher les activités/pratiques
+                break;
+              }
+            }
+            
+            // Si on n'a toujours pas de focusedHowerAngel à ce niveau, on ne cherche pas les activities et practices
+            if (!focusedHowerAngel) {
+              break;
+            }
+            
             // D'abord, rechercher par identifiant dans les deux types en parallèle si disponible
             let foundItem: ActivityItem | PracticeItem | null = null;
             let present = false;
