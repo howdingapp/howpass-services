@@ -1332,83 +1332,138 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    * @param onIaResponse Callback appelé pour chaque réponse IA générée
    */
   protected override async handleIntent(
-    intent: RecommendationIntent, 
     context: HowanaContext,
     userMessage: string,
-    globalIntentInfos: GlobalRecommendationIntentInfos,
     onIaResponse: (response: any) => Promise<void>
-  ): Promise<void> {
+  ): Promise<HowanaContext> {
+    // Récupérer intent depuis le contexte
+    const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
+    const intent = currentIntentInfos?.intent as RecommendationIntent | undefined;
+
+    if (!intent) {
+      console.warn('⚠️ Aucun intent trouvé dans le contexte, utilisation du comportement par défaut');
+      return super.handleIntent(context, userMessage, onIaResponse);
+    }
+
     const typedIntent = intent;
     
+    // Toujours calculer globalIntentInfos avant les handlers
+    let globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+    context.metadata = {
+      ...context.metadata,
+      ['globalIntentInfos']: globalIntentInfos
+    };
+
+    // Déterminer si on doit recalculer globalIntentInfos après les handlers
+    // Pour les intents de recherche : oui (besoin des intentResults après les recherches)
+    const shouldRecomputeAfterHandle = 
+      typedIntent?.intent === 'search_activities' ||
+      typedIntent?.intent === 'search_hower_angel' ||
+      typedIntent?.intent === 'search_advices';
+
     // Router vers la fonction appropriée selon le type d'intent
     if (typedIntent?.intent === 'know_more') {
-      return this.handleKnowMoreIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
-    }
-    
-    if (!typedIntent?.searchContext) {
+      await this.handleKnowMoreIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
+      return context;
+    } else if (!typedIntent?.searchContext) {
       console.log('⚠️ Aucun searchContext dans l\'intent, utilisation du comportement par défaut');
-      return this.handleDefaultIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
-    }
+      await this.handleDefaultIntent(context, userMessage, onIaResponse);
+      return context;
+    } else {
+      const { searchChunks, searchType } = typedIntent.searchContext;
 
-    const { searchChunks, searchType } = typedIntent.searchContext;
+      if (!searchChunks || searchChunks.length === 0) {
+        console.log('⚠️ Aucun searchChunks dans l\'intent, utilisation du comportement par défaut');
+        await this.handleDefaultIntent(context, userMessage, onIaResponse);
+        return context;
+      } else {
+        try {
+          // Pour les recherches, effectuer les recherches d'abord
+          switch (searchType) {
+            case 'activity':
+              await this.handleSearchActivityIntent(searchChunks, context);
+              break;
+            case 'practice':
+              await this.handleSearchPracticeIntent(searchChunks, context);
+              break;
+            case 'hower_angel':
+              const handled = await this.handleSearchHowerAngelIntent(searchChunks, context, onIaResponse);
+              if (handled) {
+                // Si une erreur s'est produite, recalculer globalIntentInfos si nécessaire
+                if (shouldRecomputeAfterHandle) {
+                  globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+                  context.metadata = {
+                    ...context.metadata,
+                    ['globalIntentInfos']: globalIntentInfos
+                  };
+                }
+                return context;
+              }
+              break;
+            default:
+              console.warn(`⚠️ searchType non reconnu: ${searchType}, utilisation du comportement par défaut`);
+              await this.handleDefaultIntent(context, userMessage, onIaResponse);
+              return context;
+          }
 
-    if (!searchChunks || searchChunks.length === 0) {
-      console.log('⚠️ Aucun searchChunks dans l\'intent, utilisation du comportement par défaut');
-      return this.handleDefaultIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
-    }
+          // Après avoir effectué les recherches, recalculer globalIntentInfos si nécessaire (pour avoir accès aux intentResults)
+          if (shouldRecomputeAfterHandle) {
+            globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+            context.metadata = {
+              ...context.metadata,
+              ['globalIntentInfos']: globalIntentInfos
+            };
+          }
 
-    try {
-      switch (searchType) {
-        case 'activity':
-          await this.handleSearchActivityIntent(searchChunks, context);
-          break;
-        case 'practice':
-          await this.handleSearchPracticeIntent(searchChunks, context);
-          break;
-        case 'hower_angel':
-          const handled = await this.handleSearchHowerAngelIntent(searchChunks, context, intent, userMessage, globalIntentInfos, onIaResponse);
-          if (handled) return; // Si une erreur s'est produite, elle a déjà été gérée
-          break;
-        default:
-          console.warn(`⚠️ searchType non reconnu: ${searchType}, utilisation du comportement par défaut`);
-          return this.handleDefaultIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
+          // Utiliser le comportement par défaut pour générer la réponse
+          await this.handleDefaultIntent(context, userMessage, onIaResponse);
+          return context;
+        } catch (error) {
+          console.error('❌ Erreur lors du traitement de l\'intent:', error);
+          // En cas d'erreur, recalculer globalIntentInfos si nécessaire
+          if (shouldRecomputeAfterHandle) {
+            globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+            context.metadata = {
+              ...context.metadata,
+              ['globalIntentInfos']: globalIntentInfos
+            };
+          }
+          await this.handleDefaultIntent(context, userMessage, onIaResponse);
+          return context;
+        }
       }
-
-      // Après avoir effectué les recherches, utiliser le comportement par défaut pour générer la réponse
-      return this.handleDefaultIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
-    } catch (error) {
-      console.error('❌ Erreur lors du traitement de l\'intent:', error);
-      // En cas d'erreur, utiliser le comportement par défaut
-      return this.handleDefaultIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
     }
   }
 
   /**
-   * Gère l'intent "know_more" - enrichit le userMessage avec les informations du globalIntentInfos
+   * Gère l'intent "know_more" - valorise intentResults avec les messages contextuels du globalIntentInfos
    */
   private async handleKnowMoreIntent(
     intent: RecommendationIntent,
     context: HowanaContext,
     userMessage: string,
-    globalIntentInfos: GlobalRecommendationIntentInfos,
+    globalIntentInfos: GlobalRecommendationIntentInfos | undefined,
     onIaResponse: (response: any) => Promise<void>
-  ): Promise<void> {
-    console.log('ℹ️ Intent "know_more" détecté - enrichissement du message avec les informations du contexte');
+  ): Promise<HowanaContext> {
+    if (!globalIntentInfos) {
+      return super.handleIntent(context, userMessage, onIaResponse);
+    }
+    console.log('ℹ️ Intent "know_more" détecté - valorisation de intentResults avec les messages contextuels');
     
     if (!intent.knowMoreContext) {
       console.warn('⚠️ knowMoreContext manquant dans l\'intent know_more');
-      return super.handleIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
+      return super.handleIntent(context, userMessage, onIaResponse);
     }
 
     const { type, designation } = intent.knowMoreContext;
-    let enrichedMessage = userMessage;
+    let intentResultsText = '';
 
-    // Enrichir le message selon le type et l'état de l'élément dans globalIntentInfos
+    // Construire le message contextuel selon le type et l'état de l'élément dans globalIntentInfos
     if (type === 'hower_angel') {
       if (globalIntentInfos.focusedHowerAngel) {
-        // Élément focused existe, enrichir avec ses informations
+        // Élément focused existe
         const howerAngel = globalIntentInfos.focusedHowerAngel;
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE] L'utilisateur souhaite en savoir plus sur le hower angel suivant : ${JSON.stringify({
+        intentResultsText = `L'utilisateur souhaite en savoir plus sur le hower angel suivant : ${JSON.stringify({
           id: howerAngel.id,
           userId: howerAngel.userId,
           firstName: howerAngel.firstName,
@@ -1420,16 +1475,16 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         // Élément en attente de confirmation
         const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
         const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE IMPORTANT] L'utilisateur mentionne "${designation}" mais cet élément n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}" dont il veut en savoir plus.`;
+        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cet élément n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}" (ID: ${pendingHowerAngel.userId}) dont il veut en savoir plus.`;
       } else {
         // Élément non trouvé, demander des précisions
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE] L'utilisateur mentionne "${designation}" mais cet élément n'a pas pu être identifié avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, spécialité, etc.).`;
+        intentResultsText = `L'utilisateur mentionne "${designation}" mais cet élément n'a pas pu être identifié avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, spécialité, etc.).`;
       }
     } else if (type === 'activity') {
       if (globalIntentInfos.focusedActivity) {
-        // Élément focused existe, enrichir avec ses informations
+        // Élément focused existe
         const activity = globalIntentInfos.focusedActivity;
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE] L'utilisateur souhaite en savoir plus sur l'activité suivante : ${JSON.stringify({
+        intentResultsText = `L'utilisateur souhaite en savoir plus sur l'activité suivante : ${JSON.stringify({
           id: activity.id,
           title: activity.title,
           shortDescription: activity.shortDescription,
@@ -1438,16 +1493,16 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       } else if (globalIntentInfos.pendingConfirmations.focusedActivity) {
         // Élément en attente de confirmation
         const pendingActivity = globalIntentInfos.pendingConfirmations.focusedActivity;
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE IMPORTANT] L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingActivity.title}" dont il veut en savoir plus.`;
+        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingActivity.title}" (ID: ${pendingActivity.id}) dont il veut en savoir plus.`;
       } else {
         // Élément non trouvé, demander des précisions
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE] L'utilisateur mentionne "${designation}" mais cette activité n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type d'activité, etc.).`;
+        intentResultsText = `L'utilisateur mentionne "${designation}" mais cette activité n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type d'activité, etc.).`;
       }
     } else if (type === 'practice') {
       if (globalIntentInfos.focusedPractice) {
-        // Élément focused existe, enrichir avec ses informations
+        // Élément focused existe
         const practice = globalIntentInfos.focusedPractice;
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE] L'utilisateur souhaite en savoir plus sur la pratique suivante : ${JSON.stringify({
+        intentResultsText = `L'utilisateur souhaite en savoir plus sur la pratique suivante : ${JSON.stringify({
           id: practice.id,
           title: practice.title,
           shortDescription: practice.shortDescription,
@@ -1456,27 +1511,32 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       } else if (globalIntentInfos.pendingConfirmations.focusedPractice) {
         // Élément en attente de confirmation
         const pendingPractice = globalIntentInfos.pendingConfirmations.focusedPractice;
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE IMPORTANT] L'utilisateur mentionne "${designation}" mais cette pratique n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingPractice.title}" dont il veut en savoir plus.`;
+        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette pratique n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingPractice.title}" (ID: ${pendingPractice.id}) dont il veut en savoir plus.`;
       } else {
         // Élément non trouvé, demander des précisions
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE] L'utilisateur mentionne "${designation}" mais cette pratique n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type de pratique, etc.).`;
+        intentResultsText = `L'utilisateur mentionne "${designation}" mais cette pratique n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type de pratique, etc.).`;
       }
     } else if (type === 'subject') {
       if (globalIntentInfos.focusedFaqs && globalIntentInfos.focusedFaqs.length > 0) {
-        // FAQ trouvées, enrichir avec leurs informations
+        // FAQ trouvées
         const faqs = globalIntentInfos.focusedFaqs;
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE] L'utilisateur souhaite en savoir plus sur le sujet "${designation}". FAQ trouvées : ${JSON.stringify(faqs.map(faq => ({
+        intentResultsText = `L'utilisateur souhaite en savoir plus sur le sujet "${designation}". FAQ trouvées : ${JSON.stringify(faqs.map(faq => ({
           id: faq.id,
           question: faq.question,
-          // Ajouter d'autres champs pertinents si nécessaire
         })), null, 2)}`;
       } else {
         // Sujet non trouvé, demander des précisions
-        enrichedMessage = `${userMessage}\n\n[CONTEXTE] L'utilisateur mentionne le sujet "${designation}" mais aucune information pertinente n'a été trouvée. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement.`;
+        intentResultsText = `L'utilisateur mentionne le sujet "${designation}" mais aucune information pertinente n'a été trouvée. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement.`;
       }
     }
 
-    return super.handleIntent(intent, context, enrichedMessage, globalIntentInfos, onIaResponse);
+    // Mettre à jour le contexte avec intentResults (string)
+    context.metadata = {
+      ...context.metadata,
+      ['intentResults']: intentResultsText
+    };
+
+    return super.handleIntent(context, userMessage, onIaResponse);
   }
 
   /**
@@ -1530,9 +1590,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
   private async handleSearchHowerAngelIntent(
     searchChunks: Array<{ type: string; text: string }>,
     context: HowanaContext,
-    intent: RecommendationIntent,
-    userMessage: string,
-    globalIntentInfos: GlobalRecommendationIntentInfos,
     onIaResponse: (response: any) => Promise<void>
   ): Promise<boolean> {
     const searchChunksTexts = searchChunks.map(chunk => chunk.text);
@@ -1541,7 +1598,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunksTexts);
     if (!howerAngelsResult.success) {
       console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
-      await super.handleIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
+      // Récupérer userMessage depuis le contexte si nécessaire, sinon utiliser un message par défaut
+      const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
+      const userMessage = currentIntentInfos?.userMessage || '';
+      await super.handleIntent(context, userMessage, onIaResponse);
       return true; // Erreur gérée
     }
     
@@ -1562,13 +1622,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    * Utilise le comportement par défaut pour générer la réponse
    */
   private async handleDefaultIntent(
-    intent: RecommendationIntent,
     context: HowanaContext,
     userMessage: string,
-    globalIntentInfos: GlobalRecommendationIntentInfos,
     onIaResponse: (response: any) => Promise<void>
-  ): Promise<void> {
-    return super.handleIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
+  ): Promise<HowanaContext> {
+    return super.handleIntent(context, userMessage, onIaResponse);
   }
 
   /**

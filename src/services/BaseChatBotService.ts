@@ -280,13 +280,21 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
         const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
         const intent = currentIntentInfos?.intent;
         const intentResults = context.metadata?.['intentResults'];
+        const globalIntentInfos = context.metadata?.['globalIntentInfos'];
         
         // Construire le texte de contexte intent et l'ajouter au message ET dans les métadonnées pour le tracing
         let intentContextText = '';
-        if (intent && intentResults) {
+        if (intent) {
           intentContextText = `\n\n[CONTEXTE INTENT ET RÉSULTATS DE RECHERCHE]\n` +
-            `Intent calculé: ${JSON.stringify(intent, null, 2)}\n` +
-            `Résultats de recherche: ${JSON.stringify(intentResults, null, 2)}`;
+            `Intent calculé: ${JSON.stringify(intent, null, 2)}`;
+          
+          if (globalIntentInfos) {
+            intentContextText += `\nInformations cumulées d'intent: ${JSON.stringify(globalIntentInfos, null, 2)}`;
+          }
+          
+          if (intentResults) {
+            intentContextText += `\nRésultats de recherche suite au dernier message de l'utilisateur: ${JSON.stringify(intentResults, null, 2)}`;
+          }
           
           // Mettre à jour intentContextText dans currentIntentInfos
           context.metadata = {
@@ -1285,14 +1293,13 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
    * @returns Promise<void> - La méthode doit attendre que toutes les réponses soient générées
    */
   protected async handleIntent(
-    _intent: any, 
     context: HowanaContext,
     userMessage: string,
-    _globalIntentInfos: any,
     onIaResponse: (response: any) => Promise<void>
-  ): Promise<void> {
+  ): Promise<HowanaContext> {
     // Implémentation par défaut : génère une réponse IA et la passe au callback
     const aiResponse = await this.generateAIResponse(context, userMessage);
     await onIaResponse(aiResponse);
+    return context;
   }
 }

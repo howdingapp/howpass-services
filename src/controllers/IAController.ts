@@ -503,12 +503,10 @@ export class IAController {
     };
 
     // Appeler handleIntent avec le callback et attendre qu'il se termine
-    await chatBotService['handleIntent'](intent, contextWithIntent, taskData.userMessage, globalIntentInfos, onIaResponse);
-    
-    // Mettre à jour le contexte avec le dernier contexte mis à jour par handleIntent
-    if (lastUpdatedContext !== contextWithIntent) {
-      contextWithIntent = lastUpdatedContext;
-    }
+    // intent et globalIntentInfos sont maintenant récupérés depuis le contexte
+    // handleIntent retourne le contexte mis à jour avec le globalIntentInfos calculé
+    const updatedContext = await chatBotService['handleIntent'](contextWithIntent, taskData.userMessage, onIaResponse);
+    contextWithIntent = updatedContext;
     
     // handleIntent a déjà généré et traité les réponses via le callback
     // Si c'était la dernière réponse (sans have_next), on la retourne et on laisse finalizeTask s'en occuper
