@@ -1118,11 +1118,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             description: "Texte de la suggestion (max 5 mots)"
           },
           redirectionUrl: {
-            type: "string",
-            description: "URL de redirection (requis si type='url')"
+            type: ["string", "null"],
+            description: "URL de redirection (requis si type='url', peut être null si type='text')"
           }
         },
-        required: ["type", "text"],
+        required: ["type", "text", "redirectionUrl"],
         additionalProperties: false
       },
       description
