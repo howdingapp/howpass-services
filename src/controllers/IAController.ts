@@ -436,7 +436,8 @@ export class IAController {
     contextWithIntent.metadata = {
       ...contextWithIntent.metadata,
       ['currentIntentInfos']: currentIntentInfos,
-      ['globalIntentInfos']: globalIntentInfos
+      ['globalIntentInfos']: globalIntentInfos,
+      ['intentResults']: null
     };
     
     if (intent) {

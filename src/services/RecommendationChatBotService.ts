@@ -1915,9 +1915,14 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                   type: "string",
                   description: "Type de l'élément confirmé",
                   enum: ["hower_angel", "activity", "practice"]
+                },
+                intent: {
+                  type: "string",
+                  description: "Intent original qui a abouti à la demande de confirmation. Cet intent sera utilisé pour continuer son traitement après la confirmation",
+                  enum: ["know_more", "take_rdv"]
                 }
               },
-              required: ["type"],
+              required: ["type", "intent"],
               additionalProperties: false
             }
           },
