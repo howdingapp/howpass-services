@@ -242,4 +242,12 @@ export class BilanChatBotService extends RecommendationChatBotService {
       }
     };
   }
+
+  /**
+   * Calcule le globalIntentInfos à partir de l'intent courant et du contexte
+   */
+  protected override async computeGlobalIntentInfos(intent: any, _context: HowanaContext): Promise<any> {
+    // Implémentation par défaut - peut être surchargée selon les besoins
+    return intent;
+  }
 }

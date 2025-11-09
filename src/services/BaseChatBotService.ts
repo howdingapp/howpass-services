@@ -666,6 +666,14 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   protected abstract getIntentSchema(context: HowanaContext): ChatBotOutputSchema;
   
   /**
+   * Calcule le globalIntentInfos à partir de l'intent courant et du contexte
+   * @param intent L'intent calculé par computeIntent
+   * @param context Le contexte de la conversation
+   * @returns Le globalIntentInfos calculé
+   */
+  protected abstract computeGlobalIntentInfos(intent: any, context: HowanaContext): Promise<any>;
+  
+  /**
    * Schéma de sortie pour addMessage (par défaut avec un champ response obligatoire)
    */
   protected getFirstMessageOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
@@ -1183,9 +1191,9 @@ ${practicesList}`;
    * Calcule l'intent de la conversation en parallèle de la génération de réponse
    * @param context Le contexte de la conversation
    * @param userMessage Le dernier message de l'utilisateur
-   * @returns L'intent calculé selon le schéma défini par le service et le coût (nombre de tokens)
+   * @returns L'intent calculé selon le schéma défini par le service, le coût (nombre de tokens) et le globalIntentInfos
    */
-  public async computeIntent(context: HowanaContext, userMessage: string): Promise<{ intent: any; intentCost: number | null }> {
+  public async computeIntent(context: HowanaContext, userMessage: string): Promise<{ intent: any; intentCost: number | null; globalIntentInfos: any }> {
     try {
       console.log('🎯 Calcul de l\'intent pour la conversation:', context.id);
       
@@ -1194,7 +1202,7 @@ ${practicesList}`;
       
       if (!intentSchema) {
         console.warn('⚠️ Aucun schéma d\'intent défini pour ce service, retour d\'un intent vide');
-        return { intent: null, intentCost: null };
+        return { intent: null, intentCost: null, globalIntentInfos: null };
       }
 
       // Construire le prompt pour l'analyse d'intent
@@ -1243,23 +1251,27 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
 
       if (!resultText) {
         console.warn('⚠️ Aucune réponse générée pour l\'intent');
-        return { intent: null, intentCost: intentCost };
+        return { intent: null, intentCost: intentCost, globalIntentInfos: null };
       }
 
       // Parser le JSON de l'intent
       try {
         const parsedIntent = JSON.parse(resultText);
         console.log('✅ Intent calculé avec succès:', JSON.stringify(parsedIntent, null, 2));
-        return { intent: parsedIntent, intentCost: intentCost };
+        
+        // Calculer le globalIntentInfos en utilisant la fonction abstraite
+        const globalIntentInfos = await this.computeGlobalIntentInfos(parsedIntent, context);
+        
+        return { intent: parsedIntent, intentCost: intentCost, globalIntentInfos: globalIntentInfos };
       } catch (parseError) {
         console.error('❌ Erreur de parsing JSON de l\'intent:', parseError);
-        return { intent: null, intentCost: intentCost };
+        return { intent: null, intentCost: intentCost, globalIntentInfos: null };
       }
 
     } catch (error) {
       console.error('❌ Erreur lors du calcul de l\'intent:', error);
       // Ne pas faire échouer la génération de réponse si l'intent échoue
-      return { intent: null, intentCost: null };
+      return { intent: null, intentCost: null, globalIntentInfos: null };
     }
   }
 

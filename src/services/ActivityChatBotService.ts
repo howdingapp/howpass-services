@@ -420,4 +420,12 @@ export class ActivityChatBotService extends BaseChatBotService<IAMessageResponse
       }
     };
   }
+
+  /**
+   * Calcule le globalIntentInfos à partir de l'intent courant et du contexte
+   */
+  protected async computeGlobalIntentInfos(intent: any, _context: HowanaContext): Promise<any> {
+    // Implémentation par défaut - peut être surchargée selon les besoins
+    return intent;
+  }
 }

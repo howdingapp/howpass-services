@@ -420,22 +420,11 @@ export class IAController {
     const intentResult = await chatBotService.computeIntent(context, taskData.userMessage);
     const intent = intentResult.intent;
     const intentCost = intentResult.intentCost;
+    const globalIntentInfos = intentResult.globalIntentInfos;
     
     // Mettre à jour le contexte avec l'intent
     let contextWithIntent = { ...context };
     let lastUpdatedContext = contextWithIntent;
-    
-    // Sauvegarder l'intent courant dans previousIntentInfos (même s'il est null)
-    const currentIntent = context.metadata?.['currentIntentInfos'] as any;
-    const previousIntentInfos = currentIntent ? {
-      intent: currentIntent.intent || null,
-      intentCost: currentIntent.intentCost || null,
-      intentContextText: currentIntent.intentContextText || null
-    } : {
-      intent: null,
-      intentCost: null,
-      intentContextText: null
-    };
     
     // Mettre les nouvelles valeurs dans currentIntentInfos
     const currentIntentInfos = {
@@ -446,8 +435,8 @@ export class IAController {
     
     contextWithIntent.metadata = {
       ...contextWithIntent.metadata,
-      ['previousIntentInfos']: previousIntentInfos,
-      ['currentIntentInfos']: currentIntentInfos
+      ['currentIntentInfos']: currentIntentInfos,
+      ['globalIntentInfos']: globalIntentInfos
     };
     
     if (intent) {

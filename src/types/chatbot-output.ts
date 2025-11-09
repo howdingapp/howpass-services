@@ -54,10 +54,11 @@ export interface RecommendationSummary {
  */
 export interface RecommendationIntent {
   format: 'remote' | 'inPerson' | 'any';
-  intent: 'search_hower_angel' | 'search_activities' | 'search_advices' | 'take_rdv' | 'discover' | 'know_more';
+  intent: 'search_hower_angel' | 'search_activities' | 'search_advices' | 'take_rdv' | 'discover' | 'know_more' | 'confirmation';
   rdvContext?: {
     type: 'hower_angel' | 'activity' | 'practice';
     id: string;
+    designation: string | null;
   };
   searchContext?: {
     searchChunks: Array<{
@@ -66,6 +67,14 @@ export interface RecommendationIntent {
     }>;
     searchType: 'activity' | 'hower_angel' | 'practice';
     searchFormat: 'from_user_situation' | 'from_name_query';
+  };
+  knowMoreContext?: {
+    type: 'hower_angel' | 'activity' | 'practice' | 'subject';
+    designation: string;
+    identifiant?: string;
+  };
+  confirmationContext?: {
+    type: 'hower_angel' | 'activity' | 'practice';
   };
 }
 
@@ -173,6 +182,125 @@ export interface ConstrainedRecommendationSummary<T extends ExtractedRecommandat
   recommendations: ConstrainedRecommendation<T>[];
   nextSteps: string[];
   importanteKnowledge: string[];
+}
+
+/**
+ * Interface pour un élément d'activité dans les résultats d'intent
+ */
+export interface ActivityItem {
+  type: 'activity';
+  id: string;
+  title: string;
+  shortDescription?: string;
+  longDescription?: string;
+  durationMinutes?: number;
+  participants?: number;
+  rating?: number;
+  price?: number;
+  benefits?: any;
+  locationType?: string;
+  address?: any;
+  selectedKeywords?: any;
+  typicalSituations?: any;
+  relevanceScore: number;
+}
+
+/**
+ * Interface pour un élément de pratique dans les résultats d'intent
+ */
+export interface PracticeItem {
+  type: 'practice';
+  id: string;
+  title: string;
+  shortDescription?: string;
+  longDescription?: string;
+  benefits?: any;
+  typicalSituations?: any;
+  relevanceScore: number;
+}
+
+/**
+ * Interface pour un élément FAQ dans les résultats d'intent
+ */
+export interface FAQItem {
+  type: 'faq';
+  id: string;
+  question: string;
+  answer: string;
+  keywords?: any;
+  faqType?: string;
+  active?: boolean;
+  relevanceScore: number;
+  typicalSituation?: any;
+}
+
+/**
+ * Interface pour un élément hower angel dans les résultats d'intent
+ */
+export interface HowerAngelItem {
+  id: string;
+  userId: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  specialties?: Array<{
+    id: string;
+    title: string;
+    shortDescription?: string;
+  }>;
+  experience?: string;
+  profile: string;
+  activities?: Array<{
+    id: string;
+    title: string;
+    shortDescription?: string;
+    longDescription?: string;
+    durationMinutes?: number;
+    participants?: number;
+    rating?: number;
+    price?: number;
+    benefits?: any;
+    locationType?: string;
+    address?: any;
+    selectedKeywords?: any;
+    presentationImagePublicUrl?: string;
+    presentationVideoPublicUrl?: string;
+    status?: string;
+    isActive?: boolean;
+  }>;
+  relevanceScore: number;
+}
+
+/**
+ * Interface pour les résultats d'intent (résultats de recherche)
+ */
+export interface IntentResults {
+  activities: ActivityItem[];
+  practices: PracticeItem[];
+  howerAngels: HowerAngelItem[];
+}
+
+/**
+ * Interface pour les informations globales d'intent
+ */
+export interface GlobalIntentInfos {
+  howerAngels: HowerAngelItem[];
+  activities: ActivityItem[];
+  practices: PracticeItem[];
+  faqs: FAQItem[];
+  focusedHowerAngel: HowerAngelItem | null;
+  focusedActivity: ActivityItem | null;
+  focusedPractice: PracticeItem | null;
+  focusedFaqs: FAQItem[];
+  pendingConfirmations: {
+    focusedHowerAngel: HowerAngelItem | null;
+    focusedActivity: ActivityItem | null;
+    focusedPractice: PracticeItem | null;
+  };
+  unknownFocused: {
+    type: 'hower_angel' | 'activity' | 'practice' | 'subject';
+    designation: string;
+  } | null;
 }
 
 

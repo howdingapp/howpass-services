@@ -6,6 +6,12 @@ import {
   RecommendationMessageResponse,
   ExtractedRecommandations,
   RecommendationIntent,
+  IntentResults,
+  GlobalIntentInfos,
+  ActivityItem,
+  PracticeItem,
+  HowerAngelItem,
+  FAQItem,
 } from '../types/chatbot-output';
 import { BaseChatBotService } from './BaseChatBotService';
 
@@ -1361,24 +1367,26 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         case 'activity':
           // Recherche d'activités uniquement
           const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunksTexts);
-          const activities = activitiesResults.results || [];
+          const activities: ActivityItem[] = activitiesResults.results || [];
           console.log(`✅ ${activities.length} activités trouvées`);
           // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+          const activityIntentResults: IntentResults = { activities, practices: [], howerAngels: [] };
           context.metadata = {
             ...context.metadata,
-            ['intentResults']: { activities, practices: [], howerAngels: [] }
+            ['intentResults']: activityIntentResults
           };
           break;
 
         case 'practice':
           // Recherche de pratiques uniquement
           const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunksTexts);
-          const practices = practicesResults.results || [];
+          const practices: PracticeItem[] = practicesResults.results || [];
           console.log(`✅ ${practices.length} pratiques trouvées`);
           // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+          const practiceIntentResults: IntentResults = { activities: [], practices, howerAngels: [] };
           context.metadata = {
             ...context.metadata,
-            ['intentResults']: { activities: [], practices, howerAngels: [] }
+            ['intentResults']: practiceIntentResults
           };
           break;
 
@@ -1389,12 +1397,13 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
             return super.handleIntent(intent, context, userMessage, onIaResponse);
           }
-          const howerAngels = howerAngelsResult.data || [];
+          const howerAngels: HowerAngelItem[] = howerAngelsResult.data || [];
           console.log(`✅ ${howerAngels.length} hower angels trouvés`);
           // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+          const howerAngelIntentResults: IntentResults = { activities: [], practices: [], howerAngels };
           context.metadata = {
             ...context.metadata,
-            ['intentResults']: { activities: [], practices: [], howerAngels }
+            ['intentResults']: howerAngelIntentResults
           };
           break;
 
@@ -1431,8 +1440,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 - "search_advices": Recherche de conseil explicite sur une problématique
 - "take_rdv": Demande explicite de prendre un rendez-vous avec une personne précise ou une activité (déduite du contexte)
 - "discover": Demande de découverte de nouveaux horizons
-- "know_more": Demande plus d'information par rapport à un précédent résultat de la conversation`,
-              enum: ["search_hower_angel", "search_activities", "search_advices", "take_rdv", "discover", "know_more"]
+- "know_more": Demande plus d'information par rapport à un précédent résultat de la conversation
+- "confirmation": Confirmation d'un élément mentionné précédemment`,
+              enum: ["search_hower_angel", "search_activities", "search_advices", "take_rdv", "discover", "know_more", "confirmation"]
             },
             rdvContext: {
               type: ["object", "null"],
@@ -1447,13 +1457,17 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                   type: "string",
                   description: "ID associé au type de rendez-vous (ID du hower_angel, de l'activité ou de la pratique)"
                 },
+                designation: {
+                  type: ["string", "null"],
+                  description: "Nom du hower angel, de la pratique ou de l'activité mentionné (peut être null si non connu)"
+                },
                 format: {
                   type: "string",
                   description: "Format de recommandation préféré par l'utilisateur : 'remote' (à distance/en ligne), 'inPerson' (en personne/présentiel), ou 'any' (les deux formats acceptés)",
                   enum: ["remote", "inPerson", "any"]
                 }
               },
-              required: ["type", "id", "format"],
+              required: ["type", "id", "format", "designation"],
               additionalProperties: false
             },
             searchContext: {
@@ -1498,13 +1512,349 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               },
               required: ["searchChunks", "searchType", "searchFormat"],
               additionalProperties: false
+            },
+            knowMoreContext: {
+              type: ["object", "null"],
+              description: "Quand l'intent est 'know_more', l'objectif de ce contexte est d'indiquer de quoi/qui est le sujet d'intérêt dont on veut en savoir plus",
+              properties: {
+                type: {
+                  type: "string",
+                  description: "Type de l'élément sur lequel on veut en savoir plus",
+                  enum: ["hower_angel", "activity", "practice", "subject"]
+                },
+                designation: {
+                  type: "string",
+                  description: "Nom du hower angel, de la pratique, de l'activité ou du sujet d'intérêt mentionné"
+                },
+                identifiant: {
+                  type: ["string", "null"],
+                  description: "Identifiant associé (peut être null si non connu)"
+                }
+              },
+              required: ["type", "designation", "identifiant"],
+              additionalProperties: false
+            },
+            confirmationContext: {
+              type: ["object", "null"],
+              description: "Quand l'intent est 'confirmation', ce contexte indique quel type d'élément est confirmé",
+              properties: {
+                type: {
+                  type: "string",
+                  description: "Type de l'élément confirmé",
+                  enum: ["hower_angel", "activity", "practice"]
+                }
+              },
+              required: ["type"],
+              additionalProperties: false
             }
           },
-          required: ["intent", "rdvContext", "searchContext"],
+          required: ["intent", "rdvContext", "searchContext", "knowMoreContext", "confirmationContext"],
           additionalProperties: false
         },
         strict: true
       }
+    };
+  }
+
+  /**
+   * Calcule le globalIntentInfos à partir de l'intent courant et du contexte
+   */
+  protected async computeGlobalIntentInfos(intent: any, context: HowanaContext): Promise<GlobalIntentInfos> {
+    // Récupérer le globalIntentInfos précédent depuis les métadonnées
+    const previousGlobalIntentInfos = context.metadata?.['globalIntentInfos'] as GlobalIntentInfos | undefined;
+    
+    // Créer des Maps pour éviter les doublons (clé = userId pour howerAngels, id pour les autres)
+    const howerAngelsMap = new Map<string, HowerAngelItem>();
+    const activitiesMap = new Map<string, ActivityItem>();
+    const practicesMap = new Map<string, PracticeItem>();
+    
+    // Initialiser les Maps avec les données précédentes
+    if (previousGlobalIntentInfos) {
+      previousGlobalIntentInfos.howerAngels.forEach(item => {
+        howerAngelsMap.set(item.userId, item);
+      });
+      previousGlobalIntentInfos.activities.forEach(item => {
+        activitiesMap.set(item.id, item);
+      });
+      previousGlobalIntentInfos.practices.forEach(item => {
+        practicesMap.set(item.id, item);
+      });
+    }
+    
+    // Récupérer les intentResults actuels depuis les métadonnées (si disponibles)
+    const intentResults = context.metadata?.['intentResults'] as IntentResults | undefined;
+    
+    // Mettre à jour les Maps avec les nouveaux résultats si disponibles (évite les doublons)
+    if (intentResults) {
+      if (intentResults.howerAngels && intentResults.howerAngels.length > 0) {
+        intentResults.howerAngels.forEach(item => {
+          howerAngelsMap.set(item.userId, item);
+        });
+      }
+      if (intentResults.activities && intentResults.activities.length > 0) {
+        intentResults.activities.forEach(item => {
+          activitiesMap.set(item.id, item);
+        });
+      }
+      if (intentResults.practices && intentResults.practices.length > 0) {
+        intentResults.practices.forEach(item => {
+          practicesMap.set(item.id, item);
+        });
+      }
+    }
+    
+    // Initialiser les listes FAQ
+    const faqsMap = new Map<string, FAQItem>();
+    if (previousGlobalIntentInfos?.faqs) {
+      previousGlobalIntentInfos.faqs.forEach(item => {
+        faqsMap.set(item.id, item);
+      });
+    }
+    
+    // Déterminer les éléments focused à partir de l'intent courant
+    let focusedHowerAngel: HowerAngelItem | null = previousGlobalIntentInfos?.focusedHowerAngel || null;
+    let focusedActivity: ActivityItem | null = previousGlobalIntentInfos?.focusedActivity || null;
+    let focusedPractice: PracticeItem | null = previousGlobalIntentInfos?.focusedPractice || null;
+    let focusedFaqs: FAQItem[] = previousGlobalIntentInfos?.focusedFaqs || [];
+    let pendingConfirmations = previousGlobalIntentInfos?.pendingConfirmations || {
+      focusedHowerAngel: null,
+      focusedActivity: null,
+      focusedPractice: null
+    };
+    let unknownFocused: { type: 'hower_angel' | 'activity' | 'practice' | 'subject'; designation: string } | null = null;
+    
+    // Fonction helper pour résoudre un élément focused
+    const resolveFocusedItem = async (
+      type: 'hower_angel' | 'activity' | 'practice' | 'subject',
+      identifiant: string | null | undefined,
+      designation?: string
+    ): Promise<{ item: HowerAngelItem | ActivityItem | PracticeItem | FAQItem[] | null; isUnknown: boolean; present: boolean }> => {
+      // Si c'est un sujet, faire une recherche FAQ
+      if (type === 'subject') {
+        if (!designation) {
+          return { item: null, isUnknown: true, present: false };
+        }
+        try {
+          const faqResult = await this.searchFAQ(designation);
+          // Si on a des résultats FAQ, les retourner
+          if (faqResult && faqResult.faq && faqResult.faq.length > 0) {
+            return { item: faqResult.faq as FAQItem[], isUnknown: false, present: true };
+          }
+        } catch (error) {
+          console.error(`❌ Erreur lors de la recherche FAQ pour le sujet:`, error);
+        }
+        // Pas de résultats FAQ trouvés
+        return { item: null, isUnknown: true, present: false };
+      }
+      
+      // Stratégie 1: Si l'identifiant est valide et trouvé dans les Maps
+      if (identifiant) {
+        if (type === 'hower_angel') {
+          // Chercher par userId d'abord, puis par id si pas trouvé
+          let item = howerAngelsMap.get(identifiant);
+          if (!item) {
+            // Si pas trouvé par userId, chercher par id dans les valeurs
+            item = Array.from(howerAngelsMap.values()).find(ha => ha.id === identifiant) || undefined;
+          }
+          if (item) return { item, isUnknown: false, present: true };
+        } else if (type === 'activity') {
+          const item = activitiesMap.get(identifiant);
+          if (item) return { item, isUnknown: false, present: true };
+        } else if (type === 'practice') {
+          const item = practicesMap.get(identifiant);
+          if (item) return { item, isUnknown: false, present: true };
+        }
+      }
+      
+      // Stratégie 2: Faire une recherche vectorielle avec le nom
+      // (uniquement si une designation est fournie)
+      if (designation) {
+        try {
+          let searchResult: any = null;
+          let isPresent = false;
+          
+          if (type === 'hower_angel') {
+            const result = await this.supabaseService.searchHowerAngelsByUserSituation([designation], 1);
+            if (result.success && result.data && result.data.length > 0) {
+              const found = result.data[0];
+              if (found) {
+                searchResult = found;
+                // Vérifier si le résultat est présent dans le contexte (par userId ou id)
+                isPresent = howerAngelsMap.has(found.userId) || Array.from(howerAngelsMap.values()).some(ha => ha.id === found.id);
+              }
+            }
+          } else if (type === 'activity') {
+            const result = await this.supabaseService.searchActivitiesBySituationChunks([designation]);
+            if (result.results && result.results.length > 0) {
+              const found = result.results[0];
+              if (found) {
+                searchResult = found;
+                // Vérifier si le résultat est présent dans le contexte
+                isPresent = activitiesMap.has(found.id);
+              }
+            }
+          } else if (type === 'practice') {
+            const result = await this.supabaseService.searchPracticesBySituationChunks([designation]);
+            if (result.results && result.results.length > 0) {
+              const found = result.results[0];
+              if (found) {
+                searchResult = found;
+                // Vérifier si le résultat est présent dans le contexte
+                isPresent = practicesMap.has(found.id);
+              }
+            }
+          }
+          
+          if (searchResult) {
+            return { item: searchResult, isUnknown: false, present: isPresent };
+          }
+        } catch (error) {
+          console.error(`❌ Erreur lors de la recherche vectorielle pour ${type}:`, error);
+        }
+      }
+      
+      // Stratégie 3: Échec - on ne peut pas identifier l'élément
+      return { item: null, isUnknown: true, present: false };
+    };
+    
+    // Gérer confirmationContext (pour confirmation) - doit être traité en premier
+    if (intent?.intent === 'confirmation' && intent?.confirmationContext) {
+      const confirmationType = intent.confirmationContext.type;
+      
+      // Transférer l'élément depuis pendingConfirmations vers le focused correspondant
+      if (confirmationType === 'hower_angel' && pendingConfirmations.focusedHowerAngel) {
+        focusedHowerAngel = pendingConfirmations.focusedHowerAngel;
+        // Ajouter à la Map si pas déjà présent
+        if (!howerAngelsMap.has(focusedHowerAngel.userId)) {
+          howerAngelsMap.set(focusedHowerAngel.userId, focusedHowerAngel);
+        }
+      } else if (confirmationType === 'activity' && pendingConfirmations.focusedActivity) {
+        focusedActivity = pendingConfirmations.focusedActivity;
+        // Ajouter à la Map si pas déjà présent
+        if (!activitiesMap.has(focusedActivity.id)) {
+          activitiesMap.set(focusedActivity.id, focusedActivity);
+        }
+      } else if (confirmationType === 'practice' && pendingConfirmations.focusedPractice) {
+        focusedPractice = pendingConfirmations.focusedPractice;
+        // Ajouter à la Map si pas déjà présent
+        if (!practicesMap.has(focusedPractice.id)) {
+          practicesMap.set(focusedPractice.id, focusedPractice);
+        }
+      }
+      
+      // Vider complètement pendingConfirmations après confirmation
+      pendingConfirmations = {
+        focusedHowerAngel: null,
+        focusedActivity: null,
+        focusedPractice: null
+      };
+    } else {
+      // Gérer knowMoreContext (pour know_more) ou rdvContext (pour take_rdv)
+      let contextType: 'hower_angel' | 'activity' | 'practice' | 'subject' | null = null;
+      let contextIdentifiant: string | null | undefined = null;
+      let contextDesignation: string | undefined = undefined;
+      
+      if (intent?.intent === 'know_more' && intent?.knowMoreContext) {
+        // Pour know_more, utiliser knowMoreContext
+        contextType = intent.knowMoreContext.type;
+        contextIdentifiant = intent.knowMoreContext.identifiant;
+        contextDesignation = intent.knowMoreContext.designation;
+      } else if (intent?.intent === 'take_rdv') {
+        // Pour take_rdv, mapper uniquement depuis rdvContext (pas de fallback vers knowMoreContext)
+        contextType = intent.rdvContext?.type || null;
+        contextIdentifiant = intent.rdvContext?.id || null;
+        contextDesignation = intent.rdvContext?.designation || undefined;
+      }
+      
+      if (contextType) {
+        const { item, isUnknown, present } = await resolveFocusedItem(contextType, contextIdentifiant, contextDesignation);
+        
+        if (isUnknown) {
+          unknownFocused = { type: contextType, designation: contextDesignation || '' };
+        } else {
+          // Si c'est un sujet, stocker les FAQ trouvées
+          if (contextType === 'subject') {
+            const faqItems = item as FAQItem[];
+            if (faqItems && faqItems.length > 0) {
+              focusedFaqs = faqItems;
+              // Ajouter les FAQ à la Map si pas déjà présentes
+              faqItems.forEach(faqItem => {
+                if (!faqsMap.has(faqItem.id)) {
+                  faqsMap.set(faqItem.id, faqItem);
+                }
+              });
+            }
+          } else if (contextType === 'hower_angel') {
+            focusedHowerAngel = item as HowerAngelItem;
+            if (focusedHowerAngel) {
+              // Si l'élément n'était pas présent et que ce n'est pas take_rdv, le mettre dans pendingConfirmations
+              if (!present && intent?.intent !== 'take_rdv') {
+                pendingConfirmations.focusedHowerAngel = focusedHowerAngel;
+              } else {
+                // Pour take_rdv, si l'élément n'était pas présent, l'ajouter explicitement à la liste
+                if (!present && intent?.intent === 'take_rdv' && !howerAngelsMap.has(focusedHowerAngel.userId)) {
+                  howerAngelsMap.set(focusedHowerAngel.userId, focusedHowerAngel);
+                } else if (!howerAngelsMap.has(focusedHowerAngel.userId)) {
+                  // Ajouter à la Map si pas déjà présent (indexé par userId)
+                  howerAngelsMap.set(focusedHowerAngel.userId, focusedHowerAngel);
+                }
+              }
+            }
+          } else if (contextType === 'activity') {
+            focusedActivity = item as ActivityItem;
+            if (focusedActivity) {
+              // Si l'élément n'était pas présent et que ce n'est pas take_rdv, le mettre dans pendingConfirmations
+              if (!present && intent?.intent !== 'take_rdv') {
+                pendingConfirmations.focusedActivity = focusedActivity;
+              } else {
+                // Pour take_rdv, si l'élément n'était pas présent, l'ajouter explicitement à la liste
+                if (!present && intent?.intent === 'take_rdv' && !activitiesMap.has(focusedActivity.id)) {
+                  activitiesMap.set(focusedActivity.id, focusedActivity);
+                } else if (!activitiesMap.has(focusedActivity.id)) {
+                  // Ajouter à la Map si pas déjà présent
+                  activitiesMap.set(focusedActivity.id, focusedActivity);
+                }
+              }
+            }
+          } else if (contextType === 'practice') {
+            focusedPractice = item as PracticeItem;
+            if (focusedPractice) {
+              // Si l'élément n'était pas présent et que ce n'est pas take_rdv, le mettre dans pendingConfirmations
+              if (!present && intent?.intent !== 'take_rdv') {
+                pendingConfirmations.focusedPractice = focusedPractice;
+              } else {
+                // Pour take_rdv, si l'élément n'était pas présent, l'ajouter explicitement à la liste
+                if (!present && intent?.intent === 'take_rdv' && !practicesMap.has(focusedPractice.id)) {
+                  practicesMap.set(focusedPractice.id, focusedPractice);
+                } else if (!practicesMap.has(focusedPractice.id)) {
+                  // Ajouter à la Map si pas déjà présent
+                  practicesMap.set(focusedPractice.id, focusedPractice);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Reconvertir les Maps en tableaux (au cas où de nouveaux éléments ont été ajoutés)
+    const finalHowerAngels = Array.from(howerAngelsMap.values());
+    const finalActivities = Array.from(activitiesMap.values());
+    const finalPractices = Array.from(practicesMap.values());
+    const finalFaqs = Array.from(faqsMap.values());
+    
+    // Construire et retourner le globalIntentInfos
+    return {
+      howerAngels: finalHowerAngels,
+      activities: finalActivities,
+      practices: finalPractices,
+      faqs: finalFaqs,
+      focusedHowerAngel,
+      focusedActivity,
+      focusedPractice,
+      focusedFaqs,
+      pendingConfirmations,
+      unknownFocused
     };
   }
 
