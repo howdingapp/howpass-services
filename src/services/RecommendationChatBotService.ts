@@ -2206,72 +2206,154 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       }
       
       if (contextType) {
-        const { item, isUnknown, present } = await resolveFocusedItem(contextType, contextIdentifiant, contextDesignation);
+        let isUnknown = false;
         
+        switch (contextType) {
+          case 'subject': {
+            const { item, isUnknown: itemIsUnknown } = await resolveFocusedItem('subject', null, contextDesignation);
+            if (itemIsUnknown) {
+              isUnknown = true;
+            } else {
+              const faqItems = item as FAQItem[];
+              if (faqItems && faqItems.length > 0) {
+                focusedFaqs = faqItems;
+                // Ajouter les FAQ à la Map si pas déjà présentes
+                faqItems.forEach(faqItem => {
+                  if (!faqsMap.has(faqItem.id)) {
+                    faqsMap.set(faqItem.id, faqItem);
+                  }
+                });
+              } else {
+                isUnknown = true;
+              }
+            }
+            break;
+          }
+          
+          case 'hower_angel': {
+            const { item, isUnknown: itemIsUnknown, present } = await resolveFocusedItem('hower_angel', contextIdentifiant, contextDesignation);
+            if (itemIsUnknown) {
+              isUnknown = true;
+            } else {
+              const howerAngelItem = item as HowerAngelItem;
+              if (howerAngelItem) {
+                // Si l'élément n'était pas présent, le mettre dans pendingConfirmations (peu importe l'intent)
+                // On ne valorise pas focused dans ce cas
+                if (!present) {
+                  pendingConfirmations.focusedHowerAngel = howerAngelItem;
+                } else {
+                  // Si présent, valoriser focused et ajouter à la Map si nécessaire
+                  focusedHowerAngel = howerAngelItem;
+                  if (!howerAngelsMap.has(howerAngelItem.userId)) {
+                    // Ajouter à la Map si pas déjà présent (indexé par userId)
+                    howerAngelsMap.set(howerAngelItem.userId, howerAngelItem);
+                  }
+                }
+              } else {
+                isUnknown = true;
+              }
+            }
+            break;
+          }
+          
+          case 'activity':
+          case 'practice': {
+            // D'abord, rechercher par identifiant dans les deux types en parallèle si disponible
+            let foundItem: ActivityItem | PracticeItem | null = null;
+            let present = false;
+            
+            if (contextIdentifiant) {
+              // Rechercher l'identifiant dans activity ET practice en parallèle
+              const [activityResult, practiceResult] = await Promise.all([
+                resolveFocusedItem('activity', contextIdentifiant, contextDesignation),
+                resolveFocusedItem('practice', contextIdentifiant, contextDesignation)
+              ]);
+              
+              // Privilégier le type correspondant au contextType
+              if (contextType === 'activity' && !activityResult.isUnknown && activityResult.item) {
+                foundItem = activityResult.item as ActivityItem;
+                present = activityResult.present;
+              } else if (contextType === 'practice' && !practiceResult.isUnknown && practiceResult.item) {
+                foundItem = practiceResult.item as PracticeItem;
+                present = practiceResult.present;
+              } else if (!activityResult.isUnknown && activityResult.item) {
+                // Si le type demandé n'est pas trouvé, utiliser activity si disponible
+                foundItem = activityResult.item as ActivityItem;
+                present = activityResult.present;
+              } else if (!practiceResult.isUnknown && practiceResult.item) {
+                // Sinon utiliser practice si disponible
+                foundItem = practiceResult.item as PracticeItem;
+                present = practiceResult.present;
+              }
+            }
+            
+            // Toujours faire une recherche croisée systématique sur les activités ET pratiques si on a une désignation
+            if (contextDesignation) {
+              // Faire les deux recherches en parallèle
+              const [activityResult, practiceResult] = await Promise.all([
+                resolveFocusedItem('activity', null, contextDesignation),
+                resolveFocusedItem('practice', null, contextDesignation)
+              ]);
+              
+              // Si on n'avait pas trouvé par identifiant, utiliser le résultat de la recherche par désignation selon le contextType
+              if (!foundItem) {
+                if (contextType === 'activity' && activityResult.item) {
+                  foundItem = activityResult.item as ActivityItem;
+                  present = activityResult.present;
+                } else if (contextType === 'practice' && practiceResult.item) {
+                  foundItem = practiceResult.item as PracticeItem;
+                  present = practiceResult.present;
+                } else if (activityResult.item) {
+                  foundItem = activityResult.item as ActivityItem;
+                  present = activityResult.present;
+                } else if (practiceResult.item) {
+                  foundItem = practiceResult.item as PracticeItem;
+                  present = practiceResult.present;
+                }
+              }
+              
+              // Ajouter les résultats dans pendingConfirmations si trouvés et pas déjà dans les Maps
+              if (activityResult.item && !activitiesMap.has((activityResult.item as ActivityItem).id)) {
+                pendingConfirmations.focusedActivity = activityResult.item as ActivityItem;
+              }
+              if (practiceResult.item && !practicesMap.has((practiceResult.item as PracticeItem).id)) {
+                pendingConfirmations.focusedPractice = practiceResult.item as PracticeItem;
+              }
+            }
+            
+            // Traiter l'élément trouvé selon le type
+            if (foundItem) {
+              if (contextType === 'activity') {
+                const activityItem = foundItem as ActivityItem;
+                if (!present) {
+                  pendingConfirmations.focusedActivity = activityItem;
+                } else {
+                  focusedActivity = activityItem;
+                  if (!activitiesMap.has(activityItem.id)) {
+                    activitiesMap.set(activityItem.id, activityItem);
+                  }
+                }
+              } else {
+                const practiceItem = foundItem as PracticeItem;
+                if (!present) {
+                  pendingConfirmations.focusedPractice = practiceItem;
+                } else {
+                  focusedPractice = practiceItem;
+                  if (!practicesMap.has(practiceItem.id)) {
+                    practicesMap.set(practiceItem.id, practiceItem);
+                  }
+                }
+              }
+            } else {
+              isUnknown = true;
+            }
+            break;
+          }
+        }
+        
+        // Valoriser unknownFocused une seule fois en fin de switch si isUnknown est true
         if (isUnknown) {
           unknownFocused = { type: contextType, designation: contextDesignation || '' };
-        } else {
-          // Si c'est un sujet, stocker les FAQ trouvées
-          if (contextType === 'subject') {
-            const faqItems = item as FAQItem[];
-            if (faqItems && faqItems.length > 0) {
-              focusedFaqs = faqItems;
-              // Ajouter les FAQ à la Map si pas déjà présentes
-              faqItems.forEach(faqItem => {
-                if (!faqsMap.has(faqItem.id)) {
-                  faqsMap.set(faqItem.id, faqItem);
-                }
-              });
-            }
-          } else if (contextType === 'hower_angel') {
-            const howerAngelItem = item as HowerAngelItem;
-            if (howerAngelItem) {
-              // Si l'élément n'était pas présent, le mettre dans pendingConfirmations (peu importe l'intent)
-              // On ne valorise pas focused dans ce cas
-              if (!present) {
-                pendingConfirmations.focusedHowerAngel = howerAngelItem;
-              } else {
-                // Si présent, valoriser focused et ajouter à la Map si nécessaire
-                focusedHowerAngel = howerAngelItem;
-                if (!howerAngelsMap.has(howerAngelItem.userId)) {
-                  // Ajouter à la Map si pas déjà présent (indexé par userId)
-                  howerAngelsMap.set(howerAngelItem.userId, howerAngelItem);
-                }
-              }
-            }
-          } else if (contextType === 'activity') {
-            const activityItem = item as ActivityItem;
-            if (activityItem) {
-              // Si l'élément n'était pas présent, le mettre dans pendingConfirmations (peu importe l'intent)
-              // On ne valorise pas focused dans ce cas
-              if (!present) {
-                pendingConfirmations.focusedActivity = activityItem;
-              } else {
-                // Si présent, valoriser focused et ajouter à la Map si nécessaire
-                focusedActivity = activityItem;
-                if (!activitiesMap.has(activityItem.id)) {
-                  // Ajouter à la Map si pas déjà présent
-                  activitiesMap.set(activityItem.id, activityItem);
-                }
-              }
-            }
-          } else if (contextType === 'practice') {
-            const practiceItem = item as PracticeItem;
-            if (practiceItem) {
-              // Si l'élément n'était pas présent, le mettre dans pendingConfirmations (peu importe l'intent)
-              // On ne valorise pas focused dans ce cas
-              if (!present) {
-                pendingConfirmations.focusedPractice = practiceItem;
-              } else {
-                // Si présent, valoriser focused et ajouter à la Map si nécessaire
-                focusedPractice = practiceItem;
-                if (!practicesMap.has(practiceItem.id)) {
-                  // Ajouter à la Map si pas déjà présent
-                  practicesMap.set(practiceItem.id, practiceItem);
-                }
-              }
-            }
-          }
         }
       }
     }
