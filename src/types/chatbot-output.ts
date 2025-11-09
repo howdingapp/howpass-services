@@ -281,9 +281,9 @@ export interface IntentResults {
 }
 
 /**
- * Interface pour les informations globales d'intent
+ * Interface pour les informations globales d'intent de recommandation
  */
-export interface GlobalIntentInfos {
+export interface GlobalRecommendationIntentInfos {
   howerAngels: HowerAngelItem[];
   activities: ActivityItem[];
   practices: PracticeItem[];
