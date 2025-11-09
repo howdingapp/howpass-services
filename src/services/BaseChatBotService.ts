@@ -275,7 +275,7 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
     const errorResponse = {
       response: 'Une erreur a eu lieu. Veuillez réessayer plus tard.',
       messageId: response.messageId || 'error',
-      updatedContext: context,
+      updatedContext: response.updatedContext,
       cost: response.cost || null,
       haveNext: false,
     } as unknown as T;
