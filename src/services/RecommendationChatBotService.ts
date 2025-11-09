@@ -1696,26 +1696,122 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         intentResultsText = `L'utilisateur mentionne "${designation}" mais ce hower angel n'a pas pu être identifié avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, spécialité, etc.).`;
       }
     } else if (type === 'activity') {
-      if (globalIntentInfos.focusedActivity) {
-        const activity = globalIntentInfos.focusedActivity;
-        rdvUrl = `/activity/${activity.id}`;
-        
-        intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour l'activité suivante : ${JSON.stringify({
-          id: activity.id,
-          title: activity.title,
-          shortDescription: activity.shortDescription,
-          longDescription: activity.longDescription,
-        }, null, 2)}\n\n`;
-        
-        intentResultsText += `URL de rendez-vous: ${rdvUrl}`;
-      } else if (globalIntentInfos.pendingConfirmations.focusedActivity) {
-        const pendingActivity = globalIntentInfos.pendingConfirmations.focusedActivity;
-        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingActivity.title}" pour laquelle il veut prendre rendez-vous.`;
+      // Vérifier d'abord si on a une activité disponible (focused ou pending)
+      const activity = globalIntentInfos.focusedActivity || globalIntentInfos.pendingConfirmations.focusedActivity;
+      
+      if (activity) {
+        // On a une activité, comportement normal
+        if (globalIntentInfos.focusedActivity) {
+          rdvUrl = `/activity/${activity.id}`;
+          
+          intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour l'activité suivante : ${JSON.stringify({
+            id: activity.id,
+            title: activity.title,
+            shortDescription: activity.shortDescription,
+            longDescription: activity.longDescription,
+          }, null, 2)}\n\n`;
+          
+          intentResultsText += `URL de rendez-vous: ${rdvUrl}`;
+        } else {
+          // Activité en pending
+          intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${activity.title}" pour laquelle il veut prendre rendez-vous.`;
+        }
       } else {
-        intentResultsText = `L'utilisateur mentionne "${designation}" mais cette activité n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type d'activité, etc.).`;
+        // Pas d'activité, vérifier si on a une pratique (focused ou pending) avec un hower angel
+        const practice = globalIntentInfos.focusedPractice || globalIntentInfos.pendingConfirmations.focusedPractice;
+        
+        if (practice && globalIntentInfos.focusedHowerAngel) {
+          // Chercher les activités du hower angel qui correspondent à cette pratique
+          const howerAngel = globalIntentInfos.focusedHowerAngel;
+          const matchingActivities = howerAngel.activities?.filter(activity => {
+            // Vérifier si l'activité correspond à la pratique via les selectedKeywords
+            if (activity.selectedKeywords && Array.isArray(activity.selectedKeywords)) {
+              return activity.selectedKeywords.some((keyword: any) => 
+                keyword === practice.id || 
+                (typeof keyword === 'object' && keyword.id === practice.id)
+              );
+            }
+            return false;
+          }) || [];
+          
+          if (matchingActivities.length > 0) {
+            // Des activités correspondent à la pratique
+            const howerAngelFullName = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
+            intentResultsText = `L'utilisateur recherche une activité qui correspond à la pratique "${practice.title}". `;
+            intentResultsText += `Voici les activités disponibles du hower angel "${howerAngelFullName}" qui correspondent à cette pratique : ${JSON.stringify(matchingActivities.map(activity => ({
+              id: activity.id,
+              title: activity.title,
+              shortDescription: activity.shortDescription,
+              longDescription: activity.longDescription,
+              durationMinutes: activity.durationMinutes,
+              participants: activity.participants,
+              rating: activity.rating,
+              price: activity.price,
+              benefits: activity.benefits,
+              locationType: activity.locationType,
+              address: activity.address,
+              selectedKeywords: activity.selectedKeywords
+            })), null, 2)}`;
+          } else {
+            // Aucune activité ne correspond
+            intentResultsText = `L'utilisateur mentionne "${designation}" mais aucune activité correspondant à la pratique "${practice.title}" n'a été trouvée pour ce hower angel. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement.`;
+          }
+        } else {
+          // Pas d'activité, pas de pratique avec hower angel
+          intentResultsText = `L'utilisateur mentionne "${designation}" mais cette activité n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type d'activité, etc.).`;
+        }
       }
     } else if (type === 'practice') {
-      if (globalIntentInfos.focusedPractice) {
+      // Vérifier si on a une pratique (focused ou pending)
+      const practice = globalIntentInfos.focusedPractice || globalIntentInfos.pendingConfirmations.focusedPractice;
+      
+      if (practice && globalIntentInfos.focusedHowerAngel) {
+        // Si on a une pratique ET un hower angel, chercher les activités du hower angel qui correspondent à cette pratique
+        const howerAngel = globalIntentInfos.focusedHowerAngel;
+        const matchingActivities = howerAngel.activities?.filter(activity => {
+          // Vérifier si l'activité correspond à la pratique via les selectedKeywords
+          if (activity.selectedKeywords && Array.isArray(activity.selectedKeywords)) {
+            return activity.selectedKeywords.some((keyword: any) => 
+              keyword === practice.id || 
+              (typeof keyword === 'object' && keyword.id === practice.id)
+            );
+          }
+          return false;
+        }) || [];
+        
+        if (matchingActivities.length > 0) {
+          // Des activités correspondent à la pratique
+          const howerAngelFullName = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
+          intentResultsText = `L'utilisateur recherche une activité qui correspond à la pratique "${practice.title}". `;
+          intentResultsText += `Voici les activités disponibles du hower angel "${howerAngelFullName}" qui correspondent à cette pratique : ${JSON.stringify(matchingActivities.map(activity => ({
+            id: activity.id,
+            title: activity.title,
+            shortDescription: activity.shortDescription,
+            longDescription: activity.longDescription,
+            durationMinutes: activity.durationMinutes,
+            participants: activity.participants,
+            rating: activity.rating,
+            price: activity.price,
+            benefits: activity.benefits,
+            locationType: activity.locationType,
+            address: activity.address,
+            selectedKeywords: activity.selectedKeywords
+          })), null, 2)}`;
+        } else {
+          // Aucune activité ne correspond, utiliser le comportement par défaut
+          rdvUrl = `/practitioners?practice=${practice.id}`;
+          
+          intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour la pratique suivante : ${JSON.stringify({
+            id: practice.id,
+            title: practice.title,
+            shortDescription: practice.shortDescription,
+            longDescription: practice.longDescription,
+          }, null, 2)}\n\n`;
+          
+          intentResultsText += `URL de rendez-vous: ${rdvUrl}`;
+        }
+      } else if (globalIntentInfos.focusedPractice) {
+        // Pratique focused mais pas de hower angel
         const practice = globalIntentInfos.focusedPractice;
         rdvUrl = `/practitioners?practice=${practice.id}`;
         
