@@ -184,7 +184,7 @@ export class IAController {
 
       // 2. Extraire le nombre de tokens depuis iaResponse et ajouter le coût de l'intent
       const responseTokens = iaResponse.cost !== undefined && iaResponse.cost !== null ? iaResponse.cost : 0;
-      const intentCost = updatedContext.metadata?.['intentCost'] as number | undefined ?? 0;
+      const intentCost = (updatedContext.metadata?.['currentIntentInfos'] as any)?.intentCost as number | undefined ?? 0;
       const tokens = responseTokens + intentCost; // Coût total = réponse + intent
 
       // 3. Faire un appel de mise à jour globale
@@ -316,7 +316,7 @@ export class IAController {
 
       // 4. Extraire le nombre de tokens depuis iaResponse et ajouter le coût de l'intent (seulement pour la première réponse)
       const responseTokens = iaResponse.cost !== undefined && iaResponse.cost !== null ? iaResponse.cost : 0;
-      const intentCost = isFirstResponse ? (updatedContext.metadata?.['intentCost'] as number | undefined ?? 0) : 0;
+      const intentCost = isFirstResponse ? ((updatedContext.metadata?.['currentIntentInfos'] as any)?.intentCost as number | undefined ?? 0) : 0;
       const tokens = responseTokens + intentCost; // Coût total = réponse + intent (intent seulement pour la première réponse)
 
       // 5. Mettre à jour les informations de la réponse actuelle
@@ -425,22 +425,35 @@ export class IAController {
     let contextWithIntent = { ...context };
     let lastUpdatedContext = contextWithIntent;
     
+    // Sauvegarder l'intent courant dans previousIntentInfos (même s'il est null)
+    const currentIntent = context.metadata?.['currentIntentInfos'] as any;
+    const previousIntentInfos = currentIntent ? {
+      intent: currentIntent.intent || null,
+      intentCost: currentIntent.intentCost || null,
+      intentContextText: currentIntent.intentContextText || null
+    } : {
+      intent: null,
+      intentCost: null,
+      intentContextText: null
+    };
+    
+    // Mettre les nouvelles valeurs dans currentIntentInfos
+    const currentIntentInfos = {
+      intent: intent || null,
+      intentCost: intentCost || null,
+      intentContextText: null
+    };
+    
+    contextWithIntent.metadata = {
+      ...contextWithIntent.metadata,
+      ['previousIntentInfos']: previousIntentInfos,
+      ['currentIntentInfos']: currentIntentInfos
+    };
+    
     if (intent) {
-      contextWithIntent.metadata = {
-        ...contextWithIntent.metadata,
-        ['intent']: intent,
-        ['intentCost']: intentCost
-      };
       console.log('✅ Intent calculé avec succès et ajouté au contexte');
     } else {
       console.warn('⚠️ Calcul d\'intent retourné null, génération de la réponse sans intent');
-      // Mettre l'intent, intentCost et intentContextText à null dans le contexte
-      contextWithIntent.metadata = {
-        ...contextWithIntent.metadata,
-        ['intent']: null,
-        ['intentCost']: null,
-        ['intentContextText']: null
-      };
     }
     
     // Créer le callback pour traiter chaque réponse générée par handleIntent

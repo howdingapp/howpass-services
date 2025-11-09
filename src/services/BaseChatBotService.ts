@@ -277,7 +277,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       } else {
         // Comportement normal : message utilisateur + consignes système + outils
         // Vérifier si des intentResults sont présents pour les ajouter aux métadonnées
-        const intent = context.metadata?.['intent'];
+        const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
+        const intent = currentIntentInfos?.intent;
         const intentResults = context.metadata?.['intentResults'];
         
         // Construire le texte de contexte intent et l'ajouter au message ET dans les métadonnées pour le tracing
@@ -287,10 +288,13 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
             `Intent calculé: ${JSON.stringify(intent, null, 2)}\n` +
             `Résultats de recherche: ${JSON.stringify(intentResults, null, 2)}`;
           
-          // Ajouter dans les métadonnées pour le tracing
+          // Mettre à jour intentContextText dans currentIntentInfos
           context.metadata = {
             ...context.metadata,
-            ['intentContextText']: intentContextText
+            ['currentIntentInfos']: {
+              ...currentIntentInfos,
+              intentContextText: intentContextText
+            }
           };
         }
 
