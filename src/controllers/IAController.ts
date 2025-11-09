@@ -36,6 +36,42 @@ export class IAController {
   }
 
   /**
+   * Compter le nombre de réponses IA dans une conversation
+   */
+  private async getMessageCount(conversationId: string): Promise<number> {
+    try {
+      const result = await this.supabaseService.getAIResponsesByConversation(conversationId);
+      if (!result.success || !result.data) {
+        console.warn('⚠️ Impossible de récupérer le nombre de messages, utilisation de 0');
+        return 0;
+      }
+      // Compter uniquement les réponses qui ont un response_text (réponses complétées)
+      const completedResponses = result.data.filter(response => response.response_text !== null);
+      return completedResponses.length;
+    } catch (error) {
+      console.error('❌ Erreur lors du comptage des messages:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Vérifier si la conversation a atteint la limite de messages
+   */
+  private async checkMessageLimit(conversationId: string): Promise<boolean> {
+    const maxMessages = parseInt(process.env['MAX_CONVERSATION_MESSAGES'] || '10', 10);
+    const messageCount = await this.getMessageCount(conversationId);
+    const hasReachedLimit = messageCount >= maxMessages;
+    
+    if (hasReachedLimit) {
+      console.log(`⚠️ Limite de messages atteinte: ${messageCount}/${maxMessages} pour la conversation ${conversationId}`);
+    } else {
+      console.log(`📊 Nombre de messages: ${messageCount}/${maxMessages} pour la conversation ${conversationId}`);
+    }
+    
+    return hasReachedLimit;
+  }
+
+  /**
    * Traiter une tâche IA reçue de Google Cloud Tasks
    */
   async processIATask(req: IAAuthenticatedRequest, res: Response): Promise<void> {
@@ -91,6 +127,16 @@ export class IAController {
       console.log(`🏷️ Type de conversation: ${context.type}`);
 
       console.log('🔍 Contexte de la conversation:', context);
+
+      // Vérifier la limite de messages pour les tâches de type generate_response
+      // Si la limite est atteinte, forcer la génération d'un résumé
+      if (taskData.type === 'generate_response') {
+        const hasReachedLimit = await this.checkMessageLimit(taskData.conversationId);
+        if (hasReachedLimit) {
+          console.log(`🔄 Limite de messages atteinte, conversion de generate_response en generate_summary`);
+          taskData.type = 'generate_summary';
+        }
+      }
 
       // Mesurer le temps de traitement
       const startTime = Date.now();
