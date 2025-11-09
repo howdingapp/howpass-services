@@ -2125,21 +2125,43 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           } else if (type === 'activity') {
             const result = await this.supabaseService.searchActivitiesBySituationChunks([designation]);
             if (result.results && result.results.length > 0) {
-              const found = result.results[0];
-              if (found) {
-                searchResult = found;
-                // Vérifier si le résultat est présent dans le contexte
-                isPresent = activitiesMap.has(found.id);
+              // Si focusedHowerAngel est présent, filtrer pour ne garder que les activités disponibles dans focusedHowerAngel.activities
+              let filteredResults = result.results;
+              if (focusedHowerAngel?.activities && focusedHowerAngel.activities.length > 0) {
+                const availableActivityIds = focusedHowerAngel.activities.map(a => a.id);
+                filteredResults = result.results.filter((activity: any) => 
+                  availableActivityIds.includes(activity.id)
+                );
+              }
+              
+              if (filteredResults.length > 0) {
+                const found = filteredResults[0];
+                if (found) {
+                  searchResult = found;
+                  // Vérifier si le résultat est présent dans le contexte
+                  isPresent = activitiesMap.has(found.id);
+                }
               }
             }
           } else if (type === 'practice') {
             const result = await this.supabaseService.searchPracticesBySituationChunks([designation]);
             if (result.results && result.results.length > 0) {
-              const found = result.results[0];
-              if (found) {
-                searchResult = found;
-                // Vérifier si le résultat est présent dans le contexte
-                isPresent = practicesMap.has(found.id);
+              // Si focusedHowerAngel est présent, filtrer pour ne garder que les pratiques disponibles dans focusedHowerAngel.specialties
+              let filteredResults = result.results;
+              if (focusedHowerAngel?.specialties && focusedHowerAngel.specialties.length > 0) {
+                const availableSpecialtyIds = focusedHowerAngel.specialties.map(s => s.id);
+                filteredResults = result.results.filter((practice: any) => 
+                  availableSpecialtyIds.includes(practice.id)
+                );
+              }
+              
+              if (filteredResults.length > 0) {
+                const found = filteredResults[0];
+                if (found) {
+                  searchResult = found;
+                  // Vérifier si le résultat est présent dans le contexte
+                  isPresent = practicesMap.has(found.id);
+                }
               }
             }
           }
