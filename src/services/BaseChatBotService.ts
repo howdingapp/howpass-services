@@ -271,8 +271,9 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
     console.error('❌ Validation échouée après retry:', errorReason);
     
     // Construire une réponse d'erreur valide pour ne pas bloquer le frontend
+    // Message fonctionnel et non technique pour l'utilisateur
     const errorResponse = {
-      response: `Désolé, je rencontre des difficultés techniques. ${errorReason}. Pouvez-vous réessayer dans un moment ?`,
+      response: 'Une erreur a eu lieu. Veuillez réessayer plus tard.',
       messageId: response.messageId || 'error',
       updatedContext: context,
       cost: response.cost || null,
