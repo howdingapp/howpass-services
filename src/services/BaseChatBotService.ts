@@ -272,10 +272,21 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
     
     // Construire une réponse d'erreur valide pour ne pas bloquer le frontend
     // Message fonctionnel et non technique pour l'utilisateur
+    const errorMessage = 'Une erreur a eu lieu. Veuillez réessayer plus tard.';
+    
+    // Ajouter la réponse d'erreur dans les métadonnées du contexte
+    const errorContext = {
+      ...response.updatedContext,
+      metadata: {
+        ...response.updatedContext.metadata,
+        errorResponse: errorMessage
+      }
+    };
+    
     const errorResponse = {
-      response: 'Une erreur a eu lieu. Veuillez réessayer plus tard.',
+      response: errorMessage,
       messageId: response.messageId || 'error',
-      updatedContext: response.updatedContext,
+      updatedContext: errorContext,
       cost: response.cost || null,
       haveNext: false,
     } as unknown as T;
