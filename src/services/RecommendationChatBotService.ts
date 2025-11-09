@@ -2439,9 +2439,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               }
             }
             
-            // Traiter l'élément trouvé selon le type
+            // Traiter l'élément trouvé selon le type réel de l'item
             if (foundItem) {
-              if (contextType === 'activity') {
+              // Vérifier le type réel de l'item plutôt que contextType
+              if (foundItem.type === 'activity') {
                 const activityItem = foundItem as ActivityItem;
                 if (!present) {
                   pendingConfirmations.focusedActivity = activityItem;
@@ -2451,7 +2452,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     activitiesMap.set(activityItem.id, activityItem);
                   }
                 }
-              } else {
+              } else if (foundItem.type === 'practice') {
                 const practiceItem = foundItem as PracticeItem;
                 if (!present) {
                   pendingConfirmations.focusedPractice = practiceItem;
