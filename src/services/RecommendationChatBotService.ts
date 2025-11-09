@@ -2417,6 +2417,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               }
             }
             
+            // Si on a ajouté dans pendingConfirmation, on ne calcule pas les activity ni practice
+            if (pendingConfirmations.focusedHowerAngel) {
+              break;
+            }
+            
             // Si on n'a toujours pas de focusedHowerAngel à ce niveau, on ne cherche pas les activities et practices
             if (!focusedHowerAngel) {
               break;
