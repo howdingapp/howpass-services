@@ -1433,6 +1433,17 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         context = await this.handleTakeRdvIntent(intent, context, userMessage, globalIntentInfos);
         break;
       
+      case 'confirmation':
+        // Appeler directement le handler approprié selon l'intent original
+        if (intent.confirmationContext?.intent === 'know_more') {
+          context = await this.handleKnowMoreIntent(intent, context, userMessage, globalIntentInfos);
+        } else if (intent.confirmationContext?.intent === 'take_rdv') {
+          context = await this.handleTakeRdvIntent(intent, context, userMessage, globalIntentInfos);
+        } else {
+          console.warn('⚠️ Intent original manquant ou non géré dans confirmationContext');
+        }
+        break;
+      
       case 'search_activities':
       case 'search_hower_angel':
       case 'search_advices':
@@ -1480,6 +1491,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
   /**
    * Gère l'intent "know_more" - valorise intentResults avec les messages contextuels du globalIntentInfos
+   * Peut aussi être appelé depuis un intent "confirmation" pour continuer le traitement
    */
   private async handleKnowMoreIntent(
     intent: RecommendationIntent,
@@ -1492,12 +1504,36 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     }
     console.log('ℹ️ Intent "know_more" détecté - valorisation de intentResults avec les messages contextuels');
     
-    if (!intent.knowMoreContext) {
-      console.warn('⚠️ knowMoreContext manquant dans l\'intent know_more');
-      return context;
+    // Si c'est une confirmation, reconstruire le contexte depuis confirmationContext
+    let type: 'hower_angel' | 'activity' | 'practice' | 'subject';
+    let designation: string;
+    
+    if (intent.intent === 'confirmation' && intent.confirmationContext) {
+      // Reconstruire le contexte depuis confirmationContext et globalIntentInfos
+      const confirmationType = intent.confirmationContext.type;
+      type = confirmationType;
+      
+      // Récupérer la désignation depuis l'élément confirmé dans globalIntentInfos
+      if (confirmationType === 'hower_angel' && globalIntentInfos.focusedHowerAngel) {
+        const howerAngel = globalIntentInfos.focusedHowerAngel;
+        designation = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
+      } else if (confirmationType === 'activity' && globalIntentInfos.focusedActivity) {
+        designation = globalIntentInfos.focusedActivity.title;
+      } else if (confirmationType === 'practice' && globalIntentInfos.focusedPractice) {
+        designation = globalIntentInfos.focusedPractice.title;
+      } else {
+        console.warn('⚠️ Élément confirmé non trouvé dans globalIntentInfos');
+        return context;
+      }
+    } else {
+      // Cas normal : utiliser knowMoreContext
+      if (!intent.knowMoreContext) {
+        console.warn('⚠️ knowMoreContext manquant dans l\'intent know_more');
+        return context;
+      }
+      type = intent.knowMoreContext.type;
+      designation = intent.knowMoreContext.designation;
     }
-
-    const { type, designation } = intent.knowMoreContext;
     let intentResultsText = '';
 
     // Construire le message contextuel selon le type et l'état de l'élément dans globalIntentInfos
@@ -1583,6 +1619,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
   /**
    * Gère l'intent "take_rdv" - valorise intentResults avec les informations de rendez-vous et les URLs
+   * Peut aussi être appelé depuis un intent "confirmation" pour continuer le traitement
    */
   private async handleTakeRdvIntent(
     intent: RecommendationIntent,
@@ -1595,12 +1632,36 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     }
     console.log('ℹ️ Intent "take_rdv" détecté - valorisation de intentResults avec les informations de rendez-vous');
     
-    if (!intent.rdvContext) {
-      console.warn('⚠️ rdvContext manquant dans l\'intent take_rdv');
-      return context;
+    // Si c'est une confirmation, reconstruire le contexte depuis confirmationContext
+    let type: 'hower_angel' | 'activity' | 'practice';
+    let designation: string;
+    
+    if (intent.intent === 'confirmation' && intent.confirmationContext) {
+      // Reconstruire le contexte depuis confirmationContext et globalIntentInfos
+      const confirmationType = intent.confirmationContext.type;
+      type = confirmationType;
+      
+      // Récupérer la désignation depuis l'élément confirmé dans globalIntentInfos
+      if (confirmationType === 'hower_angel' && globalIntentInfos.focusedHowerAngel) {
+        const howerAngel = globalIntentInfos.focusedHowerAngel;
+        designation = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
+      } else if (confirmationType === 'activity' && globalIntentInfos.focusedActivity) {
+        designation = globalIntentInfos.focusedActivity.title;
+      } else if (confirmationType === 'practice' && globalIntentInfos.focusedPractice) {
+        designation = globalIntentInfos.focusedPractice.title;
+      } else {
+        console.warn('⚠️ Élément confirmé non trouvé dans globalIntentInfos');
+        return context;
+      }
+    } else {
+      // Cas normal : utiliser rdvContext
+      if (!intent.rdvContext) {
+        console.warn('⚠️ rdvContext manquant dans l\'intent take_rdv');
+        return context;
+      }
+      type = intent.rdvContext.type;
+      designation = intent.rdvContext.designation || '';
     }
-
-    const { type, designation } = intent.rdvContext;
     let intentResultsText = '';
     let rdvUrl: string | null = null;
 

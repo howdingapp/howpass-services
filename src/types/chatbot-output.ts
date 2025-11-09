@@ -75,6 +75,7 @@ export interface RecommendationIntent {
   };
   confirmationContext?: {
     type: 'hower_angel' | 'activity' | 'practice';
+    intent: 'know_more' | 'take_rdv';
   };
 }
 
