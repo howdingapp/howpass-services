@@ -1354,85 +1354,55 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       ['globalIntentInfos']: globalIntentInfos
     };
 
-    // Déterminer si on doit recalculer globalIntentInfos après les handlers
-    // Pour les intents de recherche : oui (besoin des intentResults après les recherches)
-    const shouldRecomputeAfterHandle = 
-      typedIntent?.intent === 'search_activities' ||
-      typedIntent?.intent === 'search_hower_angel' ||
-      typedIntent?.intent === 'search_advices';
-
     // Router vers la fonction appropriée selon le type d'intent
-    if (typedIntent?.intent === 'know_more') {
-      await this.handleKnowMoreIntent(intent, context, userMessage, globalIntentInfos, onIaResponse);
-      return context;
-    } else if (!typedIntent?.searchContext) {
-      console.log('⚠️ Aucun searchContext dans l\'intent, utilisation du comportement par défaut');
-      await this.handleDefaultIntent(context, userMessage, onIaResponse);
-      return context;
-    } else {
-      const { searchChunks, searchType } = typedIntent.searchContext;
-
-      if (!searchChunks || searchChunks.length === 0) {
-        console.log('⚠️ Aucun searchChunks dans l\'intent, utilisation du comportement par défaut');
-        await this.handleDefaultIntent(context, userMessage, onIaResponse);
-        return context;
-      } else {
+    switch (typedIntent?.intent) {
+      case 'know_more':
+        context = await this.handleKnowMoreIntent(intent, context, userMessage, globalIntentInfos);
+        break;
+      
+      case 'search_activities':
+      case 'search_hower_angel':
+      case 'search_advices':
+        if (!typedIntent.searchContext) {
+          console.log('⚠️ Aucun searchContext dans l\'intent');
+          break;
+        }
+        const { searchChunks, searchType } = typedIntent.searchContext;
+        if (!searchChunks || searchChunks.length === 0) {
+          console.log('⚠️ Aucun searchChunks dans l\'intent');
+          break;
+        }
         try {
           // Pour les recherches, effectuer les recherches d'abord
           switch (searchType) {
             case 'activity':
-              await this.handleSearchActivityIntent(searchChunks, context);
+              context = await this.handleSearchActivityIntent(searchChunks, context, intent);
               break;
             case 'practice':
-              await this.handleSearchPracticeIntent(searchChunks, context);
+              context = await this.handleSearchPracticeIntent(searchChunks, context, intent);
               break;
             case 'hower_angel':
-              const handled = await this.handleSearchHowerAngelIntent(searchChunks, context, onIaResponse);
+              const handled = await this.handleSearchHowerAngelIntent(searchChunks, context, intent);
               if (handled) {
-                // Si une erreur s'est produite, recalculer globalIntentInfos si nécessaire
-                if (shouldRecomputeAfterHandle) {
-                  globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
-                  context.metadata = {
-                    ...context.metadata,
-                    ['globalIntentInfos']: globalIntentInfos
-                  };
-                }
-                return context;
+                // Si une erreur s'est produite, le contexte a déjà été mis à jour
+                break;
               }
               break;
             default:
-              console.warn(`⚠️ searchType non reconnu: ${searchType}, utilisation du comportement par défaut`);
-              await this.handleDefaultIntent(context, userMessage, onIaResponse);
-              return context;
+              console.warn(`⚠️ searchType non reconnu: ${searchType}`);
           }
-
-          // Après avoir effectué les recherches, recalculer globalIntentInfos si nécessaire (pour avoir accès aux intentResults)
-          if (shouldRecomputeAfterHandle) {
-            globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
-            context.metadata = {
-              ...context.metadata,
-              ['globalIntentInfos']: globalIntentInfos
-            };
-          }
-
-          // Utiliser le comportement par défaut pour générer la réponse
-          await this.handleDefaultIntent(context, userMessage, onIaResponse);
-          return context;
         } catch (error) {
           console.error('❌ Erreur lors du traitement de l\'intent:', error);
-          // En cas d'erreur, recalculer globalIntentInfos si nécessaire
-          if (shouldRecomputeAfterHandle) {
-            globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
-            context.metadata = {
-              ...context.metadata,
-              ['globalIntentInfos']: globalIntentInfos
-            };
-          }
-          await this.handleDefaultIntent(context, userMessage, onIaResponse);
-          return context;
         }
-      }
+        break;
+      
+      default:
+        // Pour les autres intents (take_rdv, confirmation, discover, etc.), pas de traitement spécial
+        break;
     }
+
+    // Appel unifié à super.handleIntent à la fin
+    return super.handleIntent(context, userMessage, onIaResponse);
   }
 
   /**
@@ -1441,18 +1411,17 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
   private async handleKnowMoreIntent(
     intent: RecommendationIntent,
     context: HowanaContext,
-    userMessage: string,
-    globalIntentInfos: GlobalRecommendationIntentInfos | undefined,
-    onIaResponse: (response: any) => Promise<void>
+    _userMessage: string,
+    globalIntentInfos: GlobalRecommendationIntentInfos | undefined
   ): Promise<HowanaContext> {
     if (!globalIntentInfos) {
-      return super.handleIntent(context, userMessage, onIaResponse);
+      return context;
     }
     console.log('ℹ️ Intent "know_more" détecté - valorisation de intentResults avec les messages contextuels');
     
     if (!intent.knowMoreContext) {
       console.warn('⚠️ knowMoreContext manquant dans l\'intent know_more');
-      return super.handleIntent(context, userMessage, onIaResponse);
+      return context;
     }
 
     const { type, designation } = intent.knowMoreContext;
@@ -1536,7 +1505,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       ['intentResults']: intentResultsText
     };
 
-    return super.handleIntent(context, userMessage, onIaResponse);
+    return context;
   }
 
   /**
@@ -1544,8 +1513,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    */
   private async handleSearchActivityIntent(
     searchChunks: Array<{ type: string; text: string }>,
-    context: HowanaContext
-  ): Promise<void> {
+    context: HowanaContext,
+    intent: RecommendationIntent
+  ): Promise<HowanaContext> {
     const searchChunksTexts = searchChunks.map(chunk => chunk.text);
     console.log(`🔍 Recherche d'activités avec ${searchChunks.length} chunks`);
     
@@ -1553,12 +1523,21 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     const activities: ActivityItem[] = activitiesResults.results || [];
     console.log(`✅ ${activities.length} activités trouvées`);
     
-    // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+    // Ajouter les résultats dans les métadonnées
     const activityIntentResults: IntentResults = { activities, practices: [], howerAngels: [] };
     context.metadata = {
       ...context.metadata,
       ['intentResults']: activityIntentResults
     };
+
+    // Recalculer globalIntentInfos pour avoir accès aux intentResults
+    const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+    context.metadata = {
+      ...context.metadata,
+      ['globalIntentInfos']: globalIntentInfos
+    };
+
+    return context;
   }
 
   /**
@@ -1566,8 +1545,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    */
   private async handleSearchPracticeIntent(
     searchChunks: Array<{ type: string; text: string }>,
-    context: HowanaContext
-  ): Promise<void> {
+    context: HowanaContext,
+    intent: RecommendationIntent
+  ): Promise<HowanaContext> {
     const searchChunksTexts = searchChunks.map(chunk => chunk.text);
     console.log(`🔍 Recherche de pratiques avec ${searchChunks.length} chunks`);
     
@@ -1575,22 +1555,31 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     const practices: PracticeItem[] = practicesResults.results || [];
     console.log(`✅ ${practices.length} pratiques trouvées`);
     
-    // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+    // Ajouter les résultats dans les métadonnées
     const practiceIntentResults: IntentResults = { activities: [], practices, howerAngels: [] };
     context.metadata = {
       ...context.metadata,
       ['intentResults']: practiceIntentResults
     };
+
+    // Recalculer globalIntentInfos pour avoir accès aux intentResults
+    const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+    context.metadata = {
+      ...context.metadata,
+      ['globalIntentInfos']: globalIntentInfos
+    };
+
+    return context;
   }
 
   /**
    * Gère la recherche de hower angels
-   * @returns true si une erreur s'est produite et que le comportement par défaut a déjà été appelé
+   * @returns true si une erreur s'est produite
    */
   private async handleSearchHowerAngelIntent(
     searchChunks: Array<{ type: string; text: string }>,
     context: HowanaContext,
-    onIaResponse: (response: any) => Promise<void>
+    intent: RecommendationIntent
   ): Promise<boolean> {
     const searchChunksTexts = searchChunks.map(chunk => chunk.text);
     console.log(`🔍 Recherche de hower angels avec ${searchChunks.length} chunks`);
@@ -1598,36 +1587,35 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunksTexts);
     if (!howerAngelsResult.success) {
       console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
-      // Récupérer userMessage depuis le contexte si nécessaire, sinon utiliser un message par défaut
-      const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
-      const userMessage = currentIntentInfos?.userMessage || '';
-      await super.handleIntent(context, userMessage, onIaResponse);
+      // Recalculer globalIntentInfos même en cas d'erreur
+      const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+      context.metadata = {
+        ...context.metadata,
+        ['globalIntentInfos']: globalIntentInfos
+      };
       return true; // Erreur gérée
     }
     
     const howerAngels: HowerAngelItem[] = howerAngelsResult.data || [];
     console.log(`✅ ${howerAngels.length} hower angels trouvés`);
     
-    // Ajouter les résultats dans les métadonnées pour que le parent puisse les récupérer
+    // Ajouter les résultats dans les métadonnées
     const howerAngelIntentResults: IntentResults = { activities: [], practices: [], howerAngels };
     context.metadata = {
       ...context.metadata,
       ['intentResults']: howerAngelIntentResults
     };
+
+    // Recalculer globalIntentInfos pour avoir accès aux intentResults
+    const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+    context.metadata = {
+      ...context.metadata,
+      ['globalIntentInfos']: globalIntentInfos
+    };
     
     return false; // Pas d'erreur
   }
 
-  /**
-   * Utilise le comportement par défaut pour générer la réponse
-   */
-  private async handleDefaultIntent(
-    context: HowanaContext,
-    userMessage: string,
-    onIaResponse: (response: any) => Promise<void>
-  ): Promise<HowanaContext> {
-    return super.handleIntent(context, userMessage, onIaResponse);
-  }
 
   /**
    * Schéma de sortie pour le calcul d'intent spécifique aux recommandations
