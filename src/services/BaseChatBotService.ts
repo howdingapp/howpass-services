@@ -266,10 +266,20 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
       return retryResponse;
     }
 
-    // Si le retry échoue aussi, lancer une erreur au lieu de retourner une réponse invalide
-    const errorMessage = `La validation a échoué après retry. Raison: ${retryValidation.reason || validation.reason || 'Erreur de validation non spécifiée'}`;
-    console.error('❌ Validation échouée après retry:', errorMessage);
-    throw new Error(errorMessage);
+    // Si le retry échoue aussi, retourner une réponse d'erreur valide au lieu de lancer une exception
+    const errorReason = retryValidation.reason || validation.reason || 'Erreur de validation non spécifiée';
+    console.error('❌ Validation échouée après retry:', errorReason);
+    
+    // Construire une réponse d'erreur valide pour ne pas bloquer le frontend
+    const errorResponse = {
+      response: `Désolé, je rencontre des difficultés techniques. ${errorReason}. Pouvez-vous réessayer dans un moment ?`,
+      messageId: response.messageId || 'error',
+      updatedContext: context,
+      cost: response.cost || null,
+      haveNext: false,
+    } as unknown as T;
+    
+    return errorResponse;
   }
 
   /**

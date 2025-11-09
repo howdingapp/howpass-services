@@ -2668,8 +2668,30 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       }
 
       // Créer des Sets pour vérifier rapidement l'existence des IDs
+      // Activities : depuis globalIntentInfos.activities ET depuis howerAngels[].activities
       const activityIds = new Set(globalIntentInfos.activities.map(a => a.id));
+      globalIntentInfos.howerAngels.forEach(howerAngel => {
+        if (howerAngel.activities) {
+          howerAngel.activities.forEach(activity => {
+            if (activity.id) {
+              activityIds.add(activity.id);
+            }
+          });
+        }
+      });
+
+      // Practices : depuis globalIntentInfos.practices ET depuis howerAngels[].specialties
       const practiceIds = new Set(globalIntentInfos.practices.map(p => p.id));
+      globalIntentInfos.howerAngels.forEach(howerAngel => {
+        if (howerAngel.specialties) {
+          howerAngel.specialties.forEach(specialty => {
+            if (specialty.id) {
+              practiceIds.add(specialty.id);
+            }
+          });
+        }
+      });
+
       const howerAngelUserIds = new Set(globalIntentInfos.howerAngels.map(h => h.userId));
 
       // Copie de la réponse pour modification si nécessaire
