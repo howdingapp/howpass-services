@@ -1896,8 +1896,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                   description: "Nom du hower angel, de la pratique ou de l'activité mentionné (peut être null si non connu)"
                 },
                 format: {
-                  type: "string",
-                  description: "Format de recommandation préféré par l'utilisateur : 'remote' (à distance/en ligne), 'inPerson' (en personne/présentiel), ou 'any' (les deux formats acceptés)",
+                  type: ["string", "null"],
+                  description: "Format de recommandation préféré par l'utilisateur si expressément mentionné : 'remote' (à distance/en ligne), 'inPerson' (en personne/présentiel), ou 'any' (les deux formats acceptés). Si l'utilisateur n'a pas expressément décidé, utiliser null (sera traité comme 'inPerson' par défaut)",
                   enum: ["remote", "inPerson", "any"]
                 }
               },

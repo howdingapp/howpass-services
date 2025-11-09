@@ -59,6 +59,7 @@ export interface RecommendationIntent {
     type: 'hower_angel' | 'activity' | 'practice';
     id: string;
     designation: string | null;
+    format?: 'remote' | 'inPerson' | 'any' | null;
   };
   searchContext?: {
     searchChunks: Array<{
