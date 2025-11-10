@@ -102,16 +102,6 @@ export class IAController {
 
       const taskData = req.body as IATaskRequest;
       
-      // Validation de userId (obligatoire)
-      if (!taskData.userId) {
-        console.error('❌ userId manquant dans les données de tâche');
-        res.status(401).json({
-          error: 'Non autorisé',
-          message: 'Le champ userId est requis'
-        });
-        return;
-      }
-      
       // Validation supplémentaire des données
       if (!taskData.type || !taskData.conversationId) {
         console.error('❌ Données de tâche incomplètes:', taskData);
@@ -152,7 +142,7 @@ export class IAController {
       // Si la limite est atteinte, forcer la génération d'un résumé
       // Cette vérification s'applique uniquement pour les conversations de type 'bilan' ou 'recommandation'
       if (taskData.type === 'generate_response') {
-        const hasReachedDailyLimit = await this.checkDailyMessageLimit(taskData.userId, context.type);
+        const hasReachedDailyLimit = await this.checkDailyMessageLimit(req.user?.userId || '', context.type);
         if (hasReachedDailyLimit) {
           console.log(`🔄 Limite journalière de messages atteinte, conversion de generate_response en generate_summary`);
           taskData.type = 'generate_summary';
@@ -167,16 +157,16 @@ export class IAController {
       
       switch (taskData.type) {
         case 'generate_response':
-          result = await this.processGenerateResponse(taskData, context);
+          result = await this.processGenerateResponse(req, taskData, context);
           break;
         case 'generate_summary':
-          result = await this.processGenerateSummary(taskData, context);
+          result = await this.processGenerateSummary(req, taskData, context);
           break;
         case 'generate_first_response':
-          result = await this.processGenerateFirstResponse(taskData, context);
+          result = await this.processGenerateFirstResponse(req, taskData, context);
           break;
         case 'generate_unfinished_exchange':
-          result = await this.processGenerateUnfinishedExchange(taskData, context);
+          result = await this.processGenerateUnfinishedExchange(req, taskData, context);
           break;
         default:
           console.error('❌ Type de tâche non reconnu:', taskData.type);
@@ -325,6 +315,7 @@ export class IAController {
    * Ne doit être appelée que pour les réponses intermédiaires
    */
   private async finalizeIntermediateResponse(
+    req: IAAuthenticatedRequest,
     taskData: IATaskRequest,
     iaResponse: any,
     updatedContext: HowanaContext,
@@ -356,7 +347,7 @@ export class IAController {
       if (hasNext) {
         const createNextResult = await this.supabaseService.createAIResponse({
           conversation_id: taskData.conversationId,
-          user_id: taskData.userId,
+          user_id: req.user?.userId || '',
           response_text: null, // Réponse vide pour l'instant
           message_type: 'text',
           next_response_id: null
@@ -441,7 +432,7 @@ export class IAController {
   /**
    * Traiter la génération d'une première réponse IA
    */
-  private async processGenerateFirstResponse(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
+  private async processGenerateFirstResponse(_req: IAAuthenticatedRequest, taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
     console.log(`👋 Génération d'une première réponse IA pour: ${taskData.conversationId}`);
     
     // Obtenir le service de chatbot approprié
@@ -474,7 +465,7 @@ export class IAController {
   /**
    * Traiter la génération d'une réponse IA
    */
-  private async processGenerateResponse(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
+  private async processGenerateResponse(req: IAAuthenticatedRequest, taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
     if (!taskData.userMessage) {
       throw new Error('Message utilisateur manquant pour la génération de réponse');
     }
@@ -555,6 +546,7 @@ export class IAController {
         // C'est une réponse intermédiaire, finaliser immédiatement
         const isFirstResponse = responseCount === 1;
         await this.finalizeIntermediateResponse(
+          req,
           taskData,
           completeIaResponse,
           updatedContext,
@@ -597,7 +589,7 @@ export class IAController {
   /**
    * Traiter la génération d'un résumé IA
    */
-  private async processGenerateSummary(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
+  private async processGenerateSummary(_req: IAAuthenticatedRequest, taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
     console.log(`📝 Génération d'un résumé IA pour: ${taskData.conversationId}`);
     
     // Obtenir le service de chatbot approprié
@@ -638,7 +630,7 @@ export class IAController {
   /**
    * Traiter la génération d'un échange non fini
    */
-  private async processGenerateUnfinishedExchange(taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
+  private async processGenerateUnfinishedExchange(_req: IAAuthenticatedRequest, taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
     console.log(`🔄 Génération d'un échange non fini pour: ${taskData.conversationId}`);
     
     // Créer un message simple indiquant que l'utilisateur est parti
