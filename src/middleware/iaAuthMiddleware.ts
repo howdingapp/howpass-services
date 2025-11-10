@@ -4,6 +4,7 @@ import { SupabaseService } from '../services/SupabaseService';
 export interface IAAuthenticatedRequest extends Request {
   user?: {
     id: string;
+    userId: string;
     email?: string;
     role?: string;
   };
@@ -15,7 +16,7 @@ export interface IAAuthenticatedRequest extends Request {
  * Vérifie le token d'authentification dans le corps de la requête
  * (envoyé par Google Cloud Tasks) en utilisant Supabase
  */
-export function authenticateIAToken(req: IAAuthenticatedRequest, res: Response, next: NextFunction): void {
+export function authenticateIAToken(req: Request, res: Response, next: NextFunction): void {
   try {
     // Vérifier que le corps de la requête contient un token
     if (!req.body || !req.body.authToken) {
@@ -46,7 +47,7 @@ export function authenticateIAToken(req: IAAuthenticatedRequest, res: Response, 
     console.log('✅ Token d\'authentification IA validé');
     
     // Ajouter le token validé à la requête pour utilisation ultérieure
-    req.validatedAuthToken = authToken;
+    (req as IAAuthenticatedRequest).validatedAuthToken = authToken;
     
     next();
     
@@ -130,6 +131,7 @@ export async function validateIAToken(req: IAAuthenticatedRequest, res: Response
       // Ajouter les informations utilisateur à la requête
       req.user = {
         id: user.id,
+        userId: user.id,
         ...(user.email && { email: user.email }),
         ...(user.role && { role: user.role })
       };

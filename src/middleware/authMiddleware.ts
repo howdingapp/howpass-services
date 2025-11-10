@@ -4,6 +4,7 @@ import { SupabaseService } from '../services/SupabaseService';
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
+    userId: string;
     email?: string;
     role?: string;
   };
@@ -11,7 +12,7 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export const authenticateToken = async (
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
@@ -48,14 +49,15 @@ export const authenticateToken = async (
     }
 
     // Ajouter les informations utilisateur et le token à la requête
-    req.user = {
+    (req as AuthenticatedRequest).user = {
       id: user.id,
+      userId: user.id,
       ...(user.email && { email: user.email }),
       ...(user.role && { role: user.role })
     };
     
     // Ajouter le token d'authentification pour les tâches IA
-    req.authToken = token;
+    (req as AuthenticatedRequest).authToken = token;
 
     console.log(`✅ Utilisateur authentifié: ${user.email} (${user.id})`);
     return next();
