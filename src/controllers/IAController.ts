@@ -36,39 +36,49 @@ export class IAController {
   }
 
   /**
-   * Compter le nombre de réponses IA dans une conversation
+   * Vérifier si l'utilisateur a atteint la limite journalière de messages
+   * Cette vérification s'applique uniquement pour les conversations de type 'bilan' ou 'recommandation'
    */
-  private async getMessageCount(conversationId: string): Promise<number> {
-    try {
-      const result = await this.supabaseService.getAIResponsesByConversation(conversationId);
-      if (!result.success || !result.data) {
-        console.warn('⚠️ Impossible de récupérer le nombre de messages, utilisation de 0');
-        return 0;
-      }
-      // Compter uniquement les réponses qui ont un response_text (réponses complétées)
-      const completedResponses = result.data.filter(response => response.response_text !== null);
-      return completedResponses.length;
-    } catch (error) {
-      console.error('❌ Erreur lors du comptage des messages:', error);
-      return 0;
+  private async checkDailyMessageLimit(userId: string, conversationType: string): Promise<boolean> {
+    // Ne vérifier la limite que pour les conversations de type 'bilan' ou 'recommandation'
+    if (conversationType !== 'bilan' && conversationType !== 'recommandation') {
+      return false;
     }
-  }
 
-  /**
-   * Vérifier si la conversation a atteint la limite de messages
-   */
-  private async checkMessageLimit(conversationId: string): Promise<boolean> {
-    const maxMessages = parseInt(process.env['MAX_CONVERSATION_MESSAGES'] || '10', 10);
-    const messageCount = await this.getMessageCount(conversationId);
-    const hasReachedLimit = messageCount >= maxMessages;
-    
-    if (hasReachedLimit) {
-      console.log(`⚠️ Limite de messages atteinte: ${messageCount}/${maxMessages} pour la conversation ${conversationId}`);
-    } else {
-      console.log(`📊 Nombre de messages: ${messageCount}/${maxMessages} pour la conversation ${conversationId}`);
+    try {
+      // Récupérer le profil de l'utilisateur pour déterminer la limite
+      const profilResult = await this.supabaseService.getUserProfil(userId);
+      if (!profilResult.success) {
+        console.warn('⚠️ Impossible de récupérer le profil utilisateur, utilisation de la limite par défaut (non-free)');
+      }
+
+      const isFree = profilResult.profil === 'free';
+      
+      // Déterminer la limite selon le profil
+      const maxDailyMessages = isFree 
+        ? parseInt(process.env['MAX_DAILY_MESSAGES_FREE'] || '10', 10)
+        : parseInt(process.env['MAX_DAILY_MESSAGES'] || '30', 10);
+
+      const result = await this.supabaseService.countTodayValidMessagesByUserId(userId);
+      if (!result.success) {
+        console.warn('⚠️ Impossible de récupérer le nombre de messages valides du jour, on continue sans limite');
+        return false;
+      }
+
+      const todayMessagesCount = result.count || 0;
+      const hasReachedLimit = todayMessagesCount >= maxDailyMessages;
+      
+      if (hasReachedLimit) {
+        console.log(`⚠️ Limite journalière de messages atteinte: ${todayMessagesCount}/${maxDailyMessages} pour l'utilisateur ${userId} (profil: ${profilResult.profil || 'unknown'})`);
+      } else {
+        console.log(`📊 Nombre de messages valides aujourd'hui: ${todayMessagesCount}/${maxDailyMessages} pour l'utilisateur ${userId} (profil: ${profilResult.profil || 'unknown'})`);
+      }
+      
+      return hasReachedLimit;
+    } catch (error) {
+      console.error('❌ Erreur lors de la vérification de la limite journalière de messages:', error);
+      return false;
     }
-    
-    return hasReachedLimit;
   }
 
   /**
@@ -128,12 +138,13 @@ export class IAController {
 
       console.log('🔍 Contexte de la conversation:', context);
 
-      // Vérifier la limite de messages pour les tâches de type generate_response
+      // Vérifier la limite journalière de messages pour les tâches de type generate_response
       // Si la limite est atteinte, forcer la génération d'un résumé
+      // Cette vérification s'applique uniquement pour les conversations de type 'bilan' ou 'recommandation'
       if (taskData.type === 'generate_response') {
-        const hasReachedLimit = await this.checkMessageLimit(taskData.conversationId);
-        if (hasReachedLimit) {
-          console.log(`🔄 Limite de messages atteinte, conversion de generate_response en generate_summary`);
+        const hasReachedDailyLimit = await this.checkDailyMessageLimit(taskData.userId, context.type);
+        if (hasReachedDailyLimit) {
+          console.log(`🔄 Limite journalière de messages atteinte, conversion de generate_response en generate_summary`);
           taskData.type = 'generate_summary';
         }
       }

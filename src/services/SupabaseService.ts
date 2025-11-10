@@ -518,6 +518,114 @@ export class SupabaseService {
   }
 
   /**
+   * Récupérer le profil d'un utilisateur
+   */
+  async getUserProfil(userId: string): Promise<{
+    success: boolean;
+    profil?: string;
+    error?: string;
+  }> {
+    try {
+      const { data, error } = await this.supabase
+        .from('user_data')
+        .select('profil')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération du profil utilisateur:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      return {
+        success: true,
+        profil: data?.profil || null
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération du profil utilisateur:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Compter les messages valides créés aujourd'hui par un utilisateur
+   * Les messages valides sont ceux avec valid_for_limit = true et qui ne proviennent pas de conversations de type 'activity'
+   */
+  async countTodayValidMessagesByUserId(userId: string): Promise<{
+    success: boolean;
+    count?: number;
+    error?: string;
+  }> {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Récupérer d'abord les conversations qui ne sont pas de type 'activity'
+      const { data: conversations, error: conversationsError } = await this.supabase
+        .from('howana_conversations')
+        .select('id')
+        .eq('user_id', userId)
+        .neq('conversation_type', 'activity');
+
+      if (conversationsError) {
+        console.error('❌ Erreur lors de la récupération des conversations valides:', conversationsError);
+        return {
+          success: false,
+          error: conversationsError.message
+        };
+      }
+
+      if (!conversations || conversations.length === 0) {
+        return {
+          success: true,
+          count: 0
+        };
+      }
+
+      const conversationIds = conversations.map(c => c.id);
+
+      // Compter les messages valides pour ces conversations
+      const { count, error } = await this.supabase
+        .from('ai_responses')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('valid_for_limit', true)
+        .in('conversation_id', conversationIds)
+        .gte('created_at', today.toISOString())
+        .lt('created_at', tomorrow.toISOString());
+
+      if (error) {
+        console.error('❌ Erreur lors du comptage des messages valides du jour:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      return {
+        success: true,
+        count: count || 0
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors du comptage des messages valides du jour:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
    * Supprimer une réponse IA
    */
   async deleteAIResponse(responseId: string): Promise<{
