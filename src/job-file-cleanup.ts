@@ -5,7 +5,14 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 /**
- * Job de nettoyage automatique des fichiers RGPD expirés
+ * Job de nettoyage automatique générique :
+ * - Fichiers RGPD expirés
+ * - Conversations (howana_conversations) de plus de 3 jours
+ * - Réponses IA (ai_responses) de plus de 3 jours
+ */
+
+/**
+ * Nettoie les fichiers RGPD expirés
  */
 async function cleanupExpiredFiles() {
   try {
@@ -104,7 +111,7 @@ async function markFileAsDeleted(supabase: any, fileId: string): Promise<void> {
  */
 async function cleanupOldRecords() {
   try {
-    console.log('🧹 Nettoyage des anciens enregistrements...');
+    console.log('🧹 Nettoyage des anciens enregistrements de la queue...');
 
     const supabaseService = new SupabaseService();
     const supabase = supabaseService.getSupabaseClient();
@@ -122,7 +129,7 @@ async function cleanupOldRecords() {
     if (error) {
       console.error('❌ Erreur lors du nettoyage des anciens enregistrements:', error);
     } else {
-      console.log('✅ Anciens enregistrements nettoyés');
+      console.log('✅ Anciens enregistrements de la queue nettoyés');
     }
 
   } catch (error) {
@@ -130,10 +137,47 @@ async function cleanupOldRecords() {
   }
 }
 
+/**
+ * Nettoie les conversations (howana_conversations) de plus de 3 jours
+ * Note: Les ai_responses associées seront automatiquement supprimées en cascade
+ * grâce à la contrainte ON DELETE CASCADE sur conversation_id
+ */
+async function cleanupOldConversations() {
+  try {
+    console.log('🧹 Nettoyage des conversations de plus de 3 jours...');
+
+    const supabaseService = new SupabaseService();
+    const supabase = supabaseService.getSupabaseClient();
+
+    // Calculer la date de 3 jours en arrière
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+    // Supprimer les conversations de plus de 3 jours
+    // Les ai_responses associées seront automatiquement supprimées en cascade
+    const { data, error } = await supabase
+      .from('howana_conversations')
+      .delete()
+      .lt('created_at', threeDaysAgo.toISOString())
+      .select();
+
+    if (error) {
+      console.error('❌ Erreur lors du nettoyage des conversations:', error);
+    } else {
+      const deletedCount = data?.length || 0;
+      console.log(`✅ ${deletedCount} conversation(s) supprimée(s) (et tous leurs messages ai_responses associés en cascade)`);
+    }
+
+  } catch (error) {
+    console.error('❌ Erreur lors du nettoyage des conversations:', error);
+  }
+}
+
 // Exécuter le nettoyage si ce fichier est appelé directement
 if (require.main === module) {
   cleanupExpiredFiles()
     .then(() => cleanupOldRecords())
+    .then(() => cleanupOldConversations()) // Supprimer les conversations de plus de 3 jours (les ai_responses seront supprimées en cascade)
     .then(() => {
       console.log('✅ Nettoyage complet terminé');
       process.exit(0);
@@ -144,4 +188,4 @@ if (require.main === module) {
     });
 }
 
-export { cleanupExpiredFiles, cleanupOldRecords };
+export { cleanupExpiredFiles, cleanupOldRecords, cleanupOldConversations };

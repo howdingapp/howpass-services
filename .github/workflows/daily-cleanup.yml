@@ -1,4 +1,4 @@
-name: Daily File Cleanup
+name: Daily Cleanup
 
 on:
   schedule:
@@ -13,7 +13,7 @@ env:
   SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
 
 jobs:
-  cleanup-files:
+  cleanup:
     runs-on: ubuntu-latest
     
     steps:
@@ -24,15 +24,15 @@ jobs:
           service_account_key: ${{ secrets.GCP_SA_KEY }}
           export_default_credentials: true
 
-      - name: Execute File Cleanup Job
+      - name: Execute Cleanup Job
         run: |
-          echo "🧹 Exécution du nettoyage quotidien des fichiers RGPD..."
+          echo "🧹 Exécution du nettoyage quotidien..."
           
-          # Exécuter le job de nettoyage avec les variables d'environnement
+          # Exécuter le job de nettoyage générique
+          # Les variables d'environnement sont déjà configurées dans le job via deploy.yml
           gcloud run jobs execute file-cleanup-job \
             --region=${{ env.REGION }} \
-            --wait \
-            --set-env-vars="SUPABASE_URL=${{ env.SUPABASE_URL }},SUPABASE_SERVICE_KEY=${{ env.SUPABASE_SERVICE_KEY }},NODE_ENV=production"
+            --wait
           
           echo "✅ Nettoyage quotidien terminé"
 
@@ -41,4 +41,6 @@ jobs:
           echo "📊 Résumé du nettoyage:"
           echo "- Fichiers RGPD expirés supprimés"
           echo "- Anciens enregistrements de queue nettoyés"
+          echo "- Conversations (howana_conversations) de plus de 3 jours supprimées"
+          echo "- Réponses IA (ai_responses) de plus de 3 jours supprimées"
           echo "- Espace de stockage optimisé"

@@ -246,7 +246,15 @@ jobs:
             --args="run,job:cleanup" \
             --set-env-vars=NODE_ENV=production \
             --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
+            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
+            --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+            --set-env-vars=GCP_LOCATION=europe-west1 \
+            --set-env-vars=GCP_JOB_NAME=file-cleanup-job \
+            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
+            --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }} \
+            --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }} \
+            --set-env-vars=SUPPORT_LINK=${{ vars.SUPPORT_LINK }}
         else
           echo "🆕 Création d'un nouveau job de nettoyage..."
           gcloud run jobs create file-cleanup-job \
@@ -265,7 +273,15 @@ jobs:
             --args="run,job:cleanup" \
             --set-env-vars=NODE_ENV=production \
             --set-env-vars=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
+            --set-env-vars=SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }} \
+            --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+            --set-env-vars=GCP_LOCATION=europe-west1 \
+            --set-env-vars=GCP_JOB_NAME=file-cleanup-job \
+            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
+            --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }} \
+            --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }} \
+            --set-env-vars=SUPPORT_LINK=${{ vars.SUPPORT_LINK }}
         fi
         
         echo "✅ Cloud Run Job de nettoyage configuré avec succès"
