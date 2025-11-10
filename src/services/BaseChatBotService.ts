@@ -3,20 +3,8 @@ import { SupabaseService } from './SupabaseService';
 import { StartConversationRequest, OpenAIToolsDescription } from '../types/conversation';
 import { HowanaContext } from '../types/repositories';
 import { ChatBotOutputSchema, IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
-import type { Response } from 'openai/resources/responses/responses';
+import type { Response, ResponseUsage } from 'openai/resources/responses/responses';
 import OpenAI from 'openai';
-
-/**
- * Interface pour l'usage des tokens de l'API OpenAI responses
- */
-interface OpenAIUsage {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-  prompt_tokens_details?: {
-    cached_tokens?: number;
-  };
-}
 
 export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessageResponse> {
   protected conversationService: ConversationService;
@@ -37,9 +25,10 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
   /**
    * Extrait les tokens depuis l'usage OpenAI
-   * L'API responses retourne usage avec prompt_tokens, completion_tokens, et parfois cached_tokens
+   * L'API responses retourne usage avec input_tokens, output_tokens, et input_tokens_details.cached_tokens
+   * Note: input_tokens et cached_tokens sont comptés séparément, pas besoin de soustraire
    */
-  protected extractTokensFromUsage(usage: OpenAIUsage | null | undefined): {
+  protected extractTokensFromUsage(usage: ResponseUsage | null | undefined): {
     cost_input: number;
     cost_cached_input: number;
     cost_output: number;
@@ -50,20 +39,16 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     let cost_output = 0;
 
     if (usage) {
-      // L'API responses peut retourner prompt_tokens_details avec cached_tokens
-      if (usage.prompt_tokens_details) {
-        const details = usage.prompt_tokens_details;
-        // Cached tokens
-        cost_cached_input = details.cached_tokens || 0;
-        // Input non cached = prompt_tokens - cached_tokens
-        cost_input = (usage.prompt_tokens || 0) - cost_cached_input;
-      } else {
-        // Si pas de détails, tout est en input non cached
-        cost_input = usage.prompt_tokens || 0;
+      // Input tokens non cachés = input_tokens (déjà séparé des cached)
+      cost_input = usage.input_tokens || 0;
+      
+      // Cached tokens (séparé, pas inclus dans input_tokens)
+      if (usage.input_tokens_details) {
+        cost_cached_input = usage.input_tokens_details.cached_tokens || 0;
       }
 
-      // Output tokens = completion_tokens
-      cost_output = usage.completion_tokens || 0;
+      // Output tokens
+      cost_output = usage.output_tokens || 0;
     }
 
     return {
