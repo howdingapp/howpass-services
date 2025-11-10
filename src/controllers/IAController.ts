@@ -239,17 +239,27 @@ export class IAController {
         throw new Error('❌ Aucun aiResponseId disponible (ni dans taskData, ni dans le contexte)');
       }
 
-      // 2. Extraire le nombre de tokens depuis iaResponse et ajouter le coût de l'intent
-      const responseTokens = iaResponse.cost !== undefined && iaResponse.cost !== null ? iaResponse.cost : 0;
+      // 2. Extraire les tokens depuis iaResponse (séparés en input, cached_input, output)
+      const responseCostInput = iaResponse.cost_input !== undefined && iaResponse.cost_input !== null ? iaResponse.cost_input : 0;
+      const responseCostCachedInput = iaResponse.cost_cached_input !== undefined && iaResponse.cost_cached_input !== null ? iaResponse.cost_cached_input : 0;
+      const responseCostOutput = iaResponse.cost_output !== undefined && iaResponse.cost_output !== null ? iaResponse.cost_output : 0;
+      
+      // Ajouter le coût de l'intent (seulement en input)
       const intentCost = (updatedContext.metadata?.['currentIntentInfos'] as any)?.intentCost as number | undefined ?? 0;
-      const tokens = responseTokens + intentCost; // Coût total = réponse + intent
+      const totalCostInput = responseCostInput + intentCost;
 
-      // 3. Faire un appel de mise à jour globale
+      // 3. Déterminer valid_for_limit : true uniquement si l'ID correspond à taskData.aiResponseId
+      const validForLimit = aiResponseId === taskData.aiResponseId;
+
+      // 4. Faire un appel de mise à jour globale
       const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, {
         response_text: JSON.stringify(iaResponse),
         next_response_id: null, // Dernière réponse, pas de suivant
-        cost: tokens, // Nombre de tokens utilisés
+        cost_input: totalCostInput > 0 ? totalCostInput : null,
+        cost_cached_input: responseCostCachedInput > 0 ? responseCostCachedInput : null,
+        cost_output: responseCostOutput > 0 ? responseCostOutput : null,
         user_input_text: taskData.userMessage || null, // Message utilisateur qui a déclenché cette réponse
+        valid_for_limit: validForLimit,
         metadata: {
           source: 'ai',
           model: chatBotService.getAIModel(),
@@ -265,15 +275,6 @@ export class IAController {
       if (!updateResult.success) {
         console.error('❌ Erreur lors de la mise à jour de la réponse IA:', updateResult.error);
         throw new Error(`Erreur lors de la mise à jour de la réponse IA: ${updateResult.error}`);
-      }
-
-      // 4. Mettre à jour le total_cost de la conversation si des tokens ont été utilisés
-      if (tokens !== null && tokens > 0) {
-        const totalCostUpdateResult = await this.supabaseService.updateConversationTotalCost(taskData.conversationId, tokens);
-        if (!totalCostUpdateResult.success) {
-          console.error('❌ Erreur lors de la mise à jour du total_cost:', totalCostUpdateResult.error);
-          // Ne pas faire échouer la requête si la mise à jour du total_cost échoue
-        }
       }
 
       // 5. Mettre à jour le compute_time de la conversation
@@ -380,7 +381,10 @@ export class IAController {
       const intentCost = isFirstResponse ? ((updatedContext.metadata?.['currentIntentInfos'] as any)?.intentCost as number | undefined ?? 0) : 0;
       const totalCostInput = responseCostInput + intentCost;
 
-      // 5. Mettre à jour les informations de la réponse actuelle
+      // 5. Déterminer valid_for_limit : true uniquement si l'ID correspond à taskData.aiResponseId
+      const validForLimit = aiResponseId === taskData.aiResponseId;
+
+      // 6. Mettre à jour les informations de la réponse actuelle
       const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, {
         response_text: JSON.stringify(iaResponse),
         next_response_id: nextResponseId,
@@ -388,6 +392,7 @@ export class IAController {
         cost_cached_input: responseCostCachedInput > 0 ? responseCostCachedInput : null,
         cost_output: responseCostOutput > 0 ? responseCostOutput : null,
         user_input_text: taskData.userMessage || null, // Message utilisateur qui a déclenché cette réponse
+        valid_for_limit: validForLimit,
         metadata: {
           source: 'ai',
           model: chatBotService.getAIModel(),

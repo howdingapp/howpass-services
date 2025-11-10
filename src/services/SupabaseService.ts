@@ -376,6 +376,7 @@ export class SupabaseService {
     cost_cached_input?: number | null; // Nombre de tokens input utilisés (cached)
     cost_output?: number | null; // Nombre de tokens output utilisés
     user_input_text?: string | null; // Message utilisateur qui a déclenché cette réponse
+    valid_for_limit?: boolean; // Indique si ce message compte dans la limite journalière
   }): Promise<{
     success: boolean;
     data?: AIResponse;
@@ -419,6 +420,11 @@ export class SupabaseService {
       // Ajouter user_input_text si fourni
       if (updateData.user_input_text !== undefined) {
         updatePayload.user_input_text = updateData.user_input_text;
+      }
+
+      // Ajouter valid_for_limit si fourni
+      if (updateData.valid_for_limit !== undefined) {
+        updatePayload.valid_for_limit = updateData.valid_for_limit;
       }
 
       const { data, error } = await this.supabase
