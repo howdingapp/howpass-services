@@ -72,6 +72,8 @@ jobs:
           --set-env-vars=IA_PROCESSING_SERVICE_URL=${{ secrets.IA_PROCESSING_SERVICE_URL }}
           --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           --set-env-vars=MAX_CONVERSATION_MESSAGES=${{ vars.MAX_CONVERSATION_MESSAGES }}
+          --set-env-vars=MAX_DAILY_MESSAGES=${{ vars.MAX_DAILY_MESSAGES }}
+          --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }}
           --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
           --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }}
           --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }}
