@@ -22,7 +22,9 @@ export interface AIResponse {
   response_text: string;
   message_type: string;
   next_response_id?: string | null;
-  cost?: number | null; // Nombre de tokens utilisés
+  cost_input?: number | null; // Nombre de tokens input utilisés (non cached)
+  cost_cached_input?: number | null; // Nombre de tokens input utilisés (cached)
+  cost_output?: number | null; // Nombre de tokens output utilisés
   user_input_text?: string | null; // Message utilisateur qui a déclenché cette réponse
   metadata?: Record<string, any>;
   created_at?: string;
@@ -370,7 +372,9 @@ export class SupabaseService {
     response_text?: string;
     metadata?: Record<string, any>;
     next_response_id?: string | null;
-    cost?: number | null; // Nombre de tokens utilisés
+    cost_input?: number | null; // Nombre de tokens input utilisés (non cached)
+    cost_cached_input?: number | null; // Nombre de tokens input utilisés (cached)
+    cost_output?: number | null; // Nombre de tokens output utilisés
     user_input_text?: string | null; // Message utilisateur qui a déclenché cette réponse
   }): Promise<{
     success: boolean;
@@ -397,9 +401,19 @@ export class SupabaseService {
         updatePayload.next_response_id = updateData.next_response_id;
       }
 
-      // Ajouter cost (nombre de tokens) si fourni
-      if (updateData.cost !== undefined) {
-        updatePayload.cost = updateData.cost;
+      // Ajouter cost_input si fourni
+      if (updateData.cost_input !== undefined) {
+        updatePayload.cost_input = updateData.cost_input;
+      }
+
+      // Ajouter cost_cached_input si fourni
+      if (updateData.cost_cached_input !== undefined) {
+        updatePayload.cost_cached_input = updateData.cost_cached_input;
+      }
+
+      // Ajouter cost_output si fourni
+      if (updateData.cost_output !== undefined) {
+        updatePayload.cost_output = updateData.cost_output;
       }
 
       // Ajouter user_input_text si fourni

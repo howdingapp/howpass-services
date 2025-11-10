@@ -6,6 +6,18 @@ import { ChatBotOutputSchema, IAMessageResponse, ExtractedRecommandations } from
 import type { Response } from 'openai/resources/responses/responses';
 import OpenAI from 'openai';
 
+/**
+ * Interface pour l'usage des tokens de l'API OpenAI responses
+ */
+interface OpenAIUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+  };
+}
+
 export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessageResponse> {
   protected conversationService: ConversationService;
   protected supabaseService: SupabaseService;
@@ -21,6 +33,62 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     this.openai = new OpenAI({
       apiKey: process.env['OPENAI_API_KEY'],
     });
+  }
+
+  /**
+   * Extrait les tokens depuis l'usage OpenAI
+   * L'API responses retourne usage avec prompt_tokens, completion_tokens, et parfois cached_tokens
+   */
+  protected extractTokensFromUsage(usage: OpenAIUsage | null | undefined): {
+    cost_input: number;
+    cost_cached_input: number;
+    cost_output: number;
+  } {
+    // Par défaut, tous à 0
+    let cost_input = 0;
+    let cost_cached_input = 0;
+    let cost_output = 0;
+
+    if (usage) {
+      // L'API responses peut retourner prompt_tokens_details avec cached_tokens
+      if (usage.prompt_tokens_details) {
+        const details = usage.prompt_tokens_details;
+        // Cached tokens
+        cost_cached_input = details.cached_tokens || 0;
+        // Input non cached = prompt_tokens - cached_tokens
+        cost_input = (usage.prompt_tokens || 0) - cost_cached_input;
+      } else {
+        // Si pas de détails, tout est en input non cached
+        cost_input = usage.prompt_tokens || 0;
+      }
+
+      // Output tokens = completion_tokens
+      cost_output = usage.completion_tokens || 0;
+    }
+
+    return {
+      cost_input,
+      cost_cached_input,
+      cost_output
+    };
+  }
+
+  /**
+   * Cumule les tokens de deux réponses
+   */
+  protected cumulateTokens(
+    tokens1: { cost_input?: number | null; cost_cached_input?: number | null; cost_output?: number | null },
+    tokens2: { cost_input?: number | null; cost_cached_input?: number | null; cost_output?: number | null }
+  ): {
+    cost_input: number;
+    cost_cached_input: number;
+    cost_output: number;
+  } {
+    return {
+      cost_input: (tokens1.cost_input || 0) + (tokens2.cost_input || 0),
+      cost_cached_input: (tokens1.cost_cached_input || 0) + (tokens2.cost_cached_input || 0),
+      cost_output: (tokens1.cost_output || 0) + (tokens2.cost_output || 0)
+    };
   }
 
   /**
@@ -132,10 +200,10 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       const messageOutput = result.output.find(output => output.type === "message");
       const messageId = result.id;
       
-      // Extraire le nombre de tokens depuis la réponse OpenAI
-      const totalTokens = result.usage?.total_tokens || null;
-      if (totalTokens) {
-        console.log(`💰 Nombre de tokens utilisés: ${totalTokens}`);
+      // Extraire les tokens depuis la réponse OpenAI (séparés en input, cached_input, output)
+      const tokens = this.extractTokensFromUsage(result.usage);
+      if (tokens.cost_input > 0 || tokens.cost_cached_input > 0 || tokens.cost_output > 0) {
+        console.log(`💰 Tokens utilisés - Input: ${tokens.cost_input}, Cached Input: ${tokens.cost_cached_input}, Output: ${tokens.cost_output}`);
       }
       
       // Extraire le texte de la réponse
@@ -162,7 +230,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
              ...parsedResponse,
              messageId,
              updatedContext: context,
-             cost: totalTokens, // Stocker le nombre de tokens dans le champ cost
+             cost_input: tokens.cost_input > 0 ? tokens.cost_input : null,
+             cost_cached_input: tokens.cost_cached_input > 0 ? tokens.cost_cached_input : null,
+             cost_output: tokens.cost_output > 0 ? tokens.cost_output : null,
              haveNext: false,
            } as unknown as T;
          } catch (parseError) {
@@ -178,7 +248,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
          response: resultText, 
          messageId,
          updatedContext: context,
-         cost: totalTokens, // Stocker le nombre de tokens dans le champ cost
+         cost_input: tokens.cost_input > 0 ? tokens.cost_input : null,
+         cost_cached_input: tokens.cost_cached_input > 0 ? tokens.cost_cached_input : null,
+         cost_output: tokens.cost_output > 0 ? tokens.cost_output : null,
          haveNext: false,
        } as unknown as T;  
          } catch (error) {
@@ -187,7 +259,9 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
          response: "Bonjour ! Je suis Howana, votre assistant personnel. Comment puis-je vous aider aujourd'hui ?",
          messageId: "error",
          updatedContext: context,
-         cost: null, // Pas de tokens en cas d'erreur
+         cost_input: null,
+         cost_cached_input: null,
+         cost_output: null,
          haveNext: false,
        } as unknown as T;
     }
@@ -287,7 +361,9 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
       response: errorMessage,
       messageId: response.messageId || 'error',
       updatedContext: errorContext,
-      cost: response.cost || null,
+      cost_input: response.cost_input ?? null,
+      cost_cached_input: response.cost_cached_input ?? null,
+      cost_output: response.cost_output ?? null,
       haveNext: false,
     } as unknown as T;
     
@@ -430,8 +506,8 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
 
       const messageId = result.id;
 
-      // Extraire le coût (nombre de tokens) de cet appel
-      const currentCallTokens = result.usage?.total_tokens ?? 0;
+      // Extraire les tokens de cet appel (séparés en input, cached_input, output)
+      const currentCallTokens = this.extractTokensFromUsage(result.usage);
       let totalTokens = currentCallTokens;
 
       // Vérifier si l'IA demande l'exécution d'un outil (seulement si les outils sont autorisés)
@@ -484,13 +560,17 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
                 )
               );
               
-              // Cumuler le coût de l'appel récursif
-              const recursiveTokens = finalResponse.cost ?? 0;
-              totalTokens += recursiveTokens;
+              // Cumuler les tokens de l'appel récursif
+              const recursiveTokens = {
+                cost_input: finalResponse.cost_input || 0,
+                cost_cached_input: finalResponse.cost_cached_input || 0,
+                cost_output: finalResponse.cost_output || 0
+              };
+              totalTokens = this.cumulateTokens(currentCallTokens, recursiveTokens);
               
               console.log('🔍 Réponse finale IA après exécution des outils:', finalResponse.response);
               console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
-              console.log(`💰 Coût cumulé: ${currentCallTokens} + ${recursiveTokens} = ${totalTokens} tokens`);
+              console.log(`💰 Tokens cumulés - Input: ${totalTokens.cost_input}, Cached Input: ${totalTokens.cost_cached_input}, Output: ${totalTokens.cost_output}`);
 
               return {
                 ...finalResponse,
@@ -498,7 +578,9 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
                 messageId: finalResponse.messageId,
                 extractedData: this.mergeExtractedData(extractedData, finalResponse.extractedData),
                 updatedContext: finalResponse.updatedContext,
-                cost: totalTokens, // Coût total cumulé
+                cost_input: totalTokens.cost_input > 0 ? totalTokens.cost_input : null,
+                cost_cached_input: totalTokens.cost_cached_input > 0 ? totalTokens.cost_cached_input : null,
+                cost_output: totalTokens.cost_output > 0 ? totalTokens.cost_output : null,
               } as T;
             } else {
               // Aucun outil de type "response" - refaire un appel avec le contexte enrichi
@@ -521,13 +603,17 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
                 useSchemaWithToolResults // Pas de schéma avec toolResults
               );
               
-              // Cumuler le coût de l'appel récursif
-              const recursiveTokens = finalResponse.cost ?? 0;
-              totalTokens += recursiveTokens;
+              // Cumuler les tokens de l'appel récursif
+              const recursiveTokens = {
+                cost_input: finalResponse.cost_input || 0,
+                cost_cached_input: finalResponse.cost_cached_input || 0,
+                cost_output: finalResponse.cost_output || 0
+              };
+              totalTokens = this.cumulateTokens(currentCallTokens, recursiveTokens);
               
               console.log('🔍 Réponse finale IA avec contexte enrichi:', finalResponse.response);
               console.log('🔍 MessageID final OpenAI:', finalResponse.messageId);
-              console.log(`💰 Coût cumulé: ${currentCallTokens} + ${recursiveTokens} = ${totalTokens} tokens`);
+              console.log(`💰 Tokens cumulés - Input: ${totalTokens.cost_input}, Cached Input: ${totalTokens.cost_cached_input}, Output: ${totalTokens.cost_output}`);
 
               return {
                 ...finalResponse,
@@ -535,7 +621,9 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
                 messageId: finalResponse.messageId,
                 extractedData: this.mergeExtractedData(extractedData, finalResponse.extractedData),
                 updatedContext: finalResponse.updatedContext,
-                cost: totalTokens, // Coût total cumulé
+                cost_input: totalTokens.cost_input > 0 ? totalTokens.cost_input : null,
+                cost_cached_input: totalTokens.cost_cached_input > 0 ? totalTokens.cost_cached_input : null,
+                cost_output: totalTokens.cost_output > 0 ? totalTokens.cost_output : null,
               } as T;
             }
           }
@@ -545,10 +633,12 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
       // Traitement unifié de la réponse (avec ou sans outils exécutés)
       const processedResponse = this.processAIResponse(result, messageId, extractedData, context);
       
-      // Remplacer le coût par le coût total cumulé (qui inclut déjà les appels récursifs s'il y en a eu)
+      // Remplacer les tokens par les tokens cumulés (qui inclut déjà les appels récursifs s'il y en a eu)
       return {
         ...processedResponse,
-        cost: totalTokens, // Coût total cumulé (inclut les appels récursifs)
+        cost_input: totalTokens.cost_input > 0 ? totalTokens.cost_input : null,
+        cost_cached_input: totalTokens.cost_cached_input > 0 ? totalTokens.cost_cached_input : null,
+        cost_output: totalTokens.cost_output > 0 ? totalTokens.cost_output : null,
       } as T;
 
     } catch (error) {
@@ -560,8 +650,8 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
   /**
    * Générer un résumé structuré de la conversation
    */
-  async generateConversationSummary(context: HowanaContext): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined, updatedContext: HowanaContext, cost?: number | null}> {
-    let totalTokens = 0; // Coût total cumulé (déclaré en dehors du try pour être accessible dans le catch)
+  async generateConversationSummary(context: HowanaContext): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined, updatedContext: HowanaContext, cost_input?: number | null, cost_cached_input?: number | null, cost_output?: number | null}> {
+    let totalTokens = { cost_input: 0, cost_cached_input: 0, cost_output: 0 }; // Tokens cumulés (déclaré en dehors du try pour être accessible dans le catch)
     try {
       // Vérifier si des recommandations sont requises pour le résumé
       const needsRecommendations = this.recommendationRequiredForSummary(context);
@@ -583,12 +673,16 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
           recommendationResponse = await this._generateAIResponse(context, explicitRequest, true);
           extractedData = recommendationResponse?.extractedData;
           
-          // Cumuler le coût de l'appel de recommandations
-          const recommendationTokens = recommendationResponse?.cost ?? 0;
-          totalTokens += recommendationTokens;
+          // Cumuler les tokens de l'appel de recommandations
+          const recommendationTokens = {
+            cost_input: recommendationResponse?.cost_input || 0,
+            cost_cached_input: recommendationResponse?.cost_cached_input || 0,
+            cost_output: recommendationResponse?.cost_output || 0
+          };
+          totalTokens = this.cumulateTokens(totalTokens, recommendationTokens);
           
           console.log('🔧 Réponse IA avec recommandations générée (we will only use tool data):', recommendationResponse);
-          console.log(`💰 Coût des recommandations: ${recommendationTokens} tokens`);
+          console.log(`💰 Tokens des recommandations - Input: ${recommendationTokens.cost_input}, Cached Input: ${recommendationTokens.cost_cached_input}, Output: ${recommendationTokens.cost_output}`);
           
           // Ajouter immédiatement les extractedData au contexte pour que getSummaryOutputSchema puisse y accéder
           if (extractedData) {
@@ -640,10 +734,10 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
           ...(summarySchema && { text: summarySchema })
         });
 
-        // Cumuler le coût de l'appel de résumé
-        const summaryTokens = result.usage?.total_tokens ?? 0;
-        totalTokens += summaryTokens;
-        console.log(`💰 Coût du résumé: ${summaryTokens} tokens, coût total: ${totalTokens} tokens`);
+        // Cumuler les tokens de l'appel de résumé
+        const summaryTokens = this.extractTokensFromUsage(result.usage);
+        totalTokens = this.cumulateTokens(totalTokens, summaryTokens);
+        console.log(`💰 Tokens du résumé - Input: ${summaryTokens.cost_input}, Cached Input: ${summaryTokens.cost_cached_input}, Output: ${summaryTokens.cost_output}`);
 
         const resultText = result.output
           .filter((output) => output.type === "message")
@@ -657,7 +751,9 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
               summary: parsedSummary,
               extractedData,
               updatedContext: context,
-              cost: totalTokens, // Coût total cumulé
+              cost_input: totalTokens.cost_input > 0 ? totalTokens.cost_input : null,
+              cost_cached_input: totalTokens.cost_cached_input > 0 ? totalTokens.cost_cached_input : null,
+              cost_output: totalTokens.cost_output > 0 ? totalTokens.cost_output : null,
             };
           } catch (parseError) {
             console.warn('⚠️ Erreur de parsing JSON, fallback vers résumé simple:', parseError, resultText);
@@ -671,7 +767,9 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
         summary: "Résumé de la conversation généré automatiquement.",
         extractedData,
         updatedContext: context,
-        cost: totalTokens, // Coût total cumulé (peut être 0 si aucune recommandation n'a été générée)
+        cost_input: totalTokens.cost_input > 0 ? totalTokens.cost_input : null,
+        cost_cached_input: totalTokens.cost_cached_input > 0 ? totalTokens.cost_cached_input : null,
+        cost_output: totalTokens.cost_output > 0 ? totalTokens.cost_output : null,
       };
       
     } catch (error) {
@@ -680,7 +778,9 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
         summary: "Résumé de la conversation généré automatiquement.",
         extractedData: { activities: [], practices: [] },
         updatedContext: context,
-        cost: totalTokens, // Coût cumulé jusqu'à l'erreur
+        cost_input: totalTokens.cost_input > 0 ? totalTokens.cost_input : null,
+        cost_cached_input: totalTokens.cost_cached_input > 0 ? totalTokens.cost_cached_input : null,
+        cost_output: totalTokens.cost_output > 0 ? totalTokens.cost_output : null,
       };
     }
   }
@@ -1225,20 +1325,22 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
     console.log('🔍 Réponse IA via API responses:', parsedResponse);
     console.log('🔍 OutputID OpenAI:', messageId);
 
-    // Extraire le nombre de tokens depuis la réponse OpenAI
-    const totalTokens = result.usage?.total_tokens ?? null;
-    if (totalTokens) {
-      console.log(`💰 Nombre de tokens utilisés: ${totalTokens}`);
+    // Extraire les tokens depuis la réponse OpenAI (séparés en input, cached_input, output)
+    const tokens = this.extractTokensFromUsage(result.usage);
+    if (tokens.cost_input > 0 || tokens.cost_cached_input > 0 || tokens.cost_output > 0) {
+      console.log(`💰 Tokens utilisés - Input: ${tokens.cost_input}, Cached Input: ${tokens.cost_cached_input}, Output: ${tokens.cost_output}`);
     }
 
-    // Retourner la réponse parsée avec le messageId et le nombre de tokens
+    // Retourner la réponse parsée avec le messageId et les tokens
     return {
       ...parsedResponse,
       extractedData,
       messageId,
       updatedContext: context,
       haveNext: false,
-      cost: totalTokens, // Stocker le nombre de tokens dans le champ cost
+      cost_input: tokens.cost_input > 0 ? tokens.cost_input : null,
+      cost_cached_input: tokens.cost_cached_input > 0 ? tokens.cost_cached_input : null,
+      cost_output: tokens.cost_output > 0 ? tokens.cost_output : null,
     } as T;
   }
 

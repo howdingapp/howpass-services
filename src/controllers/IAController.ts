@@ -371,16 +371,22 @@ export class IAController {
         };
       }
 
-      // 4. Extraire le nombre de tokens depuis iaResponse et ajouter le coût de l'intent (seulement pour la première réponse)
-      const responseTokens = iaResponse.cost !== undefined && iaResponse.cost !== null ? iaResponse.cost : 0;
+      // 4. Extraire les tokens depuis iaResponse (séparés en input, cached_input, output)
+      const responseCostInput = iaResponse.cost_input !== undefined && iaResponse.cost_input !== null ? iaResponse.cost_input : 0;
+      const responseCostCachedInput = iaResponse.cost_cached_input !== undefined && iaResponse.cost_cached_input !== null ? iaResponse.cost_cached_input : 0;
+      const responseCostOutput = iaResponse.cost_output !== undefined && iaResponse.cost_output !== null ? iaResponse.cost_output : 0;
+      
+      // Ajouter le coût de l'intent (seulement pour la première réponse, en input)
       const intentCost = isFirstResponse ? ((updatedContext.metadata?.['currentIntentInfos'] as any)?.intentCost as number | undefined ?? 0) : 0;
-      const tokens = responseTokens + intentCost; // Coût total = réponse + intent (intent seulement pour la première réponse)
+      const totalCostInput = responseCostInput + intentCost;
 
       // 5. Mettre à jour les informations de la réponse actuelle
       const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, {
         response_text: JSON.stringify(iaResponse),
         next_response_id: nextResponseId,
-        cost: tokens, // Nombre de tokens utilisés
+        cost_input: totalCostInput > 0 ? totalCostInput : null,
+        cost_cached_input: responseCostCachedInput > 0 ? responseCostCachedInput : null,
+        cost_output: responseCostOutput > 0 ? responseCostOutput : null,
         user_input_text: taskData.userMessage || null, // Message utilisateur qui a déclenché cette réponse
         metadata: {
           source: 'ai',
@@ -397,15 +403,6 @@ export class IAController {
       if (!updateResult.success) {
         console.error('❌ Erreur lors de la mise à jour de la réponse IA:', updateResult.error);
         throw new Error(`Erreur lors de la mise à jour de la réponse IA: ${updateResult.error}`);
-      }
-
-      // 6. Mettre à jour le total_cost de la conversation si des tokens ont été utilisés
-      if (tokens !== null && tokens > 0) {
-        const totalCostUpdateResult = await this.supabaseService.updateConversationTotalCost(taskData.conversationId, tokens);
-        if (!totalCostUpdateResult.success) {
-          console.error('❌ Erreur lors de la mise à jour du total_cost:', totalCostUpdateResult.error);
-          // Ne pas faire échouer la requête si la mise à jour du total_cost échoue
-        }
       }
 
       // 7. Mettre à jour le contexte en base de données
@@ -612,7 +609,9 @@ export class IAController {
       hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0),
       messageId: `summary_${Date.now()}`,
       type: 'summary',
-      cost: summary.cost ?? null, // Coût total cumulé (inclut recommandations + résumé)
+      cost_input: summary.cost_input ?? null,
+      cost_cached_input: summary.cost_cached_input ?? null,
+      cost_output: summary.cost_output ?? null,
     };
 
     return {
