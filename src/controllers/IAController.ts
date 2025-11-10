@@ -61,8 +61,8 @@ export class IAController {
 
       const result = await this.supabaseService.countTodayValidMessagesByUserId(userId);
       if (!result.success) {
-        console.warn('⚠️ Impossible de récupérer le nombre de messages valides du jour, on continue sans limite');
-        return false;
+        console.error('❌ Erreur lors de la récupération du nombre de messages valides du jour');
+        throw new Error(`Impossible de récupérer le nombre de messages valides: ${result.error || 'Erreur inconnue'}`);
       }
 
       const todayMessagesCount = result.count || 0;
@@ -102,12 +102,22 @@ export class IAController {
 
       const taskData = req.body as IATaskRequest;
       
+      // Validation de userId (obligatoire)
+      if (!taskData.userId) {
+        console.error('❌ userId manquant dans les données de tâche');
+        res.status(401).json({
+          error: 'Non autorisé',
+          message: 'Le champ userId est requis'
+        });
+        return;
+      }
+      
       // Validation supplémentaire des données
       if (!taskData.type || !taskData.conversationId) {
         console.error('❌ Données de tâche incomplètes:', taskData);
         res.status(400).json({
           error: 'Données de tâche incomplètes',
-          message: 'Les champs type, conversationId et userId sont requis'
+          message: 'Les champs type et conversationId sont requis'
         });
         return;
       }
