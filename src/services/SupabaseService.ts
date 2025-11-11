@@ -43,7 +43,8 @@ export class SupabaseService {
     }
 
     this.supabase = createClient(url, serviceKey);
-    this.embeddingService = new EmbeddingService();
+    // Passer this pour éviter la dépendance circulaire
+    this.embeddingService = new EmbeddingService(this);
   }
 
   async download(bucketName: string, bucketPath: string, localPath: string): Promise<void> {
@@ -1996,6 +1997,61 @@ export class SupabaseService {
         total: 0,
         error: 'Erreur interne du service'
       };
+    }
+  }
+
+  /**
+   * Recherche un embedding existant dans user_search par texte
+   */
+  async findEmbeddingByText(text: string): Promise<{ id: string; text: string; vector: number[] | null; created_at: string; updated_at: string } | null> {
+    try {
+      const { data, error } = await this.supabase
+        .from('user_search')
+        .select('id, text, vector, created_at, updated_at')
+        .eq('text', text)
+        .single();
+
+      if (error) {
+        // Si l'erreur est "PGRST116" (aucun résultat), retourner null
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        console.error('Erreur lors de la recherche d\'embedding:', error);
+        return null;
+      }
+
+      return data as { id: string; text: string; vector: number[] | null; created_at: string; updated_at: string } | null;
+    } catch (error) {
+      console.error('Erreur lors de la recherche d\'embedding:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Crée ou met à jour un enregistrement dans user_search
+   */
+  async upsertEmbedding(text: string, vector: number[]): Promise<void> {
+    try {
+      const { error } = await this.supabase
+        .from('user_search')
+        .upsert(
+          {
+            text,
+            vector
+          },
+          {
+            onConflict: 'text',
+            ignoreDuplicates: false
+          }
+        );
+
+      if (error) {
+        console.error('Erreur lors de la sauvegarde d\'embedding:', error);
+        // Ne pas throw pour ne pas bloquer le processus si la sauvegarde échoue
+      }
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde d\'embedding:', error);
+      // Ne pas throw pour ne pas bloquer le processus si la sauvegarde échoue
     }
   }
 } 
