@@ -41,7 +41,12 @@ export class EmbeddingService {
       });
 
       const embedding = response.data[0]?.embedding;
-      console.log(`✅ Embedding généré avec succès (dimension: ${embedding?.length})`);
+      
+      if (!embedding) {
+        throw new Error('Aucun embedding généré par OpenAI');
+      }
+      
+      console.log(`✅ Embedding généré avec succès (dimension: ${embedding.length})`);
       
       // Sauvegarder l'embedding dans user_search pour les prochaines fois
       await this.supabaseService.upsertEmbedding(text, embedding);
@@ -70,6 +75,12 @@ export class EmbeddingService {
       // Vérifier d'abord quels textes ont déjà un embedding
       for (let i = 0; i < texts.length; i++) {
         const text = texts[i];
+        
+        if (!text) {
+          console.warn(`⚠️ Texte vide à l'index ${i}, ignoré`);
+          continue;
+        }
+        
         const existingRecord = await this.supabaseService.findEmbeddingByText(text);
         
         if (existingRecord && existingRecord.vector) {
@@ -91,8 +102,21 @@ export class EmbeddingService {
 
         // Sauvegarder les nouveaux embeddings et les ajouter au tableau
         for (let i = 0; i < response.data.length; i++) {
-          const embedding = response.data[i].embedding;
-          const { text, index } = textsToGenerate[i];
+          const dataItem = response.data[i];
+          const textItem = textsToGenerate[i];
+          
+          if (!dataItem || !textItem) {
+            console.warn(`⚠️ Données manquantes à l'index ${i}, ignoré`);
+            continue;
+          }
+          
+          const embedding = dataItem.embedding;
+          const { text, index } = textItem;
+          
+          if (!embedding) {
+            console.warn(`⚠️ Embedding manquant pour le texte à l'index ${i}, ignoré`);
+            continue;
+          }
           
           embeddings[index] = embedding;
           
