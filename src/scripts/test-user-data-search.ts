@@ -245,7 +245,7 @@ async function main() {
 
   // Recherche sémantique pour le chunk "informations sur Patricia DORFFER"
   const searchTerms = [
-    "informations sur Patricia DORFFER"
+    "dos"
   ];
 
   const limit = 10; // Top 10 user_data par test

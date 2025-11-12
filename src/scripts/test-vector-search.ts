@@ -228,7 +228,7 @@ async function main() {
   const tester = new VectorSearchTester();
 
   // Liste des phrases à tester
-  const searchTerms = [
+  let searchTerms = [
     "J'ai l'impression d'étouffer avec toutes mes émotions, je n'arrive pas à les sortir.",
     "Je sens que j'ai plein de choses enfouies en moi, et ça me pèse.",
     "Je me sens tendu tout le temps, comme si je gardais tout pour moi.",
@@ -245,6 +245,8 @@ async function main() {
     "Tout reste coincé en moi, ça me fait trop de tension.",
     "Je voudrais apprendre à accepter ce que je ressens au lieu de tout refouler."
   ];
+
+  searchTerms = ["dos"]
 
   const limit = 4; // Top 4 pratiques par test
 
