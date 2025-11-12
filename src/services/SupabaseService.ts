@@ -831,7 +831,8 @@ export class SupabaseService {
     table: string, 
     column: string, 
     query: string, 
-    limit: number = 4
+    limit: number = 4,
+    matchThreshold: number = 0.0  // Seuil de similarité vectorielle minimale (0 = pas de filtre)
   ): Promise<any[]> {
     try {
       console.log(`🔍 Recherche vectorielle sur ${table}.${column} pour: "${query}"`);
@@ -845,11 +846,14 @@ export class SupabaseService {
       
       console.log('Query params for vector search', {
         query_embedding: queryEmbedding?.slice(0, 10),
+        query_text: query,
         table_name: table,
-        match_threshold: 0.1,
         requested_results: limit,
-        chunks_to_search: chunksToSearch,
-        note: 'Recherche de chunks multipliée pour garantir assez de résultats uniques après GROUP BY'
+        vec_k: chunksToSearch,
+        lex_k: chunksToSearch,
+        rrf_k: 60,
+        match_threshold: matchThreshold,
+        note: 'Recherche hybride RRF (vector + BM25) avec sur-échantillonnage et seuil de précision'
       })
 
       // Utiliser la fonction spécifique selon la table
@@ -882,8 +886,12 @@ export class SupabaseService {
       const { data, error } = await this.supabase
         .rpc(functionName, {
           query_embedding: queryEmbedding,
-          match_threshold: 0.1,
-          match_count: chunksToSearch // Rechercher plus de chunks pour garantir assez de résultats uniques
+          query_text: query, // Texte de recherche pour la partie BM25
+          match_count: limit, // Nombre de résultats finaux désirés
+          vec_k: chunksToSearch, // Sur-échantillonnage côté vecteur
+          lex_k: chunksToSearch, // Sur-échantillonnage côté BM25
+          rrf_k: 60, // Constante de lissage RRF
+          match_threshold: matchThreshold // Seuil de similarité vectorielle minimale [0, 1]
         });
 
       if (error) {
@@ -1080,7 +1088,9 @@ export class SupabaseService {
           shortDescription: r?.short_description,
           longDescription: r?.long_description,
           benefits: r?.benefits,
-          relevanceScore
+          relevanceScore,
+          vectorSimilarity: r?.vector_similarity ?? null,
+          bm25Similarity: r?.bm25_similarity ?? null
         };
         if (withMatchInfos) {
           result.typicalSituations = r?.typical_situations;
@@ -1873,8 +1883,12 @@ export class SupabaseService {
         const { data, error } = await this.supabase
           .rpc('match_user_data', {
             query_embedding: queryEmbedding,
-            match_threshold: 0.7,
-            match_count: limit * 2 // Chercher plus de résultats pour avoir assez après déduplication
+            query_text: chunk, // Texte de recherche pour la partie BM25
+            match_count: limit * 2, // Chercher plus de résultats pour avoir assez après déduplication
+            vec_k: (limit * 2) * 8, // Sur-échantillonnage côté vecteur
+            lex_k: (limit * 2) * 8, // Sur-échantillonnage côté BM25
+            rrf_k: 60, // Constante de lissage RRF
+            match_threshold: 0.0 // Seuil de similarité vectorielle minimale (0 = pas de filtre)
           });
 
         if (error) {
@@ -1913,6 +1927,8 @@ export class SupabaseService {
             email: user.email,
             specialties: user.specialties || [], // Tableau d'objets {id, title, short_description} depuis match_user_data
             experience: user.experience,
+            vectorSimilarity: user?.vector_similarity ?? null,
+            bm25Similarity: user?.bm25_similarity ?? null,
             profile: user.profil,
             activities: (user.activities || []).map((activity: any) => ({
               id: activity.id,

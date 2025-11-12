@@ -13,6 +13,8 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 interface PracticeResult {
   id: string;
   similarity: number;
+  vectorSimilarity: number | null;
+  bm25Similarity: number | null;
   title: string;
   typical_situation: string | null;
 }
@@ -51,6 +53,8 @@ class VectorSearchTester {
         .map((practice: any) => ({
           id: practice.id,
           similarity: practice.relevanceScore || 0,
+          vectorSimilarity: practice.vectorSimilarity ?? null,
+          bm25Similarity: practice.bm25Similarity ?? null,
           title: practice.title || 'Sans titre',
           typical_situation: practice.typicalSituations || null
         }));
@@ -79,8 +83,12 @@ class VectorSearchTester {
 
     results.forEach((practice, rank) => {
       const percentage = (practice.similarity * 100).toFixed(1);
+      const vectorPct = practice.vectorSimilarity !== null ? (practice.vectorSimilarity * 100).toFixed(1) : 'N/A';
+      const bm25Pct = practice.bm25Similarity !== null ? (practice.bm25Similarity * 100).toFixed(1) : 'N/A';
       console.log(`${rank + 1}. ${practice.title}`);
-      console.log(`   Pourcentage: ${percentage}%`);
+      console.log(`   Score RRF (fusionné): ${percentage}%`);
+      console.log(`   Similarité vectorielle: ${vectorPct}%`);
+      console.log(`   Similarité BM25: ${bm25Pct}%`);
       console.log(`   ID: ${practice.id}`);
       console.log(`   Situation idéale: ${practice.typical_situation || 'Non renseigné'}`);
       console.log('');
@@ -114,8 +122,12 @@ class VectorSearchTester {
 
       testResult.results.forEach((practice, rank) => {
         const percentage = (practice.similarity * 100).toFixed(1);
+        const vectorPct = practice.vectorSimilarity !== null ? (practice.vectorSimilarity * 100).toFixed(1) : 'N/A';
+        const bm25Pct = practice.bm25Similarity !== null ? (practice.bm25Similarity * 100).toFixed(1) : 'N/A';
         content += `${rank + 1}. ${practice.title}\n`;
-        content += `   Pourcentage: ${percentage}%\n`;
+        content += `   Score RRF (fusionné): ${percentage}%\n`;
+        content += `   Similarité vectorielle: ${vectorPct}%\n`;
+        content += `   Similarité BM25: ${bm25Pct}%\n`;
         content += `   ID: ${practice.id}\n`;
         content += `   Situation idéale: ${practice.typical_situation || 'Non renseigné'}\n`;
         content += '\n';
@@ -246,7 +258,7 @@ async function main() {
     "Je voudrais apprendre à accepter ce que je ressens au lieu de tout refouler."
   ];
 
-  searchTerms = ["dos"]
+  searchTerms = ["mal dos"]
 
   const limit = 4; // Top 4 pratiques par test
 

@@ -13,6 +13,8 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 interface UserDataResult {
   id: string;
   similarity: number;
+  vectorSimilarity: number | null;
+  bm25Similarity: number | null;
   first_name: string | null;
   last_name: string | null;
   email: string | null;
@@ -55,6 +57,8 @@ class UserDataVectorSearchTester {
         .map((user: any) => ({
           id: user.id,
           similarity: user.relevanceScore || 0,
+          vectorSimilarity: user.vectorSimilarity ?? null,
+          bm25Similarity: user.bm25Similarity ?? null,
           first_name: user.firstName || null,
           last_name: user.lastName || null,
           email: user.email || null,
@@ -87,9 +91,13 @@ class UserDataVectorSearchTester {
 
     results.forEach((userData, rank) => {
       const percentage = (userData.similarity * 100).toFixed(1);
+      const vectorPct = userData.vectorSimilarity !== null ? (userData.vectorSimilarity * 100).toFixed(1) : 'N/A';
+      const bm25Pct = userData.bm25Similarity !== null ? (userData.bm25Similarity * 100).toFixed(1) : 'N/A';
       const fullName = [userData.first_name, userData.last_name].filter(Boolean).join(' ') || 'Nom non renseigné';
       console.log(`${rank + 1}. ${fullName}`);
-      console.log(`   Pourcentage: ${percentage}%`);
+      console.log(`   Score RRF (fusionné): ${percentage}%`);
+      console.log(`   Similarité vectorielle: ${vectorPct}%`);
+      console.log(`   Similarité BM25: ${bm25Pct}%`);
       console.log(`   ID: ${userData.id}`);
       console.log(`   User ID: ${userData.user_id || 'Non renseigné'}`);
       console.log(`   Email: ${userData.email || 'Non renseigné'}`);
@@ -126,9 +134,13 @@ class UserDataVectorSearchTester {
 
       testResult.results.forEach((userData, rank) => {
         const percentage = (userData.similarity * 100).toFixed(1);
+        const vectorPct = userData.vectorSimilarity !== null ? (userData.vectorSimilarity * 100).toFixed(1) : 'N/A';
+        const bm25Pct = userData.bm25Similarity !== null ? (userData.bm25Similarity * 100).toFixed(1) : 'N/A';
         const fullName = [userData.first_name, userData.last_name].filter(Boolean).join(' ') || 'Nom non renseigné';
         content += `${rank + 1}. ${fullName}\n`;
-        content += `   Pourcentage: ${percentage}%\n`;
+        content += `   Score RRF (fusionné): ${percentage}%\n`;
+        content += `   Similarité vectorielle: ${vectorPct}%\n`;
+        content += `   Similarité BM25: ${bm25Pct}%\n`;
         content += `   ID: ${userData.id}\n`;
         content += `   User ID: ${userData.user_id || 'Non renseigné'}\n`;
         content += `   Email: ${userData.email || 'Non renseigné'}\n`;
