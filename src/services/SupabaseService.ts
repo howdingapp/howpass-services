@@ -888,21 +888,7 @@ export class SupabaseService {
 
       if (error) {
         console.error(`❌ Erreur lors de la recherche vectorielle sur ${table}:`, error);
-        
-        // Fallback vers une recherche textuelle simple
-        console.log(`🔄 Fallback vers recherche textuelle sur ${table}`);
-        const { data: fallbackData, error: fallbackError } = await this.supabase
-          .from(table)
-          .select('*')
-          .ilike(column, `%${query}%`)
-          .limit(limit);
-
-        if (fallbackError) {
-          console.error(`❌ Erreur lors du fallback sur ${table}:`, fallbackError);
-          return [];
-        }
-
-        return fallbackData || [];
+        return [];
       }
 
       console.log('🔍 Résultats de la recherche vectorielle:', data);
@@ -917,26 +903,7 @@ export class SupabaseService {
       return limitedResults;
     } catch (error) {
       console.error(`❌ Erreur inattendue lors de la recherche vectorielle sur ${table}:`, error);
-      
-      // Fallback vers une recherche textuelle en cas d'erreur d'embedding
-      console.log(`🔄 Fallback vers recherche textuelle sur ${table} (erreur d'embedding)`);
-      try {
-        const { data: fallbackData, error: fallbackError } = await this.supabase
-          .from(table)
-          .select('*')
-          .ilike(column, `%${query}%`)
-          .limit(limit);
-
-        if (fallbackError) {
-          console.error(`❌ Erreur lors du fallback sur ${table}:`, fallbackError);
-          return [];
-        }
-
-        return fallbackData || [];
-      } catch (fallbackError) {
-        console.error(`❌ Erreur lors du fallback final sur ${table}:`, fallbackError);
-        return [];
-      }
+      return [];
     }
   }
 
