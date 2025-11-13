@@ -102,7 +102,6 @@ export interface BilanAnalysis {
  */
 export interface BilanSummary {
   userProfile: UserProfile;
-  bilanAnalysis: BilanAnalysis;
   recommendation: Recommendation;
   importanteKnowledge: string[];
   univers: BilanUniverse;

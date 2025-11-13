@@ -1,5 +1,7 @@
 // Types des repository - Centralisation de tous les types de données métier
 
+import { BilanUniverse } from './chatbot-output';
+
 // ===== HOWANA CONVERSATION TYPES =====
 export type HowanaConversationType = 'activity' | 'bilan' | 'recommandation';
 export type HowanaConversationStatus = 'active' | 'completed' | 'expired';
@@ -137,6 +139,7 @@ export interface HowanaRecommandationContext {
     experience?: string;
   };
   lastHowanaRecommandation?: HowanaRecommandation | null;
+  univers?: BilanUniverse;
 }
 
 export type HowanaContext = (HowanaActivityContext | HowanaBilanContext | HowanaRecommandationContext) & {

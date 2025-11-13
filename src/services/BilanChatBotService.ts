@@ -256,44 +256,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
           type: "object",
           properties: {
             userProfile: this.getUserProfileSchemaFragment("Profil utilisateur analysé à partir de la conversation de bilan"),
-            bilanAnalysis: {
-              type: "object",
-              properties: {
-                scoresAnalysis: {
-                  type: "string",
-                  description: "Message destiné à l'utilisateur analysant vos scores de bilan et identifiant vos points d'amélioration (formulé en vous parlant directement l'un a l'autre)"
-                },
-                customCategories: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      categoryKey: {
-                        type: "string",
-                        description: "Identifiant unique de la catégorie personnalisée"
-                      },
-                      categoryName: {
-                        type: "string",
-                        description: "Nom de la catégorie personnalisée identifiée"
-                      },
-                      score: {
-                        type: "number",
-                        description: "Score de 1 à 9 pour cette catégorie"
-                      },
-                      description: {
-                        type: "string",
-                        description: "Message destiné à l'utilisateur décrivant cette catégorie et pourquoi elle est importante pour vous (formulé en vous parlant directement l'un a l'autre)"
-                      }
-                    },
-                    required: ["categoryKey", "categoryName", "score", "description"],
-                    additionalProperties: false
-                  },
-                  description: "Catégories personnalisées identifiées lors de votre conversation avec leurs scores. Soit le score a été explicitement donné par l'utilisateur, soit analysé à partir de l'échange"
-                }
-              },
-              required: ["scoresAnalysis", "customCategories"],
-              additionalProperties: false
-            },
             recommendation: this.getBilanRecommendationSchemaFragment(
               availableActivityIds,
               availablePracticeIds,
@@ -305,7 +267,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
               description: "Messages destinés à l'utilisateur contenant les points clés à retenir pour optimiser votre parcours de bien-être (formulés en vous parlant directement)"
             }
           },
-          required: ["userProfile", "bilanAnalysis", "recommendation", "importanteKnowledge"],
+          required: ["userProfile", "recommendation", "importanteKnowledge"],
           additionalProperties: false,
           description: `Résumé personnalisé de votre bilan de bien-être avec recommandations adaptées. Les recommandations sont contraintes aux ${allAvailableIds.length} éléments disponibles dans le contexte.`
         },

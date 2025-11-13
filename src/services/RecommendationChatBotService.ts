@@ -90,6 +90,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     // Contexte de la dernière recommandation Howana
     contextInfo += this.getPreviousConversationContext(context);
 
+    // Ajouter l'univers du bilan si disponible
+    contextInfo += this.getUniversContextInfo(context);
+
     // Ajouter les pratiques HOW PASS existantes
     contextInfo += (await this.getAvailablePracticesContext());
 
@@ -104,32 +107,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     if (!context.lastBilan) return '';
 
     let bilanInfo = `\n\nCONTEXTE DU DERNIER BILAN COMPLET:`;
-    
-    // Fonction helper pour formater les scores
-    const formatScore = (score: number, label: string) => {
-      if (score === -1) {
-        return `- ${label}: Non renseigné`;
-      }
-      return `- ${label}: ${score}/9`;
-    };
-
-    bilanInfo += `\n${formatScore(context.lastBilan.scores.principaux.niveauEnergie, 'Niveau d\'énergie')}
-    ${formatScore(context.lastBilan.scores.principaux.qualiteSommeil, 'Qualité du sommeil')}
-    ${formatScore(context.lastBilan.scores.principaux.confortPhysique, 'Confort physique')}
-    ${formatScore(context.lastBilan.scores.principaux.equilibreEmotionnel, 'Équilibre émotionnel')}`;
-
-    // Afficher les scores secondaires de manière dynamique
-    if (context.lastBilan.scores.secondaires) {
-      Object.values(context.lastBilan.scores.secondaires).forEach((scoreData: any) => {
-        if (scoreData && typeof scoreData === 'object' && scoreData.label && typeof scoreData.score === 'number') {
-          bilanInfo += `\n    ${formatScore(scoreData.score, scoreData.label)}`;
-        }
-      });
-    }
-
-    if (context.lastBilan.douleurs) {
-      bilanInfo += `\n- Douleurs mentionnées: ${context.lastBilan.douleurs}`;
-    }
 
     if (context.lastBilan.notesPersonnelles) {
       bilanInfo += `\n- Notes personnelles: ${context.lastBilan.notesPersonnelles}`;
@@ -151,6 +128,15 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     return bilanInfo;
   }
   
+  /**
+   * Informations contextuelles de l'univers du bilan
+   */
+  protected getUniversContextInfo(context: HowanaRecommandationContext & HowanaContext): string {
+    if (!context.univers) return '';
+
+    return `\n\nCONTEXTE DE L'UNIVERS DU BILAN:\n${JSON.stringify(context.univers, null, 2)}`;
+  }
+
   /**
    * Informations contextuelles des conversations précédentes
    */
