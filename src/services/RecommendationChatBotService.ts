@@ -1424,8 +1424,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
     const typedIntent = intent;
     
-    // Toujours calculer globalIntentInfos avant les handlers
-    let globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+    // Toujours calculer globalIntentInfos avant les handlers (avec userMessage pour les services qui en ont besoin)
+    let globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
     context.metadata = {
       ...context.metadata,
       ['globalIntentInfos']: globalIntentInfos
@@ -2260,8 +2260,11 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
   /**
    * Calcule le globalIntentInfos à partir de l'intent courant et du contexte
+   * @param intent L'intent calculé
+   * @param context Le contexte de la conversation
+   * @param userMessage Le message de l'utilisateur (optionnel, utilisé par certains services comme BilanChatBotService)
    */
-  protected async computeGlobalIntentInfos(intent: any, context: HowanaContext): Promise<GlobalRecommendationIntentInfos> {
+  protected async computeGlobalIntentInfos(intent: any, context: HowanaContext, _userMessage?: string): Promise<GlobalRecommendationIntentInfos> {
     // Récupérer le globalIntentInfos précédent depuis les métadonnées
     const previousGlobalIntentInfos = context.metadata?.['globalIntentInfos'] as GlobalRecommendationIntentInfos | undefined;
     

@@ -1090,7 +1090,14 @@ export class SupabaseService {
           benefits: r?.benefits,
           relevanceScore,
           vectorSimilarity: r?.vector_similarity ?? null,
-          bm25Similarity: r?.bm25_similarity ?? null
+          bm25Similarity: r?.bm25_similarity ?? null,
+          // Nouveaux champs : category et family
+          categoryId: r?.category_id ?? null,
+          categoryName: r?.category_name ?? null,
+          categoryDescription: r?.category_description ?? null,
+          familyId: r?.family_id ?? null,
+          familyName: r?.family_name ?? null,
+          familyDescription: r?.family_description ?? null
         };
         if (withMatchInfos) {
           result.typicalSituations = r?.typical_situations;
@@ -1162,7 +1169,17 @@ export class SupabaseService {
           locationType: r?.location_type,
           address: r?.address,
           selectedKeywords: r?.selected_keywords,
-          relevanceScore
+          relevanceScore,
+          // Nouveaux champs : practice -> category -> family
+          practiceId: r?.practice_id ?? null,
+          practiceTitle: r?.practice_title ?? null,
+          practiceShortDescription: r?.practice_short_description ?? null,
+          categoryId: r?.category_id ?? null,
+          categoryName: r?.category_name ?? null,
+          categoryDescription: r?.category_description ?? null,
+          familyId: r?.family_id ?? null,
+          familyName: r?.family_name ?? null,
+          familyDescription: r?.family_description ?? null
         };
         if (withMatchInfos) {
           result.typicalSituations = r?.typical_situations;
@@ -2035,6 +2052,91 @@ export class SupabaseService {
     } catch (error) {
       console.error('Erreur lors de la sauvegarde d\'embedding:', error);
       // Ne pas throw pour ne pas bloquer le processus si la sauvegarde échoue
+    }
+  }
+
+  /**
+   * Récupère toutes les familles disponibles
+   */
+  async getAllFamilies(): Promise<{
+    success: boolean;
+    data?: Array<{ id: string; name: string }>;
+    error?: string;
+  }> {
+    try {
+      console.log(`🔍 Récupération de toutes les familles`);
+
+      const { data, error } = await this.supabase
+        .from('families')
+        .select('id, name')
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des familles:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      return {
+        success: true,
+        data: data || []
+      };
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération des familles:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Récupère toutes les familles par leurs IDs en une seule requête
+   * Utilise getAllFamilies et filtre par IDs
+   */
+  async getFamiliesByIds(familyIds: string[]): Promise<{
+    success: boolean;
+    data?: Array<{ id: string; name: string }>;
+    error?: string;
+  }> {
+    try {
+      if (!familyIds || familyIds.length === 0) {
+        return {
+          success: true,
+          data: []
+        };
+      }
+
+      console.log(`🔍 Récupération de ${familyIds.length} familles par leurs IDs`);
+
+      // Utiliser getAllFamilies et filtrer par IDs
+      const allFamiliesResult = await this.getAllFamilies();
+      
+      if (!allFamiliesResult.success) {
+        return {
+          success: false,
+          error: allFamiliesResult.error || 'Erreur lors de la récupération des familles'
+        };
+      }
+
+      // Filtrer les familles par les IDs demandés
+      const familyIdsSet = new Set(familyIds);
+      const filteredFamilies = (allFamiliesResult.data || []).filter(family => 
+        familyIdsSet.has(family.id)
+      );
+
+      return {
+        success: true,
+        data: filteredFamilies
+      };
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération des familles:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
     }
   }
 } 
