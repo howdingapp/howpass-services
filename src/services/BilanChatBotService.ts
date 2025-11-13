@@ -407,8 +407,16 @@ IMPORTANT :
 
   /**
    * Redéfinit generateFirstResponse pour construire la réponse finale avec question et quick replies
+   * Initialise également le compteur remainBilanQuestion dans le contexte
    */
   public override async generateFirstResponse(context: HowanaContext): Promise<RecommendationMessageResponse> {
+    // Initialiser le compteur remainBilanQuestion si ce n'est pas déjà fait
+    context.metadata = {
+      ...context.metadata,
+      ['remainBilanQuestion']: BILAN_QUESTIONS.length
+    };
+    console.log(`📊 [BILAN] Initialisation de remainBilanQuestion à ${BILAN_QUESTIONS.length}`);
+
     // Appeler la méthode parente pour obtenir la réponse IA
     const aiResponse = await super.generateFirstResponse(context);
 
