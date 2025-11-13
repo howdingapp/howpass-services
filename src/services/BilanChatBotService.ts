@@ -167,18 +167,21 @@ export class BilanChatBotService extends RecommendationChatBotService {
 
   /**
    * Redéfinit handleIntent pour décrémenter le nombre de questions restantes
+   * Si c'est la dernière réponse (remainBilanQuestion devient 0), passe forceSummary=true pour que BaseChatBotService génère le résumé
    */
   protected override async handleIntent(
     context: HowanaContext,
     userMessage: string,
-    onIaResponse: (response: any) => Promise<void>
+    onIaResponse: (response: any) => Promise<void>,
+    forceSummary: boolean = false
   ): Promise<HowanaContext> {
     // Récupérer le nombre de questions restantes
     const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
     
     // Décrémenter si supérieur à 0
+    let newRemainQuestion = remainBilanQuestion;
     if (remainBilanQuestion !== undefined && remainBilanQuestion > 0) {
-      const newRemainQuestion = remainBilanQuestion - 1;
+      newRemainQuestion = remainBilanQuestion - 1;
       context.metadata = {
         ...context.metadata,
         ['remainBilanQuestion']: newRemainQuestion
@@ -186,8 +189,27 @@ export class BilanChatBotService extends RecommendationChatBotService {
       console.log(`📉 [BILAN] Décrémentation de remainBilanQuestion: ${remainBilanQuestion} -> ${newRemainQuestion}`);
     }
     
-    // Appeler la méthode parente pour le reste du traitement
-    return super.handleIntent(context, userMessage, onIaResponse);
+    // Si c'est la dernière réponse (newRemainQuestion === 0), forcer la génération du résumé
+    if (newRemainQuestion === 0) {
+      console.log('✅ [BILAN] Dernière réponse détectée, génération du résumé au lieu de la réponse');
+      
+      // Calculer globalIntentInfos avant de générer le résumé (nécessaire pour avoir l'univers)
+      const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
+      const intent = currentIntentInfos?.intent;
+      if (intent) {
+        const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
+        context.metadata = {
+          ...context.metadata,
+          ['globalIntentInfos']: globalIntentInfos
+        };
+      }
+      
+      // Passer forceSummary=true pour que BaseChatBotService génère le résumé
+      forceSummary = true;
+    }
+    
+    // Appeler la méthode parente avec forceSummary
+    return super.handleIntent(context, userMessage, onIaResponse, forceSummary);
   }
 
   /**

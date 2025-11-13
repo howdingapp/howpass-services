@@ -1485,8 +1485,32 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
   protected async handleIntent(
     context: HowanaContext,
     userMessage: string,
-    onIaResponse: (response: any) => Promise<void>
+    onIaResponse: (response: any) => Promise<void>,
+    forceSummary: boolean = false
   ): Promise<HowanaContext> {
+    // Si forceSummary est true, générer le résumé au lieu d'une réponse normale
+    if (forceSummary) {
+      console.log('✅ [BASE] Génération forcée du résumé via handleIntent');
+      
+      // Générer le résumé
+      const summaryResult = await this.generateConversationSummary(context);
+      context = summaryResult.updatedContext;
+      
+      // Construire la réponse au format attendu par onIaResponse
+      const summaryResponse = {
+        response: { summary: summaryResult.summary },
+        message_type: 'summary',
+        conversation_id: context.id || '',
+        created_at: new Date().toISOString(),
+        id: `summary_${Date.now()}`
+      };
+      
+      // Appeler le callback avec la réponse de résumé
+      await onIaResponse(summaryResponse);
+      
+      return context;
+    }
+    
     // Implémentation par défaut : génère une réponse IA et la passe au callback
     const aiResponse = await this.generateAIResponse(context, userMessage);
     await onIaResponse(aiResponse);
