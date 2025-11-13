@@ -582,16 +582,18 @@ export class BilanChatBotService extends RecommendationChatBotService {
     
     // Si on est en mode questions de bilan, utiliser un schéma spécial
     if (remainQuestion !== undefined && remainQuestion > 0) {
-      // Description demandant seulement l'analyse de l'univers (sans la question, sans quickReplies)
-      const description = `Message conversationnel court (≤ 30 mots) contenant UNIQUEMENT une analyse de l'univers détecté et les points intéressants qui en ressortent.
+      // Description demandant une réponse courte et conversationnelle qui fait suite à la dernière réponse
+      const description = `Message conversationnel court (≤ 30 mots) qui fait suite à la dernière réponse de l'utilisateur à la question posée.
 
-L'analyse doit être naturelle et intégrée dans la conversation, pas une simple liste. Analyse les réponses précédentes de l'utilisateur pour identifier et mentionner les domaines, familles ou pratiques qui ressortent le plus. Exemple : "Je remarque que tu es particulièrement intéressé par [domaine principal identifié]." ou "Je vois que [point intéressant] ressort dans tes réponses."
+La réponse doit être dans l'écoute, bienveillante et empathique. Montre que tu as compris et accueille ce que l'utilisateur vient de partager. Reste dans l'écoute active, sans conseiller de pratique ou d'activité pour le moment.
 
 IMPORTANT : 
 - Le message doit rester court (≤ 30 mots) et conversationnel
-- Analyse l'univers et ressort les points intéressants de manière naturelle
-- Ne liste pas simplement les familles, mais fais une observation basée sur ce qui ressort
-- N'inclus PAS de question dans ce message, seulement l'analyse de l'univers`;
+- Fais suite naturellement à la réponse de l'utilisateur
+- Reste dans l'écoute, montre de l'empathie et de la compréhension
+- N'inclus PAS de question dans ce message
+- Ne propose PAS de pratique ou d'activité, reste dans l'écoute
+- N'inclus PAS de quickReplies dans ce message`;
       
       return {
         format: { 
