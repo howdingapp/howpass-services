@@ -78,6 +78,12 @@ export interface RecommendationIntent {
     type: 'hower_angel' | 'activity' | 'practice';
     intent: 'know_more' | 'take_rdv';
   };
+  discoverContext?: {
+    chunks: Array<{
+      type: 'hower_angel_name_info' | 'user_situation_chunk' | 'i_have_symptome_chunk' | 'with_benefit_chunk' | 'category_name_info';
+      text: string;
+    }>;
+  };
 }
 
 /**

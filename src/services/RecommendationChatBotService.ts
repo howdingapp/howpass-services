@@ -1488,8 +1488,25 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         }
         break;
       
+      case 'discover':
+        if (!typedIntent.discoverContext) {
+          console.log('⚠️ Aucun discoverContext dans l\'intent');
+          break;
+        }
+        const { chunks } = typedIntent.discoverContext;
+        if (!chunks || chunks.length === 0) {
+          console.log('⚠️ Aucun chunks dans discoverContext');
+          break;
+        }
+        try {
+          context = await this.handleDiscoverIntent(chunks, context, intent);
+        } catch (error) {
+          console.error('❌ Erreur lors du traitement de l\'intent discover:', error);
+        }
+        break;
+      
       default:
-        // Pour les autres intents (take_rdv, confirmation, discover, etc.), pas de traitement spécial
+        // Pour les autres intents, pas de traitement spécial
         break;
     }
 
@@ -2023,6 +2040,50 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     return false; // Pas d'erreur
   }
 
+  /**
+   * Gère l'intent "discover" - recherche découverte d'activités, pratiques et hower angels
+   */
+  private async handleDiscoverIntent(
+    chunks: Array<{ type: string; text: string }>,
+    context: HowanaContext,
+    intent: RecommendationIntent
+  ): Promise<HowanaContext> {
+    const chunksTexts = chunks.map(chunk => chunk.text);
+    console.log(`🔍 Découverte avec ${chunks.length} chunks`);
+    
+    // Rechercher à la fois des activités, pratiques et hower angels pour une découverte complète
+    const [activitiesResults, practicesResults, howerAngelsResult] = await Promise.all([
+      this.supabaseService.searchActivitiesBySituationChunks(chunksTexts),
+      this.supabaseService.searchPracticesBySituationChunks(chunksTexts),
+      this.supabaseService.searchHowerAngelsByUserSituation(chunksTexts)
+    ]);
+    
+    const activities: ActivityItem[] = activitiesResults.results || [];
+    const practices: PracticeItem[] = practicesResults.results || [];
+    const howerAngels: HowerAngelItem[] = howerAngelsResult.success ? (howerAngelsResult.data || []) : [];
+    
+    if (!howerAngelsResult.success) {
+      console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
+    }
+    
+    console.log(`✅ ${activities.length} activités, ${practices.length} pratiques et ${howerAngels.length} hower angels trouvés pour la découverte`);
+    
+    // Ajouter les résultats dans les métadonnées
+    const discoverIntentResults: IntentResults = { activities, practices, howerAngels };
+    context.metadata = {
+      ...context.metadata,
+      ['intentResults']: discoverIntentResults
+    };
+
+    // Recalculer globalIntentInfos pour avoir accès aux intentResults
+    const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+    context.metadata = {
+      ...context.metadata,
+      ['globalIntentInfos']: globalIntentInfos
+    };
+
+    return context;
+  }
 
   /**
    * Schéma de sortie pour le calcul d'intent spécifique aux recommandations
@@ -2154,9 +2215,42 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               },
               required: ["type", "intent"],
               additionalProperties: false
+            },
+            discoverContext: {
+              type: ["object", "null"],
+              description: "Quand l'intent est 'discover', ce contexte contient les chunks pour la découverte de nouveaux horizons",
+              properties: {
+                chunks: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: {
+                        type: "string",
+                        description: `Type du chunk. Valeurs possibles:
+- "hower_angel_name_info": Recherche par nom complet d'un hower angel
+- "user_situation_chunk": Fragment de situation utilisateur (de son point de vue, par exemple: "Je me sens...", "J'ai besoin...")
+- "i_have_symptome_chunk": Fragment décrivant un symptôme que l'utilisateur a (par exemple: "J'ai des maux de tête", "Je ressens de la fatigue")
+- "with_benefit_chunk": Fragment décrivant un bénéfice recherché (par exemple: "pour me détendre", "pour réduire le stress")
+- "category_name_info": Nom d'une catégorie d'activité ou de pratique`,
+                        enum: ["hower_angel_name_info", "user_situation_chunk", "i_have_symptome_chunk", "with_benefit_chunk", "category_name_info"]
+                      },
+                      text: {
+                        type: "string",
+                        description: "Texte du chunk (par exemple: \"Marie Dupont\" pour un nom complet, ou \"Je me sens...\" pour un fragment de situation)"
+                      }
+                    },
+                    required: ["type", "text"],
+                    additionalProperties: false
+                  },
+                  description: "Chunks représentant la situation de l'utilisateur ou les éléments de découverte (par exemple: \"Je me sens...\", \"J'ai besoin...\", \"sphorologie\", \"activité douce\", ...). Chaque chunk doit avoir un type pour indiquer s'il s'agit d'un nom complet ou d'un fragment de situation utilisateur."
+                }
+              },
+              required: ["chunks"],
+              additionalProperties: false
             }
           },
-          required: ["intent", "rdvContext", "searchContext", "knowMoreContext", "confirmationContext"],
+          required: ["intent", "rdvContext", "searchContext", "knowMoreContext", "confirmationContext", "discoverContext"],
           additionalProperties: false
         },
         strict: true

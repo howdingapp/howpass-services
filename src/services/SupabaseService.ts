@@ -832,7 +832,7 @@ export class SupabaseService {
     column: string, 
     query: string, 
     limit: number = 4,
-    matchThreshold: number = 0.0  // Seuil de similarité vectorielle minimale (0 = pas de filtre)
+    matchThreshold: number = 0.6
   ): Promise<any[]> {
     try {
       console.log(`🔍 Recherche vectorielle sur ${table}.${column} pour: "${query}"`);
@@ -1134,7 +1134,7 @@ export class SupabaseService {
       
       // Faire les appels en parallèle pour chaque chunk
       const searchPromises = situationChunks.map(chunk => 
-        this.searchVectorSimilarity('activities', 'vector_summary', chunk, 4)
+        this.searchVectorSimilarity('activities', 'vector_summary', chunk, 4, 0.6)
       );
       
       const allResults = await Promise.all(searchPromises);
