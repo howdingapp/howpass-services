@@ -373,6 +373,7 @@ export class SupabaseService {
     response_text?: string;
     metadata?: Record<string, any>;
     next_response_id?: string | null;
+    message_type?: string; // Type de message (text, summary, etc.)
     cost_input?: number | null; // Nombre de tokens input utilisés (non cached)
     cost_cached_input?: number | null; // Nombre de tokens input utilisés (cached)
     cost_output?: number | null; // Nombre de tokens output utilisés
@@ -401,6 +402,11 @@ export class SupabaseService {
       // Ajouter next_response_id si fourni
       if (updateData.next_response_id !== undefined) {
         updatePayload.next_response_id = updateData.next_response_id;
+      }
+
+      // Ajouter message_type si fourni
+      if (updateData.message_type !== undefined) {
+        updatePayload.message_type = updateData.message_type;
       }
 
       // Ajouter cost_input si fourni

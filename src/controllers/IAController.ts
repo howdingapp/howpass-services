@@ -36,6 +36,13 @@ export class IAController {
   }
 
   /**
+   * Vérifie si la réponse IA est un résumé
+   */
+  private isSummary(iaResponse: any): boolean {
+    return iaResponse.type === 'summary' || iaResponse.message_type === 'summary';
+  }
+
+  /**
    * Vérifier si l'utilisateur a atteint la limite journalière de messages
    * Cette vérification s'applique uniquement pour les conversations de type 'bilan' ou 'recommandation'
    */
@@ -251,8 +258,8 @@ export class IAController {
       // 3. Déterminer valid_for_limit : true uniquement si l'ID correspond à taskData.aiResponseId
       const validForLimit = aiResponseId === taskData.aiResponseId;
 
-      // 4. Faire un appel de mise à jour globale
-      const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, {
+      // 4. Préparer les données de mise à jour
+      const updateData: any = {
         response_text: JSON.stringify(iaResponse),
         next_response_id: null, // Dernière réponse, pas de suivant
         cost_input: totalCostInput > 0 ? totalCostInput : null,
@@ -270,7 +277,15 @@ export class IAController {
           hasRecommendations: iaResponse.hasRecommendations || ((updatedContext.recommendations?.activities?.length || 0) > 0 || (updatedContext.recommendations?.practices?.length || 0) > 0),
           recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](updatedContext)
         }
-      });
+      };
+
+      // Ajouter message_type seulement si c'est un summary
+      if (this.isSummary(iaResponse)) {
+        updateData.message_type = 'summary';
+      }
+
+      // 5. Faire un appel de mise à jour globale
+      const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, updateData);
 
       if (!updateResult.success) {
         console.error('❌ Erreur lors de la mise à jour de la réponse IA:', updateResult.error);
@@ -345,11 +360,13 @@ export class IAController {
 
       // 3. Si on détecte qu'il y aura un next, créer une nouvelle réponse intermédiaire
       if (hasNext) {
+        // Déterminer le message_type en fonction de la réponse actuelle
+        const messageType = this.isSummary(iaResponse) ? 'summary' : 'text';
         const createNextResult = await this.supabaseService.createAIResponse({
           conversation_id: taskData.conversationId,
           user_id: req.user?.userId || '',
           response_text: null, // Réponse vide pour l'instant
-          message_type: 'text',
+          message_type: messageType,
           next_response_id: null
         } as any);
 
@@ -385,8 +402,8 @@ export class IAController {
       // 5. Déterminer valid_for_limit : true uniquement si l'ID correspond à taskData.aiResponseId
       const validForLimit = aiResponseId === taskData.aiResponseId;
 
-      // 6. Mettre à jour les informations de la réponse actuelle
-      const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, {
+      // 6. Préparer les données de mise à jour
+      const updateData: any = {
         response_text: JSON.stringify(iaResponse),
         next_response_id: nextResponseId,
         cost_input: totalCostInput > 0 ? totalCostInput : null,
@@ -404,7 +421,15 @@ export class IAController {
           hasRecommendations: iaResponse.hasRecommendations || ((updatedContext.recommendations?.activities?.length || 0) > 0 || (updatedContext.recommendations?.practices?.length || 0) > 0),
           recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](updatedContext)
         }
-      });
+      };
+
+      // Ajouter message_type seulement si c'est un summary
+      if (this.isSummary(iaResponse)) {
+        updateData.message_type = 'summary';
+      }
+
+      // 7. Mettre à jour les informations de la réponse actuelle
+      const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, updateData);
 
       if (!updateResult.success) {
         console.error('❌ Erreur lors de la mise à jour de la réponse IA:', updateResult.error);
