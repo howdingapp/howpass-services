@@ -50,6 +50,65 @@ export interface RecommendationSummary {
 }
 
 /**
+ * Interface pour l'univers du bilan
+ */
+export interface BilanUniverse {
+  families: {
+    info: string;
+    value: Array<{
+      id: string;
+      name: string;
+      dominanceScore: number;
+      practicesCount: number;
+      activitiesCount: number;
+      howerAngelsCount: number;
+      matchCount: number;
+    }>;
+  };
+  practices: {
+    info: string;
+    value: any[];
+  };
+  activities: {
+    info: string;
+    value: any[];
+  };
+  howerAngels: {
+    info: string;
+    value: any[];
+  };
+  questionResponses: {
+    info: string;
+    value: Array<{ question?: string; response: string }>;
+  };
+  computedAt?: string;
+}
+
+/**
+ * Interface pour l'analyse du bilan
+ */
+export interface BilanAnalysis {
+  scoresAnalysis: string;
+  customCategories: Array<{
+    categoryKey: string;
+    categoryName: string;
+    score: number;
+    description: string;
+  }>;
+}
+
+/**
+ * Interface pour les résumés de conversation de bilan
+ */
+export interface BilanSummary {
+  userProfile: UserProfile;
+  bilanAnalysis: BilanAnalysis;
+  recommendation: Recommendation;
+  importanteKnowledge: string[];
+  univers: BilanUniverse;
+}
+
+/**
  * Type pour l'intent de recommandation basé sur le schéma JSON
  */
 export interface RecommendationIntent {

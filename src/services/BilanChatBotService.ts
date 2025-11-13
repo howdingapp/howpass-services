@@ -196,10 +196,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
   protected override async getSystemContext(context: any): Promise<string> {
     let contextInfo = '';
 
-    // Contexte du bilan
-    contextInfo += this.getDetailedBilanInfo(context);
-    
-    contextInfo += this.getLastBilanContextInfo(context);
 
     // Contexte de la dernière recommandation Howana
     contextInfo += this.getPreviousConversationContext(context as any);
@@ -208,35 +204,47 @@ export class BilanChatBotService extends RecommendationChatBotService {
 
     return contextInfo;
   }
+
   /**
-   * Informations détaillées du bilan
+   * Redéfinit getActivitiesAndPracticesConstraints pour utiliser l'univers du contexte
+   * au lieu de context.recommendations
    */
-  protected getDetailedBilanInfo(context: HowanaBilanContext & HowanaContext): string {
-    if (!context.bilanData) return '';
+  protected override getActivitiesAndPracticesConstraints(context: HowanaContext): {
+    availableActivityIds: string[];
+    availablePracticeIds: string[];
+    allAvailableIds: string[];
+  } {
+    // Récupérer l'univers depuis les métadonnées
+    const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as {
+      practices?: { info?: string; value?: any[] };
+      activities?: { info?: string; value?: any[] };
+    } | undefined;
 
-    let bilanInfo = `\n\nINFORMATIONS DU PRE-BILAN DISPONIBLES:
-    - Confort physique: ${context.bilanData.scores.principaux.confortPhysique}/9
-    - Équilibre émotionnel: ${context.bilanData.scores.principaux.equilibreEmotionnel}/9
-    - Qualité du sommeil: ${context.bilanData.scores.principaux.qualiteSommeil}/9
-    - Niveau d'énergie: ${context.bilanData.scores.principaux.niveauEnergie}/9`;
-    
-    if (context.bilanData.douleurs) {
-      bilanInfo += `\n- Douleurs: ${context.bilanData.douleurs}`;
-    }
-    
-    return bilanInfo;
-  
-  }
+    // Extraire les pratiques et activités de l'univers
+    const practicesFromUniverse = bilanUniverContext?.practices?.value || [];
+    const activitiesFromUniverse = bilanUniverContext?.activities?.value || [];
 
-  protected override getSummaryOutputSchema(context: HowanaContext): any {
-    const constraints = this.getActivitiesAndPracticesConstraints(context);
-    const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
+    // Extraire uniquement les IDs pour créer les enums
+    const availableActivityIds = activitiesFromUniverse.map((item: any) => item.id).filter((id: any) => id);
+    const availablePracticeIds = practicesFromUniverse.map((item: any) => item.id).filter((id: any) => id);
+    const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
 
-    console.log(`📋 [BILANS] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
+    console.log(`📋 [BILAN] Contraintes générées depuis l'univers avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques (IDs uniquement)`);
+
+    return {
       availableActivityIds,
       availablePracticeIds,
-      availableActivityNames,
-      availablePracticeNames,
+      allAvailableIds
+    };
+  }
+  
+  protected override getSummaryOutputSchema(context: HowanaContext): any {
+    const constraints = this.getActivitiesAndPracticesConstraints(context);
+    const { availableActivityIds, availablePracticeIds, allAvailableIds } = constraints;
+
+    console.log(`📋 [BILANS] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques (IDs uniquement):`, {
+      availableActivityIds,
+      availablePracticeIds,
       allAvailableIds
     });
 
@@ -286,11 +294,9 @@ export class BilanChatBotService extends RecommendationChatBotService {
               required: ["scoresAnalysis", "customCategories"],
               additionalProperties: false
             },
-            recommendation: this.getRecommendationSchemaFragment(
+            recommendation: this.getBilanRecommendationSchemaFragment(
               availableActivityIds,
-              availableActivityNames,
               availablePracticeIds,
-              availablePracticeNames,
               "Recommandation personnalisée basée sur l'analyse du bilan de bien-être"
             ),
             importanteKnowledge: {
@@ -306,6 +312,230 @@ export class BilanChatBotService extends RecommendationChatBotService {
         strict: true
       }
     };
+  }
+
+  /**
+   * Schéma de recommandation spécifique au bilan qui ne demande que les IDs
+   * Les noms seront enrichis après la génération du résumé depuis l'univers
+   */
+  protected getBilanRecommendationSchemaFragment(
+    availableActivityIds: string[],
+    availablePracticeIds: string[],
+    description: string = "Recommandation personnalisée basée sur l'analyse du bilan de bien-être"
+  ): any {
+    const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
+    
+    return {
+      type: "object",
+      properties: {
+        recommendedCategories: {
+          type: "array",
+          minItems: availablePracticeIds.length > 0 ? 1 : 0,
+          maxItems: availablePracticeIds.length > 0 ? Math.max(2, availablePracticeIds.length) : 0,
+          items: {
+            type: "object",
+            properties: {
+              id: {
+                type: "string",
+                enum: availablePracticeIds,
+                description: "Identifiant unique de la pratique de bien-être recommandée"
+              }
+            },
+            required: ["id"],
+            additionalProperties: false
+          },
+          description: "Pratiques de bien-être recommandées basées sur l'analyse des besoins de l'utilisateur"
+        },
+        recommendedActivities: {
+          type: "array",
+          minItems: availableActivityIds.length > 0 ? 1 : 0,
+          maxItems: availableActivityIds.length > 0 ? Math.max(2, availableActivityIds.length) : 0,
+          items: {
+            type: "object",
+            properties: {
+              id: {
+                type: "string",
+                enum: availableActivityIds,
+                description: "Identifiant unique de l'activité de bien-être recommandée"
+              }
+            },
+            required: ["id"],
+            additionalProperties: false
+          },
+          description: "Activités de bien-être recommandées basées sur l'analyse des besoins de l'utilisateur"
+        },
+        activitiesReasons: {
+          type: "string",
+          description: "Message destiné à l'utilisateur expliquant pourquoi ces activités vous correspondent (formulé en vous parlant directement l'un à l'autre)"
+        },
+        practicesReasons: {
+          type: "string",
+          description: "Message destiné à l'utilisateur expliquant pourquoi ces pratiques vous correspondent (formulé en vous parlant directement l'un à l'autre)"
+        },
+        relevanceScore: {
+          type: "number",
+          description: "Score de pertinence de la recommandation (0 = non pertinent, 1 = très pertinent)"
+        },
+        reasoning: {
+          type: "string",
+          description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation vous correspond (formulé en vous parlant directement l'un à l'autre)"
+        },
+        benefits: {
+          type: "array",
+          items: { type: "string" },
+          description: "Messages destinés à l'utilisateur listant les bénéfices concrets que vous pourrez retirer (formulés en vous parlant directement)"
+        },
+        nextSteps: {
+          type: "array",
+          items: { type: "string" },
+          description: "Messages destinés à l'utilisateur décrivant les actions concrètes à entreprendre pour progresser dans votre bien-être (formulés en vous parlant directement)"
+        },
+        top1Recommandation: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              enum: allAvailableIds,
+              description: "Identifiant unique de la recommandation prioritaire (activité ou pratique)"
+            },
+            type: {
+              type: "string",
+              enum: ["activity", "practice"],
+              description: "Type de la recommandation prioritaire"
+            },
+            reason: {
+              type: "string",
+              description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation est prioritaire pour vous (formulé en vous parlant directement)"
+            }
+          },
+          required: ["id", "type", "reason"],
+          additionalProperties: false,
+          description: "Recommandation prioritaire unique, sélectionnée parmi les activités et pratiques disponibles"
+        }
+      },
+      required: ["recommendedCategories", "recommendedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "reasoning", "benefits", "nextSteps", "top1Recommandation"],
+      additionalProperties: false,
+      description
+    };
+  }
+
+  /**
+   * Redéfinit recommendationRequiredForSummary pour retourner toujours false dans le cas du bilan
+   * car l'univers est déjà calculé et disponible dans le contexte
+   */
+  protected override recommendationRequiredForSummary(_context: HowanaContext): boolean {
+    return false;
+  }
+
+  /**
+   * Redéfinit generateConversationSummary pour ajouter systématiquement l'univers dans le résumé
+   */
+  public override async generateConversationSummary(context: HowanaContext): Promise<{
+    summary: any;
+    extractedData: any;
+    updatedContext: HowanaContext;
+    cost_input?: number | null;
+    cost_cached_input?: number | null;
+    cost_output?: number | null;
+  }> {
+    // Appeler la méthode parente pour générer le résumé
+    const result = await super.generateConversationSummary(context);
+
+    // Récupérer l'univers depuis les métadonnées
+    const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as {
+      families?: { info?: string; value?: any[] };
+      practices?: { info?: string; value?: any[] };
+      activities?: { info?: string; value?: any[] };
+      howerAngels?: { info?: string; value?: any[] };
+      questionResponses?: { info?: string; value?: Array<{ question?: string; response: string }> };
+      computedAt?: string;
+    } | undefined;
+
+    // Si l'univers existe, enrichir les recommandations avec les noms et ajouter l'univers au résumé
+    if (bilanUniverContext) {
+      const univers = {
+        families: bilanUniverContext.families || { info: '', value: [] },
+        practices: bilanUniverContext.practices || { info: '', value: [] },
+        activities: bilanUniverContext.activities || { info: '', value: [] },
+        howerAngels: bilanUniverContext.howerAngels || { info: '', value: [] },
+        questionResponses: bilanUniverContext.questionResponses || { info: '', value: [] },
+        computedAt: bilanUniverContext.computedAt
+      };
+
+      // Créer des maps pour retrouver rapidement les noms par ID
+      const practicesMap = new Map<string, string>();
+      const activitiesMap = new Map<string, string>();
+      
+      (univers.practices.value || []).forEach((practice: any) => {
+        if (practice.id) {
+          practicesMap.set(practice.id, practice.title || practice.name || 'Pratique sans nom');
+        }
+      });
+      
+      (univers.activities.value || []).forEach((activity: any) => {
+        if (activity.id) {
+          activitiesMap.set(activity.id, activity.title || activity.name || 'Activité sans nom');
+        }
+      });
+
+      // Enrichir les recommandations avec les noms
+      if (result.summary && typeof result.summary === 'object' && !Array.isArray(result.summary)) {
+        const summary = result.summary as any;
+        
+        // Enrichir recommendedCategories (pratiques)
+        if (summary.recommendation?.recommendedCategories && Array.isArray(summary.recommendation.recommendedCategories)) {
+          summary.recommendation.recommendedCategories = summary.recommendation.recommendedCategories.map((item: any) => {
+            if (item.id && !item.name) {
+              return { ...item, name: practicesMap.get(item.id) || 'Pratique sans nom' };
+            }
+            return item;
+          });
+        }
+        
+        // Enrichir recommendedActivities
+        if (summary.recommendation?.recommendedActivities && Array.isArray(summary.recommendation.recommendedActivities)) {
+          summary.recommendation.recommendedActivities = summary.recommendation.recommendedActivities.map((item: any) => {
+            if (item.id && !item.name) {
+              return { ...item, name: activitiesMap.get(item.id) || 'Activité sans nom' };
+            }
+            return item;
+          });
+        }
+        
+        // Enrichir top1Recommandation
+        if (summary.recommendation?.top1Recommandation?.id && !summary.recommendation.top1Recommandation.name) {
+          const top1Id = summary.recommendation.top1Recommandation.id;
+          const top1Type = summary.recommendation.top1Recommandation.type;
+          if (top1Type === 'practice') {
+            summary.recommendation.top1Recommandation.name = practicesMap.get(top1Id) || 'Pratique sans nom';
+          } else if (top1Type === 'activity') {
+            summary.recommendation.top1Recommandation.name = activitiesMap.get(top1Id) || 'Activité sans nom';
+          }
+        }
+        
+        // Ajouter l'univers au résumé
+        summary.univers = univers;
+      } else {
+        // Si le résumé n'est pas un objet, créer un nouveau résumé avec l'univers
+        (result as any).summary = {
+          ...(typeof result.summary === 'string' ? { message: result.summary } : (result.summary || {})),
+          univers
+        };
+      }
+
+      console.log('✅ [BILAN] Recommandations enrichies avec les noms et univers ajouté au résumé:', {
+        familiesCount: univers.families.value?.length || 0,
+        practicesCount: univers.practices.value?.length || 0,
+        activitiesCount: univers.activities.value?.length || 0,
+        howerAngelsCount: univers.howerAngels.value?.length || 0,
+        practicesMapSize: practicesMap.size,
+        activitiesMapSize: activitiesMap.size
+      });
+    } else {
+      console.warn('⚠️ [BILAN] Aucun univers trouvé dans le contexte pour enrichir les recommandations');
+    }
+
+    return result;
   }
 
   protected override buildFirstUserPrompt(_context: HowanaContext): string {

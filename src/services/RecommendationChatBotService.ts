@@ -226,67 +226,35 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     return "A partir des informations contextuelles, génère un résumé structuré détaillé qui permettra de comprendre les besoins de l'utilisateur et les recommandations proposées.";
   }
 
-  /**
-   * Génère les contraintes d'IDs pour les activités et pratiques disponibles
-   * @param context Le contexte de conversation contenant les métadonnées
-   * @returns Un objet contenant les IDs et noms contraints pour les activités et pratiques
-   */
-  private cleanNameForSchema(name: string): string {
-    return name
-      .replace(/[^\w\s\-]/g, '') // Supprime tous les caractères spéciaux sauf lettres, chiffres, espaces et tirets
-      .replace(/\s+/g, ' ') // Remplace les espaces multiples par un seul espace
-      .trim(); // Supprime les espaces en début/fin
-  }
-
   protected getActivitiesAndPracticesConstraints(context: HowanaContext): {
     availableActivityIds: string[];
     availablePracticeIds: string[];
-    availableActivityNames: string[];
-    availablePracticeNames: string[];
     allAvailableIds: string[];
   } {
     // Récupérer les recommandations des métadonnées pour contraindre les enums
     const recommendations = context.recommendations || { activities: [], practices: [] };
     
-    // Extraire les IDs et noms disponibles pour créer les enums
-    const availableActivities = recommendations.activities?.map((item: any) => ({
-      id: item.id,
-      name: this.cleanNameForSchema(item.title || item.name || 'Activité sans nom')
-    })) || [];
-    const availablePractices = recommendations.practices?.map((item: any) => ({
-      id: item.id,
-      name: this.cleanNameForSchema(item.title || item.name || 'Pratique sans nom')
-    })) || [];
-    
-    const availableActivityIds = availableActivities.map((item: any) => item.id);
-    const availablePracticeIds = availablePractices.map((item: any) => item.id);
-    const availableActivityNames = availableActivities.map((item: any) => item.name);
-    const availablePracticeNames = availablePractices.map((item: any) => item.name);
+    // Extraire uniquement les IDs pour créer les enums
+    const availableActivityIds = recommendations.activities?.map((item: any) => item.id).filter((id: any) => id) || [];
+    const availablePracticeIds = recommendations.practices?.map((item: any) => item.id).filter((id: any) => id) || [];
     const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
     
-    console.log(`📋 Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
-      activities: availableActivities,
-      practices: availablePractices
-    });
+    console.log(`📋 Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques (IDs uniquement)`);
 
     return {
       availableActivityIds,
       availablePracticeIds,
-      availableActivityNames,
-      availablePracticeNames,
       allAvailableIds
     };
   }
 
   protected getSummaryOutputSchema(context: HowanaContext): OpenAIJsonSchema {
     const constraints = this.getActivitiesAndPracticesConstraints(context);
-    const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
+    const { availableActivityIds, availablePracticeIds, allAvailableIds } = constraints;
 
-    console.log(`📋 [RECOMMANDATIONS] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
+    console.log(`📋 [RECOMMANDATIONS] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques (IDs uniquement):`, {
       availableActivityIds,
       availablePracticeIds,
-      availableActivityNames,
-      availablePracticeNames,
       allAvailableIds
     });
  
@@ -300,9 +268,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
              userProfile: this.getUserProfileSchemaFragment("Profil utilisateur analysé à partir de la conversation de recommandation"),
              recommendation: this.getRecommendationSchemaFragment(
                availableActivityIds,
-               availableActivityNames,
                availablePracticeIds,
-               availablePracticeNames,
                "Recommandation personnalisée basée sur l'analyse des besoins de l'utilisateur"
              ),
             importanteKnowledge: {
@@ -318,6 +284,85 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         strict: true
       }
     };
+  }
+
+  /**
+   * Redéfinit generateConversationSummary pour enrichir les recommandations avec les noms depuis context.recommendations
+   */
+  public override async generateConversationSummary(context: HowanaContext): Promise<{
+    summary: any;
+    extractedData: any;
+    updatedContext: HowanaContext;
+    cost_input?: number | null;
+    cost_cached_input?: number | null;
+    cost_output?: number | null;
+  }> {
+    // Appeler la méthode parente pour générer le résumé
+    const result = await super.generateConversationSummary(context);
+
+    // Récupérer les recommandations depuis le contexte pour enrichir avec les noms
+    const recommendations = context.recommendations || { activities: [], practices: [] };
+
+    // Créer des maps pour retrouver rapidement les noms par ID
+    const practicesMap = new Map<string, string>();
+    const activitiesMap = new Map<string, string>();
+    
+    (recommendations.practices || []).forEach((practice: any) => {
+      if (practice.id) {
+        practicesMap.set(practice.id, practice.title || practice.name || 'Pratique sans nom');
+      }
+    });
+    
+    (recommendations.activities || []).forEach((activity: any) => {
+      if (activity.id) {
+        activitiesMap.set(activity.id, activity.title || activity.name || 'Activité sans nom');
+      }
+    });
+
+    // Enrichir les recommandations avec les noms
+    if (result.summary && typeof result.summary === 'object' && !Array.isArray(result.summary)) {
+      const summary = result.summary as any;
+      
+      // Enrichir recommendedCategories (pratiques)
+      if (summary.recommendation?.recommendedCategories && Array.isArray(summary.recommendation.recommendedCategories)) {
+        summary.recommendation.recommendedCategories = summary.recommendation.recommendedCategories.map((item: any) => {
+          if (item.id && !item.name) {
+            return { ...item, name: practicesMap.get(item.id) || 'Pratique sans nom' };
+          }
+          return item;
+        });
+      }
+      
+      // Enrichir recommendedActivities
+      if (summary.recommendation?.recommendedActivities && Array.isArray(summary.recommendation.recommendedActivities)) {
+        summary.recommendation.recommendedActivities = summary.recommendation.recommendedActivities.map((item: any) => {
+          if (item.id && !item.name) {
+            return { ...item, name: activitiesMap.get(item.id) || 'Activité sans nom' };
+          }
+          return item;
+        });
+      }
+      
+      // Enrichir top1Recommandation
+      if (summary.recommendation?.top1Recommandation?.id && !summary.recommendation.top1Recommandation.name) {
+        const top1Id = summary.recommendation.top1Recommandation.id;
+        const top1Type = summary.recommendation.top1Recommandation.type;
+        if (top1Type === 'practice') {
+          summary.recommendation.top1Recommandation.name = practicesMap.get(top1Id) || 'Pratique sans nom';
+        } else if (top1Type === 'activity') {
+          summary.recommendation.top1Recommandation.name = activitiesMap.get(top1Id) || 'Activité sans nom';
+        }
+      }
+
+      console.log('✅ [RECOMMANDATIONS] Recommandations enrichies avec les noms:', {
+        practicesMapSize: practicesMap.size,
+        activitiesMapSize: activitiesMap.size
+      });
+    } else {
+      console.warn('⚠️ [RECOMMANDATIONS] Résumé non trouvé ou format inattendu pour enrichir les recommandations');
+    }
+
+    return result;
   }
 
   protected getStartConversationOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
@@ -467,15 +512,18 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       case 'activities_and_practices_by_user_situation':
         // Schéma pour les réponses après utilisation de l'outil de recherche d'activités et pratiques
         const constraints = this.getActivitiesAndPracticesConstraints(context);
-        const { availableActivityIds, availablePracticeIds, availableActivityNames, availablePracticeNames, allAvailableIds } = constraints;
+        const { availableActivityIds, availablePracticeIds, allAvailableIds } = constraints;
 
-        console.log(`📋 [OUTIL] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques:`, {
+        console.log(`📋 [OUTIL] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques (IDs uniquement):`, {
           availableActivityIds,
           availablePracticeIds,
-          availableActivityNames,
-          availablePracticeNames,
           allAvailableIds
         });
+
+        // Récupérer les recommandations pour obtenir les noms (pour les quickReplies)
+        const recommendations = context.recommendations || { activities: [], practices: [] };
+        const availableActivityNames = recommendations.activities?.map((item: any) => item.title || item.name || 'Activité sans nom') || [];
+        const availablePracticeNames = recommendations.practices?.map((item: any) => item.title || item.name || 'Pratique sans nom') || [];
 
         return {
           format: { 
@@ -980,7 +1028,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    */
   protected getRecommendedCategoriesSchema(
     availablePracticeIds: string[], 
-    availablePracticeNames: string[], 
     description: string = "Pratiques de bien-être recommandées basées sur l'analyse des besoins de l'utilisateur",
     minItems?: number,
     maxItems?: number
@@ -1000,14 +1047,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             type: "string",
             enum: availablePracticeIds,
             description: "Identifiant unique de la pratique de bien-être recommandée"
-          },
-          name: {
-            type: "string",
-            enum: availablePracticeNames,
-            description: "Titre de la pratique de bien-être recommandée"
           }
         },
-        required: ["id", "name"],
+        required: ["id"],
         additionalProperties: false
       },
       description
@@ -1024,7 +1066,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    */
   protected getRecommendedActivitiesSchema(
     availableActivityIds: string[], 
-    availableActivityNames: string[], 
     description: string = "Activités de bien-être recommandées basées sur l'analyse des besoins de l'utilisateur",
     minItems?: number,
     maxItems?: number
@@ -1044,14 +1085,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             type: "string",
             enum: availableActivityIds,
             description: "Identifiant unique de l'activité de bien-être recommandée"
-          },
-          name: {
-            type: "string",
-            enum: availableActivityNames,
-            description: "Titre de l'activité de bien-être recommandée"
           }
         },
-        required: ["id", "name"],
+        required: ["id"],
         additionalProperties: false
       },
       description
@@ -1328,19 +1364,16 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    */
   protected getRecommendationSchemaFragment(
     availableActivityIds: string[],
-    availableActivityNames: string[],
     availablePracticeIds: string[],
-    availablePracticeNames: string[],
     description: string = "Recommandation personnalisée basée sur l'analyse des besoins de l'utilisateur"
   ): any {
     const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
-    const allAvailableNames = [...availableActivityNames, ...availablePracticeNames];
     
     return {
       type: "object",
       properties: {
-        recommendedCategories: this.getRecommendedCategoriesSchema(availablePracticeIds, availablePracticeNames),
-        recommendedActivities: this.getRecommendedActivitiesSchema(availableActivityIds, availableActivityNames),
+        recommendedCategories: this.getRecommendedCategoriesSchema(availablePracticeIds),
+        recommendedActivities: this.getRecommendedActivitiesSchema(availableActivityIds),
         activitiesReasons: {
           type: "string",
           description: "Message destiné à l'utilisateur expliquant pourquoi ces activités vous correspondent (formulé en vous parlant directement l'un à l'autre)"
@@ -1375,11 +1408,6 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               enum: allAvailableIds,
               description: "Identifiant unique de la recommandation prioritaire (activité ou pratique)"
             },
-            name: {
-              type: "string",
-              enum: allAvailableNames,
-              description: "Nom de la recommandation prioritaire"
-            },
             type: {
               type: "string",
               enum: ["activity", "practice"],
@@ -1390,7 +1418,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation est prioritaire pour vous (formulé en vous parlant directement)"
             }
           },
-          required: ["id", "name", "type", "reason"],
+          required: ["id", "type", "reason"],
           additionalProperties: false,
           description: "Recommandation prioritaire unique, sélectionnée parmi les activités et pratiques disponibles"
         }
