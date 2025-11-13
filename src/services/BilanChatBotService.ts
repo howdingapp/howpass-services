@@ -166,6 +166,22 @@ export class BilanChatBotService extends RecommendationChatBotService {
   }
 
   /**
+   * Redéfinit shouldComputeIntent pour retourner false tant qu'il reste des questions de bilan
+   */
+  protected override shouldComputeIntent(context: HowanaContext): boolean {
+    const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
+    
+    // Si remainBilanQuestion est défini et supérieur à 0, ne pas calculer l'intent
+    if (remainBilanQuestion !== undefined && remainBilanQuestion > 0) {
+      console.log(`⏭️ [BILAN] Calcul d'intent ignoré car il reste ${remainBilanQuestion} question(s) de bilan`);
+      return false;
+    }
+    
+    // Sinon, utiliser le comportement par défaut
+    return super.shouldComputeIntent(context);
+  }
+
+  /**
    * Redéfinit handleIntent pour décrémenter le nombre de questions restantes
    * Si c'est la dernière réponse (remainBilanQuestion devient 0), passe forceSummary=true pour que BaseChatBotService génère le résumé
    */
@@ -193,15 +209,36 @@ export class BilanChatBotService extends RecommendationChatBotService {
     if (newRemainQuestion === 0) {
       console.log('✅ [BILAN] Dernière réponse détectée, génération du résumé au lieu de la réponse');
       
-      // Calculer globalIntentInfos avant de générer le résumé (nécessaire pour avoir l'univers)
+      // Vérifier la présence d'un intent et le calculer si nécessaire
       const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
-      const intent = currentIntentInfos?.intent;
+      let intent = currentIntentInfos?.intent;
+      
+      // Si l'intent n'existe pas, le calculer maintenant (car shouldComputeIntent était false avant)
+      if (!intent) {
+        console.log('🔄 [BILAN] Intent manquant, calcul de l\'intent pour la dernière réponse...');
+        const intentResult = await this.computeIntent(context, userMessage);
+        intent = intentResult.intent;
+        
+        // Mettre à jour le contexte avec l'intent calculé
+        context.metadata = {
+          ...context.metadata,
+          ['currentIntentInfos']: {
+            intent: intent || null,
+            intentCost: intentResult.intentCost || null,
+            intentContextText: null
+          }
+        };
+      }
+      
+      // Calculer globalIntentInfos avant de générer le résumé (nécessaire pour avoir l'univers)
       if (intent) {
         const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
         context.metadata = {
           ...context.metadata,
           ['globalIntentInfos']: globalIntentInfos
         };
+      } else {
+        console.warn('⚠️ [BILAN] Aucun intent disponible pour calculer globalIntentInfos');
       }
       
       // Passer forceSummary=true pour que BaseChatBotService génère le résumé

@@ -1386,13 +1386,28 @@ ${practicesList}`;
   }
 
   /**
+   * Détermine si l'intent doit être calculé
+   * Par défaut, retourne true. Peut être redéfini dans les classes dérivées.
+   */
+  protected shouldComputeIntent(_context: HowanaContext): boolean {
+    return true;
+  }
+
+  /**
    * Calcule l'intent de la conversation en parallèle de la génération de réponse
    * @param context Le contexte de la conversation
    * @param userMessage Le dernier message de l'utilisateur
    * @returns L'intent calculé selon le schéma défini par le service, le coût (nombre de tokens) et le globalIntentInfos
    */
+
   public async computeIntent(context: HowanaContext, userMessage: string): Promise<{ intent: any; intentCost: number | null; globalIntentInfos: any }> {
     try {
+      // Vérifier si l'intent doit être calculé
+      if (!this.shouldComputeIntent(context)) {
+        console.log('⏭️ [BASE] Calcul d\'intent ignoré selon shouldComputeIntent');
+        return { intent: null, intentCost: null, globalIntentInfos: null };
+      }
+
       console.log('🎯 Calcul de l\'intent pour la conversation:', context.id);
       
       // Récupérer le schéma d'intent spécifique au service
