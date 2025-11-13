@@ -108,13 +108,13 @@ const BILAN_QUESTIONS: Array<{
       { text: "🚫 Non, pas pour l'instant", icon: "smile" }
     ]
   },
-  {
-    question: "📍 Où souhaites-tu découvrir tes praticiens ?",
-    quickReplies: [
-      { text: "📍 Utiliser ma géolocalisation", icon: "explore" },
-      { text: "✏️ Saisir ma ville / code postal", icon: "explore" }
-    ]
-  }
+  //{
+  //  question: "📍 Où souhaites-tu découvrir tes praticiens ?",
+  //  quickReplies: [
+  //    { text: "📍 Utiliser ma géolocalisation", icon: "explore" },
+  //   { text: "✏️ Saisir ma ville / code postal", icon: "explore" }
+  //  ]
+  //}
 ];
 
 export class BilanChatBotService extends RecommendationChatBotService {
