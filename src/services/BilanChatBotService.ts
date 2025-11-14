@@ -29,6 +29,43 @@ export interface BilanQuestionIntent {
 }
 
 /**
+ * Structure complète de globalIntentInfos pour le bilan
+ */
+export interface BilanGlobalIntentInfos {
+  bilanUniverContext: {
+    families: {
+      info: string;
+      value: Array<{
+        id: string;
+        name: string;
+        dominanceScore: number;
+        practicesCount: number;
+        activitiesCount: number;
+        howerAngelsCount: number;
+        matchCount: number;
+      }>;
+    };
+    practices: {
+      info: string;
+      value: any[];
+    };
+    activities: {
+      info: string;
+      value: any[];
+    };
+    howerAngels: {
+      info: string;
+      value: any[];
+    };
+    questionResponses: {
+      info: string;
+      value: Array<{ question?: string; response: string }>;
+    };
+    computedAt?: string;
+  };
+}
+
+/**
  * Questions de bilan prédéfinies avec leurs réponses suggérées
  * Chaque question inclut la question elle-même et des quick replies avec icônes emoji
  */
@@ -179,6 +216,59 @@ export class BilanChatBotService extends RecommendationChatBotService {
     
     // Sinon, utiliser le comportement par défaut
     return super.shouldComputeIntent(context);
+  }
+
+  public override async computeIntent(context: HowanaContext, userMessage: string): Promise<{ intent: any; intentCost: number | null; globalIntentInfos: any }> {
+    
+    const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
+    
+    // Si remainBilanQuestion est défini et supérieur à 0, retourner un intent personnalisé
+    if (remainBilanQuestion !== undefined && remainBilanQuestion > 1) {
+      console.log(`⏭️ [BILAN] Calcul d'intent ignoré car il reste ${remainBilanQuestion} question(s) de bilan`);
+      return {
+        intent: { 
+          type: "bilan_questionnaire",
+          universContext: {
+            chunks: []
+          }
+        },
+        intentCost: null,
+        globalIntentInfos: null
+      };
+    }
+
+    // Récupérer le globalIntentInfos existant en tant qu'objet complet
+    const existingGlobalIntentInfos = context.metadata?.['globalIntentInfos'] as BilanGlobalIntentInfos;
+    
+    // Calculer l'index de la question précédente (celle à laquelle l'utilisateur répond)
+    const previousQuestionIndex = remainBilanQuestion !== undefined && remainBilanQuestion >= 0
+      ? BILAN_QUESTIONS.length - remainBilanQuestion - 1
+      : -1;
+    
+    // Récupérer la dernière question
+    const previousQuestion = previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length
+      ? BILAN_QUESTIONS[previousQuestionIndex]?.question
+      : undefined;
+
+    // Modifier le globalIntentInfos en ajoutant la nouvelle question-réponse
+    const modifiedGlobalIntentInfos: BilanGlobalIntentInfos = {
+      ...existingGlobalIntentInfos,
+      bilanUniverContext: {
+        ...existingGlobalIntentInfos.bilanUniverContext,
+        questionResponses: {
+          ...existingGlobalIntentInfos.bilanUniverContext.questionResponses,
+          value: [
+            ...existingGlobalIntentInfos.bilanUniverContext.questionResponses.value,
+            previousQuestion 
+              ? { question: previousQuestion, response: userMessage }
+              : { response: userMessage }
+          ]
+        }
+      }
+    };
+
+    // Passer le globalIntentInfos modifié en JSON à la place du userMessage
+    return super.computeIntent(context, JSON.stringify(modifiedGlobalIntentInfos));
   }
 
   /**
@@ -721,61 +811,55 @@ IMPORTANT :
   protected override getIntentSchema(context: HowanaContext): ChatBotOutputSchema {
     const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
     
-    // Si on est encore dans les réponses aux questions, utiliser le schéma de chunks typés
-    if (remainBilanQuestion !== undefined && remainBilanQuestion > 0) {
-      return {
-        format: { 
-          type: "json_schema",
-          name: "BilanQuestionChunks",
-          schema: {
-            type: "object",
-            properties: {
-              type: {
-                type: "string",
-                enum: ["bilan_question"],
-                description: "Type d'intent pour les questions de bilan"
-              },
-              universContext: {
-                type: "object",
-                properties: {
-                  chunks: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        type: {
-                          type: "string",
-                          description: `Type du chunk extrait de la réponse de l'utilisateur. Valeurs possibles:
+    return {
+      format: { 
+        type: "json_schema",
+        name: "BilanQuestionChunks",
+        schema: {
+          type: "object",
+          properties: {
+            type: {
+              type: "string",
+              enum: ["bilan_question"],
+              description: "Type d'intent pour les questions de bilan"
+            },
+            universContext: {
+              type: "object",
+              properties: {
+                chunks: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      type: {
+                        type: "string",
+                        description: `Type du chunk extrait de la réponse de l'utilisateur. Valeurs possibles:
 - "user_situation_chunk": Fragment de situation utilisateur (de son point de vue, par exemple: "Je me sens...", "J'ai besoin...")
 - "i_have_symptome_chunk": Fragment décrivant un symptôme que l'utilisateur a (par exemple: "J'ai des maux de tête", "Je ressens de la fatigue")
 - "with_benefit_chunk": Fragment décrivant un bénéfice recherché (par exemple: "pour me détendre", "pour réduire le stress")`,
-                          enum: ["user_situation_chunk", "i_have_symptome_chunk", "with_benefit_chunk"]
-                        },
-                        text: {
-                          type: "string",
-                          description: "Texte du chunk extrait de la réponse de l'utilisateur"
-                        }
+                        enum: ["user_situation_chunk", "i_have_symptome_chunk", "with_benefit_chunk"]
                       },
-                      required: ["type", "text"],
-                      additionalProperties: false
+                      text: {
+                        type: "string",
+                        description: "Texte du chunk extrait de la réponse de l'utilisateur"
+                      }
                     },
-                    description: "Chunks typés extraits de la réponse de l'utilisateur pour mieux comprendre son état et ses besoins dans le contexte du bilan"
-                  }
-                },
-                required: ["chunks"],
-                additionalProperties: false
-              }
-            },
-            required: ["type", "universContext"],
-            additionalProperties: false
+                    required: ["type", "text"],
+                    additionalProperties: false
+                  },
+                  description: "Chunks typés extraits de la réponse de l'utilisateur pour mieux comprendre son état et ses besoins dans le contexte du bilan"
+                }
+              },
+              required: ["chunks"],
+              additionalProperties: false
+            }
           },
-          strict: true
-        }
-      };
-    }
-    
-    // Sinon, utiliser le schéma du parent (RecommendationChatBotService)
-    return super.getIntentSchema(context);
+          required: ["type", "universContext"],
+          additionalProperties: false
+        },
+        strict: true
+      }
+    };
   }
 
   /**
