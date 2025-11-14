@@ -1144,7 +1144,7 @@ IMPORTANT :
     const allActivities = activitiesResults.results || [];
     const howerAngels = howerAngelsResult.success ? (howerAngelsResult.data || []) : [];
     
-    console.log(`✅ [BILAN] ${allPractices.length} pratiques (avec doublons), ${allActivities.length} activités (avec doublons) et ${howerAngels.length} hower angels trouvés`);
+    console.log(`✅ [BILAN] ${allPractices.length} pratiques (avec doublons), ${allActivities.length} activités (avec doublons) et ${howerAngels.length} hower angels (avec doublons) trouvés`);
     
     // Compter les matchs par pratique et activité (pour identifier les tendances)
     const practiceMatchCount = new Map<string, number>(); // practiceId -> nombre de matchs
