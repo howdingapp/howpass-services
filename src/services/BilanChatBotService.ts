@@ -212,10 +212,12 @@ export class BilanChatBotService extends RecommendationChatBotService {
   public override async computeIntent(context: HowanaContext, userMessage: string): Promise<{ intent: any; intentCost: number | null; globalIntentInfos: any }> {
     
     const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
-    
+    const existingGlobalIntentInfos = context.metadata?.['globalIntentInfos'] as BilanGlobalIntentInfos | undefined;
+
     // Si remainBilanQuestion est défini et supérieur à 0, retourner un intent personnalisé
     if (remainBilanQuestion !== undefined && remainBilanQuestion > 1) {
       console.log(`⏭️ [BILAN] Calcul d'intent ignoré car il reste ${remainBilanQuestion} question(s) de bilan`);
+      // Récupérer le globalIntentInfos existant
       return {
         intent: { 
           type: "bilan_questionnaire",
@@ -224,13 +226,9 @@ export class BilanChatBotService extends RecommendationChatBotService {
           }
         },
         intentCost: null,
-        globalIntentInfos: null
+        globalIntentInfos: existingGlobalIntentInfos || null
       };
     }
-
-    // Récupérer le globalIntentInfos existant en tant qu'objet complet
-    const existingGlobalIntentInfos = context.metadata?.['globalIntentInfos'] as BilanGlobalIntentInfos;
-    
     // Calculer l'index de la question précédente (celle à laquelle l'utilisateur répond)
     const previousQuestionIndex = remainBilanQuestion !== undefined && remainBilanQuestion >= 0
       ? BILAN_QUESTIONS.length - remainBilanQuestion - 1
@@ -243,7 +241,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
 
     // Ajouter la nouvelle question-réponse aux réponses existantes
     const questionResponses = [
-      ...existingGlobalIntentInfos.bilanUniverContext.questionResponses.value,
+      ...existingGlobalIntentInfos!.bilanUniverContext.questionResponses.value,
       { question: previousQuestion, response: userMessage }
     ];
 
@@ -857,14 +855,7 @@ IMPORTANT :
   ): Promise<any> {
   
     // Récupérer le bilanUniverContext précédent depuis les métadonnées
-    const previousBilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as {
-      families?: { info?: string; value?: any[] };
-      practices?: { info?: string; value?: any[] };
-      activities?: { info?: string; value?: any[] };
-      howerAngels?: { info?: string; value?: any[] };
-      questionResponses?: { info?: string; value?: Array<{ question?: string; response: string }> };
-      computedAt?: string;
-    } | undefined;
+    const previousBilanUniverContext = (context.metadata?.['globalIntentInfos'] as BilanGlobalIntentInfos | undefined)?.bilanUniverContext;
     
     // Récupérer remainQuestion directement depuis le contexte
     const remainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
