@@ -61,6 +61,10 @@ export interface BilanGlobalIntentInfos {
       info: string;
       value: Array<{ question?: string; response: string }>;
     };
+    chunks: {
+      info: string;
+      value: BilanChunk[];
+    };
     computedAt?: string;
   };
 }
@@ -901,6 +905,7 @@ IMPORTANT :
         activities: universe.activities,
         howerAngels: universe.howerAngels,
         questionResponses: universe.questionResponses,
+        chunks: universe.chunks,
         computedAt: new Date().toISOString()
       }
     };
@@ -949,6 +954,10 @@ IMPORTANT :
       info: string;
       value: Array<{ question?: string; response: string }>;
     };
+    chunks: {
+      info: string;
+      value: BilanChunk[];
+    };
   }> {
     // Récupérer les chunks depuis l'intent (dans universContext)
     const chunks = intent?.universContext?.chunks || [];
@@ -968,6 +977,7 @@ IMPORTANT :
         activities: { info: string; value: any[] };
         howerAngels: { info: string; value: any[] };
         questionResponses: { info: string; value: Array<{ question?: string; response: string }> };
+        chunks: { info: string; value: BilanChunk[] };
       } = {
         families: {
           info: 'Liste des familles de pratiques bien-être identifiées à partir des réponses de l\'utilisateur, classées par score de dominance. Chaque famille représente un domaine de bien-être (ex: méditation, yoga, sophrologie, etc.) et contient le nombre de pratiques, activités et hower angels associés.',
@@ -988,6 +998,10 @@ IMPORTANT :
         questionResponses: {
           info: questionResponsesInfo,
           value: questionResponses || []
+        },
+        chunks: {
+          info: 'Chunks typés extraits de l\'intent calculé à partir des réponses de l\'utilisateur. Chaque chunk représente un fragment sémantique identifié dans les réponses.',
+          value: chunks
         }
       };
       return emptyResult;
@@ -1010,6 +1024,7 @@ IMPORTANT :
         activities: { info: string; value: any[] };
         howerAngels: { info: string; value: any[] };
         questionResponses: { info: string; value: Array<{ question?: string; response: string }> };
+        chunks: { info: string; value: BilanChunk[] };
       } = {
         families: {
           info: 'Liste des familles de pratiques bien-être identifiées à partir des réponses de l\'utilisateur, classées par score de dominance. Chaque famille représente un domaine de bien-être (ex: méditation, yoga, sophrologie, etc.) et contient le nombre de pratiques, activités et hower angels associés.',
@@ -1030,6 +1045,10 @@ IMPORTANT :
         questionResponses: {
           info: questionResponsesInfo,
           value: questionResponses || []
+        },
+        chunks: {
+          info: 'Chunks typés extraits de l\'intent calculé à partir des réponses de l\'utilisateur. Chaque chunk représente un fragment sémantique identifié dans les réponses.',
+          value: chunks
         }
       };
       return emptyResult;
@@ -1267,6 +1286,10 @@ IMPORTANT :
         info: string;
         value: Array<{ question?: string; response: string }>;
       };
+      chunks: {
+        info: string;
+        value: BilanChunk[];
+      };
     } = {
       families: {
         info: 'Liste des familles de pratiques bien-être identifiées à partir des réponses de l\'utilisateur, classées par score de dominance. Chaque famille représente un domaine de bien-être (ex: méditation, yoga, sophrologie, etc.) et contient le nombre de pratiques, activités et hower angels associés.',
@@ -1287,6 +1310,10 @@ IMPORTANT :
       questionResponses: {
         info: questionResponsesInfo,
         value: questionResponses || []
+      },
+      chunks: {
+        info: 'Chunks typés extraits de l\'intent calculé à partir des réponses de l\'utilisateur. Chaque chunk représente un fragment sémantique identifié dans les réponses.',
+        value: chunks
       }
     };
     
