@@ -809,8 +809,7 @@ IMPORTANT :
    * retourne un schéma de chunks typés, sinon retourne le schéma du parent
    */
   protected override getIntentSchema(context: HowanaContext): ChatBotOutputSchema {
-    const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
-    
+
     return {
       format: { 
         type: "json_schema",
