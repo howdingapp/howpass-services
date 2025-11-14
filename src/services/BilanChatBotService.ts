@@ -73,81 +73,82 @@ export interface BilanGlobalIntentInfos {
 /**
  * Questions de bilan prédéfinies avec leurs réponses suggérées
  * Chaque question inclut la question elle-même et des quick replies avec icônes emoji
+ * Chaque quickReply a ses propres chunks précalculés
  */
 const BILAN_QUESTIONS: Array<{
   question: string;
-  quickReplies: Array<{ text: string; icon?: string }>;
+  quickReplies: Array<{ text: string; icon?: string; chunks: BilanChunk[] }>;
 }> = [
   {
     question: "🌿 Comment te sens-tu en ce moment ?",
     quickReplies: [
-      { text: "😴 Fatigué(e) physiquement", icon: "sleep" },
-      { text: "😰 Stressé(e) ou tendu(e)", icon: "alert-triangle" },
-      { text: "🤯 Trop dans le mental / éparpillé(e)", icon: "zap" },
-      { text: "💧 Émotif(ve) ou hypersensible", icon: "heart" },
-      { text: "🌀 Démotivé(e) ou en perte de sens", icon: "smile" },
-      { text: "🌞 Bien, envie d'évoluer encore", icon: "heart" }
+      { text: "😴 Fatigué(e) physiquement", icon: "sleep", chunks: [{ type: "symptome_chunk", text: "fatigue physique" }] },
+      { text: "😰 Stressé(e) ou tendu(e)", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "stress tension" }] },
+      { text: "🤯 Trop dans le mental / éparpillé(e)", icon: "zap", chunks: [{ type: "user_situation_chunk", text: "mental éparpillé" }] },
+      { text: "💧 Émotif(ve) ou hypersensible", icon: "heart", chunks: [{ type: "symptome_chunk", text: "émotivité hypersensibilité" }] },
+      { text: "🌀 Démotivé(e) ou en perte de sens", icon: "smile", chunks: [{ type: "user_situation_chunk", text: "démotivation perte de sens" }] },
+      { text: "🌞 Bien, envie d'évoluer encore", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "envie d'évoluer" }] }
     ]
   },
   {
     question: "🌸 Ce que tu aimerais le plus améliorer",
     quickReplies: [
-      { text: "🌿 Mon énergie", icon: "zap" },
-      { text: "🛏️ Mon sommeil", icon: "sleep" },
-      { text: "🌸 Mon calme intérieur", icon: "heart" },
-      { text: "💆‍♀️ Ma relation à mon corps", icon: "heart" },
-      { text: "💫 Ma confiance / mon estime", icon: "heart" },
-      { text: "💖 Mes émotions", icon: "heart" },
-      { text: "⚖️ Mon équilibre global", icon: "smile" },
-      { text: "🔮 Mon alignement de vie", icon: "explore" }
+      { text: "🌿 Mon énergie", icon: "zap", chunks: [{ type: "with_benefit_chunk", text: "améliorer énergie" }] },
+      { text: "🛏️ Mon sommeil", icon: "sleep", chunks: [{ type: "with_benefit_chunk", text: "améliorer sommeil" }] },
+      { text: "🌸 Mon calme intérieur", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "retrouver calme intérieur" }] },
+      { text: "💆‍♀️ Ma relation à mon corps", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "améliorer relation au corps" }] },
+      { text: "💫 Ma confiance / mon estime", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "renforcer confiance estime" }] },
+      { text: "💖 Mes émotions", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "gérer émotions" }] },
+      { text: "⚖️ Mon équilibre global", icon: "smile", chunks: [{ type: "with_benefit_chunk", text: "retrouver équilibre global" }] },
+      { text: "🔮 Mon alignement de vie", icon: "explore", chunks: [{ type: "with_benefit_chunk", text: "alignement de vie" }] }
     ]
   },
   {
     question: "🌞 Ton rythme de vie",
     quickReplies: [
-      { text: "⏰ Je cours tout le temps / je suis souvent surmené(e)", icon: "zap" },
-      { text: "🌀 J'ai du mal à trouver du temps pour moi", icon: "alert-triangle" },
-      { text: "🌿 J'arrive à maintenir un bon équilibre", icon: "smile" },
-      { text: "🕊️ Ma vie est plutôt calme et posée", icon: "heart" }
+      { text: "⏰ Je cours tout le temps / je suis souvent surmené(e)", icon: "zap", chunks: [{ type: "user_situation_chunk", text: "surmenage rythme effréné" }] },
+      { text: "🌀 J'ai du mal à trouver du temps pour moi", icon: "alert-triangle", chunks: [{ type: "user_situation_chunk", text: "manque de temps pour soi" }] },
+      { text: "🌿 J'arrive à maintenir un bon équilibre", icon: "smile", chunks: [{ type: "user_situation_chunk", text: "bon équilibre de vie" }] },
+      { text: "🕊️ Ma vie est plutôt calme et posée", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "vie calme posée" }] }
     ]
   },
   {
     question: "💆‍♀️ Ton rapport à ton corps",
     quickReplies: [
-      { text: "🔸 Raide ou tendu(e)", icon: "alert-triangle" },
-      { text: "💤 Fatigué(e), sans énergie", icon: "sleep" },
-      { text: "🌸 En déséquilibre (hormones, digestion, sommeil)", icon: "alert-triangle" },
-      { text: "🌺 Bien dans l'ensemble, envie d'entretien", icon: "smile" },
-      { text: "🌫️ Déconnecté(e), besoin de me reconnecter à lui", icon: "explore" },
-      { text: "🔥 Avec des douleurs", icon: "alert-triangle" }
+      { text: "🔸 Raide ou tendu(e)", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "raideur tension corporelle" }] },
+      { text: "💤 Fatigué(e), sans énergie", icon: "sleep", chunks: [{ type: "symptome_chunk", text: "fatigue manque d'énergie" }] },
+      { text: "🌸 En déséquilibre (hormones, digestion, sommeil)", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "déséquilibre hormones digestion sommeil" }] },
+      { text: "🌺 Bien dans l'ensemble, envie d'entretien", icon: "smile", chunks: [{ type: "with_benefit_chunk", text: "entretien du corps" }] },
+      { text: "🌫️ Déconnecté(e), besoin de me reconnecter à lui", icon: "explore", chunks: [{ type: "user_situation_chunk", text: "déconnexion du corps" }] },
+      { text: "🔥 Avec des douleurs", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "douleurs" }] }
     ]
   },
   {
     question: "💖 Tes émotions",
     quickReplies: [
-      { text: "🌧️ Je me sens souvent submergé(e)", icon: "alert-triangle" },
-      { text: "🌊 Je garde tout pour moi", icon: "heart" },
-      { text: "💔 Je me sens vide ou triste", icon: "heart" },
-      { text: "💫 Je ressens beaucoup, parfois trop", icon: "heart" },
-      { text: "🌈 Je me sens stable et prêt(e) à m'élever", icon: "smile" },
-      { text: "😬 j'ai tendance à éviter les conflits", icon: "alert-triangle" }
+      { text: "🌧️ Je me sens souvent submergé(e)", icon: "alert-triangle", chunks: [{ type: "user_situation_chunk", text: "submergé par les émotions" }] },
+      { text: "🌊 Je garde tout pour moi", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "garder tout pour soi" }] },
+      { text: "💔 Je me sens vide ou triste", icon: "heart", chunks: [{ type: "symptome_chunk", text: "vide tristesse" }] },
+      { text: "💫 Je ressens beaucoup, parfois trop", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "ressentir beaucoup d'émotions" }] },
+      { text: "🌈 Je me sens stable et prêt(e) à m'élever", icon: "smile", chunks: [{ type: "with_benefit_chunk", text: "stabilité émotionnelle" }] },
+      { text: "😬 j'ai tendance à éviter les conflits", icon: "alert-triangle", chunks: [{ type: "user_situation_chunk", text: "éviter les conflits" }] }
     ]
   },
   {
     question: "🌿 Ton besoin du moment",
     quickReplies: [
-      { text: "⚡ Recharger mes batteries", icon: "zap" },
-      { text: "🌸 Lâcher prise", icon: "heart" },
-      { text: "🌼 Me reconnecter à moi-même", icon: "explore" },
-      { text: "🔮 Retrouver du sens", icon: "explore" },
-      { text: "💛 Me faire du bien simplement", icon: "heart" }
+      { text: "⚡ Recharger mes batteries", icon: "zap", chunks: [{ type: "with_benefit_chunk", text: "recharger batteries" }] },
+      { text: "🌸 Lâcher prise", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "lâcher prise" }] },
+      { text: "🌼 Me reconnecter à moi-même", icon: "explore", chunks: [{ type: "with_benefit_chunk", text: "se reconnecter à soi-même" }] },
+      { text: "🔮 Retrouver du sens", icon: "explore", chunks: [{ type: "with_benefit_chunk", text: "retrouver du sens" }] },
+      { text: "💛 Me faire du bien simplement", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "se faire du bien" }] }
     ]
   },
   {
     question: "🐾 As-tu un compagnon à quatre pattes ?",
     quickReplies: [
-      { text: "🐶 Oui, j'aimerais aussi prendre soin de mon animal", icon: "heart" },
-      { text: "🚫 Non, pas pour l'instant", icon: "smile" }
+      { text: "🐶 Oui, j'aimerais aussi prendre soin de mon animal", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "compagnon animal" }] },
+      { text: "🚫 Non, pas pour l'instant", icon: "smile", chunks: [] }
     ]
   },
   //{
@@ -219,7 +220,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
     const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
     const existingGlobalIntentInfos = context.metadata?.['globalIntentInfos'] as BilanGlobalIntentInfos | undefined;
 
-    // Si remainBilanQuestion est défini et supérieur à 0, retourner un intent personnalisé
+    // Si remainBilanQuestion est défini et supérieur à 1, retourner un intent personnalisé
     if (remainBilanQuestion !== undefined && remainBilanQuestion > 1) {
       console.log(`⏭️ [BILAN] Calcul d'intent ignoré car il reste ${remainBilanQuestion} question(s) de bilan`);
       // Récupérer le globalIntentInfos existant
@@ -234,6 +235,13 @@ export class BilanChatBotService extends RecommendationChatBotService {
         globalIntentInfos: existingGlobalIntentInfos || null
       };
     }
+    
+    // Dernière occurrence : cumuler les chunks des quickReplies au lieu d'appeler super.computeIntent
+    console.log(`📋 [BILAN] Dernière question, cumul des chunks des quickReplies`);
+    
+    // Récupérer toutes les questions-réponses existantes
+    const existingQuestionResponses = existingGlobalIntentInfos?.bilanUniverContext?.questionResponses?.value || [];
+    
     // Calculer l'index de la question précédente (celle à laquelle l'utilisateur répond)
     const previousQuestionIndex = remainBilanQuestion !== undefined && remainBilanQuestion >= 0
       ? BILAN_QUESTIONS.length - remainBilanQuestion - 1
@@ -243,17 +251,50 @@ export class BilanChatBotService extends RecommendationChatBotService {
     const previousQuestion = previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length
       ? BILAN_QUESTIONS[previousQuestionIndex]?.question
       : undefined;
-
-    // Ajouter la nouvelle question-réponse aux réponses existantes
+    
+    // Ajouter la nouvelle question-réponse
     const questionResponses = [
-      ...existingGlobalIntentInfos!.bilanUniverContext.questionResponses.value,
+      ...existingQuestionResponses,
       { question: previousQuestion, response: userMessage }
     ];
-
-    console.log(`📋 [BILAN] Intent pour le calcule univers: ${JSON.stringify(questionResponses)}`);
-
-    // Passer uniquement les réponses aux questions en JSON à la place du userMessage
-    return super.computeIntent(context, JSON.stringify(questionResponses));
+    
+    // Cumuler tous les chunks des quickReplies correspondant aux réponses
+    const allChunks: BilanChunk[] = [];
+    
+    for (let i = 0; i < questionResponses.length; i++) {
+      const qr = questionResponses[i];
+      if (!qr || !qr.response) continue;
+      
+      // Trouver l'index de la question dans BILAN_QUESTIONS
+      const questionIndex = BILAN_QUESTIONS.findIndex(q => q.question === qr.question);
+      if (questionIndex === -1) continue;
+      
+      const questionData = BILAN_QUESTIONS[questionIndex];
+      if (!questionData) continue;
+      
+      // Trouver le quickReply correspondant à la réponse
+      const matchingQuickReply = questionData.quickReplies.find(
+        qrItem => qrItem.text === qr.response || qrItem.text.replace(/[🌿😴😰🤯💧🌀🌞🌸🛏️💆‍♀️💫💖⚖️🔮🌞⏰🕊️🔸💤🌺🌫️🔥🌧️🌊💔💫🌈😬⚡🌼💛🐾🐶🚫]/g, '').trim() === qr.response.trim()
+      );
+      
+      if (matchingQuickReply && matchingQuickReply.chunks) {
+        allChunks.push(...matchingQuickReply.chunks);
+      }
+    }
+    
+    console.log(`✅ [BILAN] ${allChunks.length} chunks cumulés depuis les quickReplies`);
+    
+    // Retourner un intent avec les chunks cumulés
+    return {
+      intent: {
+        type: "bilan_questionnaire",
+        universContext: {
+          chunks: allChunks
+        }
+      },
+      intentCost: null,
+      globalIntentInfos: null
+    };
   }
 
   /**
