@@ -653,6 +653,163 @@ export class SupabaseService {
   }
 
   /**
+   * Compter les messages valides créés aujourd'hui par un utilisateur pour les conversations de type 'recommandation'
+   * Les messages valides sont ceux avec valid_for_limit = true
+   */
+  async countTodayValidRecommandationMessagesByUserId(userId: string): Promise<{
+    success: boolean;
+    count?: number;
+    error?: string;
+  }> {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Récupérer d'abord les conversations de type 'recommandation'
+      const { data: conversations, error: conversationsError } = await this.supabase
+        .from('howana_conversations')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('conversation_type', 'recommandation');
+
+      if (conversationsError) {
+        console.error('❌ Erreur lors de la récupération des conversations de recommandation:', conversationsError);
+        return {
+          success: false,
+          error: conversationsError.message
+        };
+      }
+
+      if (!conversations || conversations.length === 0) {
+        return {
+          success: true,
+          count: 0
+        };
+      }
+
+      const conversationIds = conversations.map(c => c.id);
+
+      // Compter les messages valides pour ces conversations
+      const { count, error } = await this.supabase
+        .from('ai_responses')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('valid_for_limit', true)
+        .in('conversation_id', conversationIds)
+        .gte('created_at', today.toISOString())
+        .lt('created_at', tomorrow.toISOString());
+
+      if (error) {
+        console.error('❌ Erreur lors du comptage des messages valides de recommandation du jour:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      return {
+        success: true,
+        count: count || 0
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors du comptage des messages valides de recommandation du jour:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Compter les conversations de type bilan créées dans une période donnée
+   * @param userId - ID de l'utilisateur
+   * @param periodCount - Nombre de périodes (ex: 7 pour 7 jours)
+   * @param periodType - Type de période: 'day', 'week', 'month' (depuis le début du mois courant), ou 'year' (depuis le début de l'année courante)
+   * @param excludeConversationID - ID de la conversation à exclure du comptage (optionnel)
+   */
+  async countBilanConversationsByUserIdInPeriod(
+    userId: string, 
+    periodCount: number, 
+    periodType: 'day' | 'week' | 'month' | 'year',
+    excludeConversationID?: string
+  ): Promise<{
+    success: boolean;
+    count?: number;
+    error?: string;
+  }> {
+    try {
+      const now = new Date();
+      const startDate = new Date(now);
+      startDate.setHours(0, 0, 0, 0);
+
+      // Calculer la date de début selon le type de période
+      if (periodType === 'day') {
+        startDate.setDate(startDate.getDate() - periodCount);
+      } else if (periodType === 'week') {
+        startDate.setDate(startDate.getDate() - (periodCount * 7));
+      } else if (periodType === 'month') {
+        // Depuis le début du mois courant (ou les N derniers mois)
+        // Début du mois il y a (periodCount - 1) mois
+        startDate.setDate(1);
+        startDate.setMonth(now.getMonth() - (periodCount - 1));
+        startDate.setFullYear(now.getFullYear());
+        // JavaScript gère automatiquement le changement d'année si le mois devient négatif
+      } else { // year
+        // Depuis le début de l'année courante (ou les N dernières années)
+        // Début de l'année il y a (periodCount - 1) années
+        startDate.setDate(1);
+        startDate.setMonth(0); // Janvier
+        startDate.setFullYear(now.getFullYear() - (periodCount - 1));
+      }
+
+      let query = this.supabase
+        .from('howana_conversations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('conversation_type', 'bilan')
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', now.toISOString());
+
+      // Exclure la conversation actuelle si spécifiée
+      if (excludeConversationID) {
+        query = query.neq('id', excludeConversationID);
+      }
+
+      const { count, error } = await query;
+
+      if (error) {
+        const periodText = periodType === 'day' 
+          ? `${periodCount} jour${periodCount > 1 ? 's' : ''}`
+          : periodType === 'week'
+          ? `${periodCount} semaine${periodCount > 1 ? 's' : ''}`
+          : periodType === 'month'
+          ? `${periodCount} mois`
+          : `${periodCount} année${periodCount > 1 ? 's' : ''}`;
+        console.error(`❌ Erreur lors du comptage des conversations bilan sur ${periodText}:`, error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      return {
+        success: true,
+        count: count || 0
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors du comptage des conversations bilan:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
    * Supprimer une réponse IA
    */
   async deleteAIResponse(responseId: string): Promise<{

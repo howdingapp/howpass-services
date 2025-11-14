@@ -44,11 +44,11 @@ export class IAController {
 
   /**
    * Vérifier si l'utilisateur a atteint la limite journalière de messages
-   * Cette vérification s'applique uniquement pour les conversations de type 'bilan' ou 'recommandation'
+   * Cette vérification s'applique uniquement pour les conversations de type 'recommandation'
    */
   private async checkDailyMessageLimit(userId: string, conversationType: string): Promise<boolean> {
-    // Ne vérifier la limite que pour les conversations de type 'bilan' ou 'recommandation'
-    if (conversationType !== 'bilan' && conversationType !== 'recommandation') {
+    // Ne vérifier la limite que pour les conversations de type 'recommandation'
+    if (conversationType !== 'recommandation') {
       return false;
     }
 
@@ -66,9 +66,10 @@ export class IAController {
         ? parseInt(process.env['MAX_DAILY_MESSAGES_FREE'] || '10', 10)
         : parseInt(process.env['MAX_DAILY_MESSAGES'] || '30', 10);
 
-      const result = await this.supabaseService.countTodayValidMessagesByUserId(userId);
+      // Compter uniquement les messages des conversations de type 'recommandation'
+      const result = await this.supabaseService.countTodayValidRecommandationMessagesByUserId(userId);
       if (!result.success) {
-        console.error('❌ Erreur lors de la récupération du nombre de messages valides du jour');
+        console.error('❌ Erreur lors de la récupération du nombre de messages valides de recommandation du jour');
         throw new Error(`Impossible de récupérer le nombre de messages valides: ${result.error || 'Erreur inconnue'}`);
       }
 
@@ -78,12 +79,118 @@ export class IAController {
       if (hasReachedLimit) {
         console.log(`⚠️ Limite journalière de messages atteinte: ${todayMessagesCount}/${maxDailyMessages} pour l'utilisateur ${userId} (profil: ${profilResult.profil || 'unknown'})`);
       } else {
-        console.log(`📊 Nombre de messages valides aujourd'hui: ${todayMessagesCount}/${maxDailyMessages} pour l'utilisateur ${userId} (profil: ${profilResult.profil || 'unknown'})`);
+        console.log(`📊 Nombre de messages valides de recommandation aujourd'hui: ${todayMessagesCount}/${maxDailyMessages} pour l'utilisateur ${userId} (profil: ${profilResult.profil || 'unknown'})`);
       }
       
       return hasReachedLimit;
     } catch (error) {
       console.error('❌ Erreur lors de la vérification de la limite journalière de messages:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Parser la limite de bilan au format 'nombre1:nombre2:type'
+   * Exemples: '1:7:day' (1 bilan tous les 7 jours), '2:1:week' (2 bilans toutes les 1 semaine), '1:1:month' (1 bilan depuis le début du mois courant), '1:1:year' (1 bilan depuis le début de l'année courante)
+   * Retourne [maxBilans, periodCount, periodType]
+   */
+  private parseBilanLimit(limitString: string): [number, number, 'day' | 'week' | 'month' | 'year'] {
+    const parts = limitString.split(':');
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) {
+      // Format invalide, utiliser les valeurs par défaut
+      console.warn(`⚠️ Format de limite de bilan invalide: ${limitString}, utilisation de 1:1:week par défaut`);
+      return [1, 1, 'week'];
+    }
+
+    const maxBilans = parseInt(parts[0].trim(), 10);
+    const periodCount = parseInt(parts[1].trim(), 10);
+    const periodType = parts[2].trim().toLowerCase() as 'day' | 'week' | 'month' | 'year';
+
+    if (isNaN(maxBilans) || maxBilans < 1) {
+      console.warn(`⚠️ Nombre de bilans invalide: ${parts[0]}, utilisation de 1 par défaut`);
+      return [1, periodCount || 1, periodType === 'day' || periodType === 'month' || periodType === 'year' ? periodType : 'week'];
+    }
+
+    if (isNaN(periodCount) || periodCount < 1) {
+      console.warn(`⚠️ Nombre de périodes invalide: ${parts[1]}, utilisation de 1 par défaut`);
+      return [maxBilans, 1, periodType === 'day' || periodType === 'month' || periodType === 'year' ? periodType : 'week'];
+    }
+
+    if (periodType !== 'day' && periodType !== 'week' && periodType !== 'month' && periodType !== 'year') {
+      console.warn(`⚠️ Type de période invalide: ${periodType}, utilisation de 'week' par défaut`);
+      return [maxBilans, periodCount, 'week'];
+    }
+
+    return [maxBilans, periodCount, periodType];
+  }
+
+  /**
+   * Vérifier si l'utilisateur a atteint la limite de bilans selon la période
+   * Cette vérification s'applique uniquement pour les conversations de type 'bilan'
+   * @param userId - ID de l'utilisateur
+   * @param conversationType - Type de conversation
+   * @param excludeConversationID - ID de la conversation à exclure du comptage (le bilan actuel)
+   */
+  private async checkBilanLimit(userId: string, conversationType: string, excludeConversationID?: string): Promise<boolean> {
+    // Ne vérifier la limite que pour les conversations de type 'bilan'
+    if (conversationType !== 'bilan') {
+      return false;
+    }
+
+    try {
+      // Récupérer le profil de l'utilisateur pour déterminer la limite
+      const profilResult = await this.supabaseService.getUserProfil(userId);
+      if (!profilResult.success) {
+        console.warn('⚠️ Impossible de récupérer le profil utilisateur, utilisation de la limite par défaut (non-free)');
+      }
+
+      const isFree = profilResult.profil === 'free';
+      
+      // Déterminer la limite selon le profil (format 'nombre1:nombre2:type')
+      const bilanLimitEnv = isFree 
+        ? (process.env['MAX_BILAN_FREE'] || '1:1:year')
+        : (process.env['MAX_BILAN'] || '1:2:week');
+      
+      const [maxBilans, periodCount, periodType] = this.parseBilanLimit(bilanLimitEnv);
+      
+      // Compter les bilans dans la période en excluant la conversation actuelle
+      const result = await this.supabaseService.countBilanConversationsByUserIdInPeriod(
+        userId, 
+        periodCount, 
+        periodType,
+        excludeConversationID
+      );
+      if (!result.success) {
+        console.error('❌ Erreur lors de la récupération du nombre de bilans dans la période');
+        throw new Error(`Impossible de récupérer le nombre de bilans: ${result.error || 'Erreur inconnue'}`);
+      }
+
+      const bilanCount = result.count || 0;
+      const hasReachedLimit = bilanCount >= maxBilans;
+      
+      if (hasReachedLimit) {
+        const periodText = periodType === 'day' 
+          ? (periodCount === 1 ? 'aujourd\'hui' : `sur les ${periodCount} derniers jours`)
+          : periodType === 'week'
+          ? (periodCount === 1 ? 'cette semaine' : `sur les ${periodCount} dernières semaines`)
+          : periodType === 'month'
+          ? (periodCount === 1 ? 'ce mois' : `sur les ${periodCount} derniers mois`)
+          : (periodCount === 1 ? 'cette année' : `sur les ${periodCount} dernières années`);
+        console.log(`⚠️ Limite de bilans atteinte: ${bilanCount}/${maxBilans} ${periodText} pour l'utilisateur ${userId} (profil: ${profilResult.profil || 'unknown'})`);
+      } else {
+        const periodText = periodType === 'day' 
+          ? (periodCount === 1 ? 'aujourd\'hui' : `sur les ${periodCount} derniers jours`)
+          : periodType === 'week'
+          ? (periodCount === 1 ? 'cette semaine' : `sur les ${periodCount} dernières semaines`)
+          : periodType === 'month'
+          ? (periodCount === 1 ? 'ce mois' : `sur les ${periodCount} derniers mois`)
+          : (periodCount === 1 ? 'cette année' : `sur les ${periodCount} dernières années`);
+        console.log(`📊 Nombre de bilans ${periodText}: ${bilanCount}/${maxBilans} pour l'utilisateur ${userId} (profil: ${profilResult.profil || 'unknown'})`);
+      }
+      
+      return hasReachedLimit;
+    } catch (error) {
+      console.error('❌ Erreur lors de la vérification de la limite de bilans:', error);
       return false;
     }
   }
@@ -145,13 +252,22 @@ export class IAController {
 
       console.log('🔍 Contexte de la conversation:', context);
 
-      // Vérifier la limite journalière de messages pour les tâches de type generate_response
+      // Vérifier les limites pour les tâches de type generate_response
       // Si la limite est atteinte, forcer la génération d'un résumé
-      // Cette vérification s'applique uniquement pour les conversations de type 'bilan' ou 'recommandation'
+      // Pour les recommandations : vérifier la limite de messages journaliers
+      // Pour les bilans : vérifier la limite de bilans selon la période
       if (taskData.type === 'generate_response') {
+        // Vérifier la limite de messages pour les recommandations
         const hasReachedDailyLimit = await this.checkDailyMessageLimit(req.user?.userId || '', context.type);
         if (hasReachedDailyLimit) {
           console.log(`🔄 Limite journalière de messages atteinte, conversion de generate_response en generate_summary`);
+          taskData.type = 'generate_summary';
+        }
+        
+        // Vérifier la limite de bilans pour les bilans (en excluant la conversation actuelle)
+        const hasReachedBilanLimit = await this.checkBilanLimit(req.user?.userId || '', context.type, taskData.conversationId);
+        if (hasReachedBilanLimit) {
+          console.log(`🔄 Limite de bilans atteinte, conversion de generate_response en generate_summary`);
           taskData.type = 'generate_summary';
         }
       }
