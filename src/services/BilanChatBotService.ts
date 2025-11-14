@@ -1,6 +1,7 @@
 import { RecommendationChatBotService } from './RecommendationChatBotService';
 import { HowanaBilanContext, HowanaContext } from '../types/repositories';
 import { ChatBotOutputSchema, RecommendationMessageResponse } from '../types';
+import { sortSearchResultsBySimilarity } from '../utils/searchUtils';
 
 /**
  * Type de chunk pour les questions de bilan
@@ -1112,9 +1113,15 @@ IMPORTANT :
     });
     const activities = Array.from(activitiesMap.values());
     
-    // Trier par matchCount décroissant
-    practices.sort((a, b) => (b.matchCount || 0) - (a.matchCount || 0));
-    activities.sort((a, b) => (b.matchCount || 0) - (a.matchCount || 0));
+    // Trier par matchCount décroissant, puis par similarité si matchCount égal
+    const sortedPractices = sortSearchResultsBySimilarity(practices);
+    const sortedActivities = sortSearchResultsBySimilarity(activities);
+    
+    // Remplacer les tableaux triés
+    practices.length = 0;
+    practices.push(...sortedPractices);
+    activities.length = 0;
+    activities.push(...sortedActivities);
     
     // Extraire les familles directement depuis les résultats de recherche (plus besoin de requêtes supplémentaires)
     const familyIds = new Set<string>();
