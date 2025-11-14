@@ -1057,33 +1057,64 @@ IMPORTANT :
     console.log(`🔍 [BILAN] Calcul de l'univers avec ${allChunksTexts.length} chunks de texte`);
     
     // Réaliser les recherches sémantiques en parallèle avec withMatchInfos pour récupérer les chunks qui ont permis le matching
+    // clearDoublons = false pour pouvoir compter tous les matchs et les différents chunks qui ont matché
     const [practicesResults, activitiesResults, howerAngelsResult] = await Promise.all([
-      this.supabaseService.searchPracticesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
-      this.supabaseService.searchActivitiesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
-      this.supabaseService.searchHowerAngelsByUserSituation(allChunksTexts, 10, true) // withMatchInfos = true
+      this.supabaseService.searchPracticesBySituationChunks(allChunksTexts, true, false), // withMatchInfos = true, clearDoublons = false
+      this.supabaseService.searchActivitiesBySituationChunks(allChunksTexts, true, false), // withMatchInfos = true, clearDoublons = false
+      this.supabaseService.searchHowerAngelsByUserSituation(allChunksTexts, 10, true, false) // withMatchInfos = true, clearDoublons = false
     ]);
     
-    const practices = practicesResults.results || [];
-    const activities = activitiesResults.results || [];
+    const allPractices = practicesResults.results || [];
+    const allActivities = activitiesResults.results || [];
     const howerAngels = howerAngelsResult.success ? (howerAngelsResult.data || []) : [];
     
-    console.log(`✅ [BILAN] ${practices.length} pratiques, ${activities.length} activités et ${howerAngels.length} hower angels trouvés`);
+    console.log(`✅ [BILAN] ${allPractices.length} pratiques (avec doublons), ${allActivities.length} activités (avec doublons) et ${howerAngels.length} hower angels trouvés`);
     
     // Compter les matchs par pratique et activité (pour identifier les tendances)
     const practiceMatchCount = new Map<string, number>(); // practiceId -> nombre de matchs
     const activityMatchCount = new Map<string, number>(); // activityId -> nombre de matchs
     
     // Compter les occurrences de chaque pratique
-    practices.forEach((practice: any) => {
+    allPractices.forEach((practice: any) => {
       const currentCount = practiceMatchCount.get(practice.id) || 0;
       practiceMatchCount.set(practice.id, currentCount + 1);
     });
     
     // Compter les occurrences de chaque activité
-    activities.forEach((activity: any) => {
+    allActivities.forEach((activity: any) => {
       const currentCount = activityMatchCount.get(activity.id) || 0;
       activityMatchCount.set(activity.id, currentCount + 1);
     });
+    
+    // Dédupliquer les pratiques en gardant le meilleur score et en ajoutant le matchCount
+    const practicesMap = new Map<string, any>();
+    allPractices.forEach((practice: any) => {
+      const existing = practicesMap.get(practice.id);
+      if (!existing || (practice.relevanceScore > existing.relevanceScore)) {
+        practicesMap.set(practice.id, {
+          ...practice,
+          matchCount: practiceMatchCount.get(practice.id) || 1
+        });
+      }
+    });
+    const practices = Array.from(practicesMap.values());
+    
+    // Dédupliquer les activités en gardant le meilleur score et en ajoutant le matchCount
+    const activitiesMap = new Map<string, any>();
+    allActivities.forEach((activity: any) => {
+      const existing = activitiesMap.get(activity.id);
+      if (!existing || (activity.relevanceScore > existing.relevanceScore)) {
+        activitiesMap.set(activity.id, {
+          ...activity,
+          matchCount: activityMatchCount.get(activity.id) || 1
+        });
+      }
+    });
+    const activities = Array.from(activitiesMap.values());
+    
+    // Trier par matchCount décroissant
+    practices.sort((a, b) => (b.matchCount || 0) - (a.matchCount || 0));
+    activities.sort((a, b) => (b.matchCount || 0) - (a.matchCount || 0));
     
     // Extraire les familles directement depuis les résultats de recherche (plus besoin de requêtes supplémentaires)
     const familyIds = new Set<string>();
@@ -1093,13 +1124,15 @@ IMPORTANT :
     const familyMatchCount = new Map<string, number>(); // familyId -> nombre total de matchs
     
     // Extraire les familles depuis les pratiques et compter les matchs
+    // Une pratique qui a matché X fois contribue pour X à sa famille
     practices.forEach((practice: any) => {
       if (practice.familyId) {
         familyIds.add(practice.familyId);
         practiceFamilyMap.set(practice.id, practice.familyId);
         
         // Compter les matchs pour cette famille (via cette pratique)
-        const matchCount = practiceMatchCount.get(practice.id) || 1;
+        // Utiliser le matchCount de la pratique (qui peut être > 1 si elle a matché plusieurs fois)
+        const matchCount = practice.matchCount || 1;
         const currentFamilyCount = familyMatchCount.get(practice.familyId) || 0;
         familyMatchCount.set(practice.familyId, currentFamilyCount + matchCount);
         
@@ -1114,18 +1147,15 @@ IMPORTANT :
       }
     });
     
-    // Extraire les familles depuis les activités et compter les matchs
+    // Extraire les familles depuis les activités (uniquement pour le mapping, pas pour le comptage)
+    // Les activités ne contribuent PAS au comptage des familles car elles dépendent des utilisateurs
+    // et peuvent biaiser les statistiques. Seules les pratiques (fixes) contribuent.
     activities.forEach((activity: any) => {
       if (activity.familyId) {
-        familyIds.add(activity.familyId);
+        // On garde le mapping pour référence, mais on ne compte pas les matchs
         activityFamilyMap.set(activity.id, activity.familyId);
         
-        // Compter les matchs pour cette famille (via cette activité)
-        const matchCount = activityMatchCount.get(activity.id) || 1;
-        const currentFamilyCount = familyMatchCount.get(activity.familyId) || 0;
-        familyMatchCount.set(activity.familyId, currentFamilyCount + matchCount);
-        
-        // Stocker les informations de la famille si disponibles (priorité aux données des activités si plus complètes)
+        // Stocker les informations de la famille si disponibles (uniquement si pas déjà présente)
         if (activity.familyName && !familiesMap.has(activity.familyId)) {
           familiesMap.set(activity.familyId, {
             id: activity.familyId,
@@ -1160,13 +1190,15 @@ IMPORTANT :
     });
     
     // Compter les pratiques par famille (seules les pratiques comptent pour la dominance)
+    // Une pratique qui a matché X fois contribue pour X à sa famille
     practices.forEach((practice: any) => {
       const familyId = practiceFamilyMap.get(practice.id);
       if (familyId) {
         const family = familyDominance.get(familyId);
         if (family) {
-          family.practicesCount++;
-          family.practicesScore += practice.relevanceScore || 0;
+          const matchCount = practice.matchCount || 1;
+          family.practicesCount += matchCount; // Contribue pour X si elle a matché X fois
+          family.practicesScore += (practice.relevanceScore || 0) * matchCount; // Score multiplié par le nombre de matchs
         }
       }
     });
@@ -1194,17 +1226,16 @@ IMPORTANT :
     console.log(`📊 [BILAN] Classement de ${familiesWithDominance.length} familles par dominance:`, 
       familiesWithDominance.map(f => `${f.name} (${f.dominanceScore.toFixed(2)}, ${f.matchCount} matchs)`).join(', '));
     
-    // Enrichir les pratiques et activités avec leur compteur de match et les chunks qui ont permis le matching
+    // Enrichir les pratiques et activités avec les chunks qui ont permis le matching
     // chunkText contient le fragment de chunk de la base de données qui a matché
+    // matchCount est déjà présent dans les pratiques et activités après déduplication
     const practicesWithMatchCount = practices.map((practice: any) => ({
       ...practice,
-      matchCount: practiceMatchCount.get(practice.id) || 1,
       matchingChunks: practice.chunkText || null // Fragment de chunk de la BD qui a permis le matching
     }));
     
     const activitiesWithMatchCount = activities.map((activity: any) => ({
       ...activity,
-      matchCount: activityMatchCount.get(activity.id) || 1,
       matchingChunks: activity.chunkText || null // Fragment de chunk de la BD qui a permis le matching
     }));
     
