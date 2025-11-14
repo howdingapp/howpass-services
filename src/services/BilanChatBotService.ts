@@ -808,7 +808,7 @@ IMPORTANT :
    * Si on est encore dans les réponses aux questions (remainBilanQuestion > 0),
    * retourne un schéma de chunks typés, sinon retourne le schéma du parent
    */
-  protected override getIntentSchema(context: HowanaContext): ChatBotOutputSchema {
+  protected override getIntentSchema(_context: HowanaContext): ChatBotOutputSchema {
 
     return {
       format: { 
