@@ -241,27 +241,16 @@ export class BilanChatBotService extends RecommendationChatBotService {
       ? BILAN_QUESTIONS[previousQuestionIndex]?.question
       : undefined;
 
-    // Modifier le globalIntentInfos en ajoutant la nouvelle question-réponse
-    const modifiedGlobalIntentInfos: BilanGlobalIntentInfos = {
-      ...existingGlobalIntentInfos,
-      bilanUniverContext: {
-        ...existingGlobalIntentInfos.bilanUniverContext,
-        questionResponses: {
-          ...existingGlobalIntentInfos.bilanUniverContext.questionResponses,
-          value: [
-            ...existingGlobalIntentInfos.bilanUniverContext.questionResponses.value,
-            previousQuestion 
-              ? { question: previousQuestion, response: userMessage }
-              : { response: userMessage }
-          ]
-        }
-      }
-    };
+    // Ajouter la nouvelle question-réponse aux réponses existantes
+    const questionResponses = [
+      ...existingGlobalIntentInfos.bilanUniverContext.questionResponses.value,
+      { question: previousQuestion, response: userMessage }
+    ];
 
-    console.log(`📋 [BILAN] Intent pour le calcule univers: ${JSON.stringify(modifiedGlobalIntentInfos)}`);
+    console.log(`📋 [BILAN] Intent pour le calcule univers: ${JSON.stringify(questionResponses)}`);
 
-    // Passer le globalIntentInfos modifié en JSON à la place du userMessage
-    return super.computeIntent(context, JSON.stringify(modifiedGlobalIntentInfos));
+    // Passer uniquement les réponses aux questions en JSON à la place du userMessage
+    return super.computeIntent(context, JSON.stringify(questionResponses));
   }
 
   /**
