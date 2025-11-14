@@ -384,6 +384,10 @@ export class IAController {
       const validForLimit = aiResponseId === taskData.aiResponseId;
 
       // 4. Préparer les données de mise à jour
+      const remainQuestion = updatedContext.type === 'bilan' 
+        ? (updatedContext.metadata?.['remainBilanQuestion'] as number | undefined)
+        : undefined;
+
       const updateData: any = {
         response_text: JSON.stringify(iaResponse),
         next_response_id: null, // Dernière réponse, pas de suivant
@@ -400,7 +404,8 @@ export class IAController {
           status: 'completed',
           recommendations: iaResponse.recommendations || updatedContext.recommendations || { activities: [], practices: [] },
           hasRecommendations: iaResponse.hasRecommendations || ((updatedContext.recommendations?.activities?.length || 0) > 0 || (updatedContext.recommendations?.practices?.length || 0) > 0),
-          recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](updatedContext)
+          recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](updatedContext),
+          ...(remainQuestion !== undefined && { remainQuestion })
         }
       };
 
@@ -528,6 +533,10 @@ export class IAController {
       const validForLimit = aiResponseId === taskData.aiResponseId;
 
       // 6. Préparer les données de mise à jour
+      const remainQuestion = updatedContext.type === 'bilan' 
+        ? (updatedContext.metadata?.['remainBilanQuestion'] as number | undefined)
+        : undefined;
+
       const updateData: any = {
         response_text: JSON.stringify(iaResponse),
         next_response_id: nextResponseId,
@@ -544,7 +553,8 @@ export class IAController {
           status: 'completed',
           recommendations: iaResponse.recommendations || updatedContext.recommendations || { activities: [], practices: [] },
           hasRecommendations: iaResponse.hasRecommendations || ((updatedContext.recommendations?.activities?.length || 0) > 0 || (updatedContext.recommendations?.practices?.length || 0) > 0),
-          recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](updatedContext)
+          recommendationRequiredForSummary: chatBotService['recommendationRequiredForSummary'](updatedContext),
+          ...(remainQuestion !== undefined && { remainQuestion })
         }
       };
 
