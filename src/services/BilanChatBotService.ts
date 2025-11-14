@@ -258,6 +258,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
       }
     };
 
+    console.log(`📋 [BILAN] Intent pour le calcule univers: ${JSON.stringify(modifiedGlobalIntentInfos)}`);
+
     // Passer le globalIntentInfos modifié en JSON à la place du userMessage
     return super.computeIntent(context, JSON.stringify(modifiedGlobalIntentInfos));
   }
