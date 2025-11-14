@@ -698,13 +698,20 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
           .map((msg: any) => `${msg.type === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`)
           .join('\n');
 
+        // Ajouter summaryContextHints au message s'il est présent
+        const summaryContextHints = context.metadata?.['summaryContextHints'] as string | undefined;
+        let userMessageText = `Analyse cette conversation et génère un résumé structuré:\n${conversationText}`;
+        if (summaryContextHints) {
+          userMessageText += `\n\nDerniers analyses disponibles:\n${summaryContextHints}`;
+        }
+
         const summarySchema = this.getSummaryOutputSchema(context);
         const result = await this.openai.responses.create({
           model: this.AI_MODEL_QUALITY,
           input: [
             {
               role: "user",
-              content: [{ type: "input_text", text: `Analyse cette conversation et génère un résumé structuré:\n${conversationText}` }],
+              content: [{ type: "input_text", text: userMessageText }],
             },
             {
               type: "message",

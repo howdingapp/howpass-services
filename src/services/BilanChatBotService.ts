@@ -355,15 +355,16 @@ export class BilanChatBotService extends RecommendationChatBotService {
     } | undefined;
 
     // Extraire les pratiques et activités de l'univers
-    const practicesFromUniverse = bilanUniverContext?.practices?.value || [];
-    const activitiesFromUniverse = bilanUniverContext?.activities?.value || [];
+    // Limiter à 10 meilleurs résultats pour chaque groupe pour éviter de surcharger le summary
+    const practicesFromUniverse = (bilanUniverContext?.practices?.value || []).slice(0, 10);
+    const activitiesFromUniverse = (bilanUniverContext?.activities?.value || []).slice(0, 10);
 
     // Extraire uniquement les IDs pour créer les enums
     const availableActivityIds = activitiesFromUniverse.map((item: any) => item.id).filter((id: any) => id);
     const availablePracticeIds = practicesFromUniverse.map((item: any) => item.id).filter((id: any) => id);
     const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
 
-    console.log(`📋 [BILAN] Contraintes générées depuis l'univers avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques (IDs uniquement)`);
+    console.log(`📋 [BILAN] Contraintes générées depuis l'univers avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques (IDs uniquement, limité aux 10 meilleurs)`);
 
     return {
       availableActivityIds,
@@ -534,9 +535,6 @@ export class BilanChatBotService extends RecommendationChatBotService {
     cost_cached_input?: number | null;
     cost_output?: number | null;
   }> {
-    // Appeler la méthode parente pour générer le résumé
-    const result = await super.generateConversationSummary(context);
-
     // Récupérer l'univers depuis les métadonnées
     const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as {
       families?: { info?: string; value?: any[] };
@@ -546,6 +544,42 @@ export class BilanChatBotService extends RecommendationChatBotService {
       questionResponses?: { info?: string; value?: Array<{ question?: string; response: string }> };
       computedAt?: string;
     } | undefined;
+
+    // Créer summaryContextHints avec l'univers tronqué à 10 résultats pour chaque groupe
+    if (bilanUniverContext) {
+      const truncatedUniverse = {
+        families: bilanUniverContext.families || { info: '', value: [] },
+        practices: {
+          ...(bilanUniverContext.practices || { info: '', value: [] }),
+          value: (bilanUniverContext.practices?.value || []).slice(0, 10)
+        },
+        activities: {
+          ...(bilanUniverContext.activities || { info: '', value: [] }),
+          value: (bilanUniverContext.activities?.value || []).slice(0, 10)
+        },
+        howerAngels: {
+          ...(bilanUniverContext.howerAngels || { info: '', value: [] }),
+          value: (bilanUniverContext.howerAngels?.value || []).slice(0, 10)
+        },
+        questionResponses: bilanUniverContext.questionResponses || { info: '', value: [] },
+        computedAt: bilanUniverContext.computedAt
+      };
+
+      // Créer le texte de summaryContextHints avec l'univers tronqué
+      const summaryContextHints = `CONTEXTE DE L'UNIVERS DE L'UTILISATEUR (limité aux 10 meilleurs résultats par catégorie pour éviter de surcharger):\n\n${JSON.stringify(truncatedUniverse, null, 2)}`;
+
+      // Ajouter summaryContextHints aux métadonnées du contexte
+      context = {
+        ...context,
+        metadata: {
+          ...context.metadata,
+          summaryContextHints
+        }
+      };
+    }
+
+    // Appeler la méthode parente pour générer le résumé
+    const result = await super.generateConversationSummary(context);
 
     // Si l'univers existe, enrichir les recommandations avec les noms et ajouter l'univers au résumé
     if (bilanUniverContext) {
