@@ -1306,6 +1306,8 @@ export class SupabaseService {
         };
         if (withMatchInfos) {
           result.typicalSituations = r?.typical_situations;
+          result.chunkId = r?.chunk_id ?? null;
+          result.chunkText = r?.chunk_text ?? null;
         }
         return result;
       };
@@ -1388,6 +1390,8 @@ export class SupabaseService {
         };
         if (withMatchInfos) {
           result.typicalSituations = r?.typical_situations;
+          result.chunkId = r?.chunk_id ?? null;
+          result.chunkText = r?.chunk_text ?? null;
         }
         return result;
       };
@@ -2174,6 +2178,8 @@ export class SupabaseService {
           };
           if (withMatchInfos) {
             result.typicalSituations = user.typical_situations;
+            result.chunkId = user?.chunk_id ?? null;
+            result.chunkText = user?.chunk_text ?? null;
           }
           return result;
         });

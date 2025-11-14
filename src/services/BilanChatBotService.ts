@@ -1056,11 +1056,11 @@ IMPORTANT :
     
     console.log(`🔍 [BILAN] Calcul de l'univers avec ${allChunksTexts.length} chunks de texte`);
     
-    // Réaliser les recherches sémantiques en parallèle
+    // Réaliser les recherches sémantiques en parallèle avec withMatchInfos pour récupérer les chunks qui ont permis le matching
     const [practicesResults, activitiesResults, howerAngelsResult] = await Promise.all([
-      this.supabaseService.searchPracticesBySituationChunks(allChunksTexts),
-      this.supabaseService.searchActivitiesBySituationChunks(allChunksTexts),
-      this.supabaseService.searchHowerAngelsByUserSituation(allChunksTexts, 10) // Limiter à 10 hower angels
+      this.supabaseService.searchPracticesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
+      this.supabaseService.searchActivitiesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
+      this.supabaseService.searchHowerAngelsByUserSituation(allChunksTexts, 10, true) // withMatchInfos = true
     ]);
     
     const practices = practicesResults.results || [];
@@ -1241,15 +1241,24 @@ IMPORTANT :
     console.log(`📊 [BILAN] Classement de ${familiesWithDominance.length} familles par dominance:`, 
       familiesWithDominance.map(f => `${f.name} (${f.dominanceScore.toFixed(2)}, ${f.matchCount} matchs)`).join(', '));
     
-    // Enrichir les pratiques et activités avec leur compteur de match
+    // Enrichir les pratiques et activités avec leur compteur de match et les chunks qui ont permis le matching
+    // chunkText contient le fragment de chunk de la base de données qui a matché
     const practicesWithMatchCount = practices.map((practice: any) => ({
       ...practice,
-      matchCount: practiceMatchCount.get(practice.id) || 1
+      matchCount: practiceMatchCount.get(practice.id) || 1,
+      matchingChunks: practice.chunkText || null // Fragment de chunk de la BD qui a permis le matching
     }));
     
     const activitiesWithMatchCount = activities.map((activity: any) => ({
       ...activity,
-      matchCount: activityMatchCount.get(activity.id) || 1
+      matchCount: activityMatchCount.get(activity.id) || 1,
+      matchingChunks: activity.chunkText || null // Fragment de chunk de la BD qui a permis le matching
+    }));
+    
+    // Enrichir les hower angels avec les chunks qui ont permis le matching
+    const howerAngelsWithChunks = howerAngels.map((howerAngel: any) => ({
+      ...howerAngel,
+      matchingChunks: howerAngel.chunkText || null // Fragment de chunk de la BD qui a permis le matching
     }));
     
     // Construire les informations pour questionResponses
@@ -1305,7 +1314,7 @@ IMPORTANT :
       },
       howerAngels: {
         info: 'Liste des hower angels (praticiens) HOW PASS identifiés comme pertinents pour l\'utilisateur basés sur ses réponses au questionnaire. Chaque hower angel inclut un score de pertinence et les activités/pratiques qu\'il propose.',
-        value: howerAngels
+        value: howerAngelsWithChunks
       },
       questionResponses: {
         info: questionResponsesInfo,
