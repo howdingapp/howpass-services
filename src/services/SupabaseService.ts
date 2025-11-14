@@ -582,6 +582,48 @@ export class SupabaseService {
   }
 
   /**
+   * Récupérer le rôle d'un utilisateur
+   */
+  async getUserRole(userId: string): Promise<{
+    success: boolean;
+    role?: string;
+    error?: string;
+  }> {
+    try {
+      const { data: roleData, error } = await this.supabase
+        .from('user_roles')
+        .select(`
+          roles(name)
+        `)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération du rôle utilisateur:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      const role = roleData && Array.isArray(roleData) && roleData.length > 0 
+        ? ((roleData[0]?.roles ?? {}) as any).name || roleData[0]?.roles?.[0]?.name || undefined
+        : undefined;
+
+      return {
+        success: true,
+        role: role || null
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération du rôle utilisateur:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
    * Compter les messages valides créés aujourd'hui par un utilisateur
    * Les messages valides sont ceux avec valid_for_limit = true et qui ne proviennent pas de conversations de type 'activity'
    */

@@ -256,19 +256,28 @@ export class IAController {
       // Si la limite est atteinte, forcer la génération d'un résumé
       // Pour les recommandations : vérifier la limite de messages journaliers
       // Pour les bilans : vérifier la limite de bilans selon la période
+      // Les administrateurs n'ont pas de limites
       if (taskData.type === 'generate_response') {
-        // Vérifier la limite de messages pour les recommandations
-        const hasReachedDailyLimit = await this.checkDailyMessageLimit(req.user?.userId || '', context.type);
-        if (hasReachedDailyLimit) {
-          console.log(`🔄 Limite journalière de messages atteinte, conversion de generate_response en generate_summary`);
-          taskData.type = 'generate_summary';
-        }
-        
-        // Vérifier la limite de bilans pour les bilans (en excluant la conversation actuelle)
-        const hasReachedBilanLimit = await this.checkBilanLimit(req.user?.userId || '', context.type, taskData.conversationId);
-        if (hasReachedBilanLimit) {
-          console.log(`🔄 Limite de bilans atteinte, conversion de generate_response en generate_summary`);
-          taskData.type = 'generate_summary';
+        // Vérifier si l'utilisateur est admin
+        const userRoleResult = await this.supabaseService.getUserRole(req.user?.userId || '');
+        const isAdmin = userRoleResult.success && userRoleResult.role === 'admin';
+
+        if (!isAdmin) {
+          // Vérifier la limite de messages pour les recommandations
+          const hasReachedDailyLimit = await this.checkDailyMessageLimit(req.user?.userId || '', context.type);
+          if (hasReachedDailyLimit) {
+            console.log(`🔄 Limite journalière de messages atteinte, conversion de generate_response en generate_summary`);
+            taskData.type = 'generate_summary';
+          }
+          
+          // Vérifier la limite de bilans pour les bilans (en excluant la conversation actuelle)
+          const hasReachedBilanLimit = await this.checkBilanLimit(req.user?.userId || '', context.type, taskData.conversationId);
+          if (hasReachedBilanLimit) {
+            console.log(`🔄 Limite de bilans atteinte, conversion de generate_response en generate_summary`);
+            taskData.type = 'generate_summary';
+          }
+        } else {
+          console.log(`👑 Utilisateur admin détecté, aucune limite appliquée`);
         }
       }
 
