@@ -172,7 +172,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
     const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
     
     // Si remainBilanQuestion est défini et supérieur à 0, ne pas calculer l'intent
-    if (remainBilanQuestion !== undefined && remainBilanQuestion <= 1) {
+    if (remainBilanQuestion !== undefined && remainBilanQuestion > 1) {
       console.log(`⏭️ [BILAN] Calcul d'intent ignoré car il reste ${remainBilanQuestion} question(s) de bilan`);
       return false;
     }
