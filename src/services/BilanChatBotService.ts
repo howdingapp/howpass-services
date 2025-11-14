@@ -205,17 +205,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
   /**
    * Redéfinit shouldComputeIntent pour retourner false tant qu'il reste des questions de bilan
    */
-  protected override shouldComputeIntent(context: HowanaContext): boolean {
-    const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
-    
-    // Si remainBilanQuestion est défini et supérieur à 0, ne pas calculer l'intent
-    if (remainBilanQuestion !== undefined && remainBilanQuestion > 1) {
-      console.log(`⏭️ [BILAN] Calcul d'intent ignoré car il reste ${remainBilanQuestion} question(s) de bilan`);
-      return false;
-    }
-    
-    // Sinon, utiliser le comportement par défaut
-    return super.shouldComputeIntent(context);
+  protected override shouldComputeIntent(_context: HowanaContext): boolean {
+    return true;
   }
 
   public override async computeIntent(context: HowanaContext, userMessage: string): Promise<{ intent: any; intentCost: number | null; globalIntentInfos: any }> {
@@ -873,69 +864,65 @@ IMPORTANT :
     context: HowanaContext, 
     userMessage?: string
   ): Promise<any> {
-    // Vérifier si c'est un intent de type bilan_question
-    if (intent?.type === "bilan_question") {
-      // Récupérer le bilanUniverContext précédent depuis les métadonnées
-      const previousBilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as {
-        families?: { info?: string; value?: any[] };
-        practices?: { info?: string; value?: any[] };
-        activities?: { info?: string; value?: any[] };
-        howerAngels?: { info?: string; value?: any[] };
-        questionResponses?: { info?: string; value?: Array<{ question?: string; response: string }> };
-        computedAt?: string;
-      } | undefined;
-      
-      // Récupérer remainQuestion directement depuis le contexte
-      const remainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
-      
-      // Calculer l'index de la question précédente (celle à laquelle l'utilisateur répond)
-      // Si remainQuestion est le nombre de questions restantes, la question précédente est à l'index:
-      // BILAN_QUESTIONS.length - remainQuestion - 1
-      // (car la question actuelle est à l'index BILAN_QUESTIONS.length - remainQuestion)
-      const previousQuestionIndex = remainQuestion !== undefined && remainQuestion >= 0
-        ? BILAN_QUESTIONS.length - remainQuestion - 1
-        : -1;
-      
-      // Récupérer la question précédente directement depuis BILAN_QUESTIONS
-      const previousQuestion = previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length
-        ? BILAN_QUESTIONS[previousQuestionIndex]?.question
-        : undefined;
-      
-      // Créer l'objet { question, response } pour la question actuelle
-      const currentQuestionResponse: { question?: string; response: string } | undefined = userMessage ? {
-        ...(previousQuestion ? { question: previousQuestion } : {}),
-        response: userMessage
-      } : undefined;
-      
-      // Accumuler les questions-réponses précédentes avec la nouvelle
-      const questionResponses: Array<{ question?: string; response: string }> = 
-        previousBilanUniverContext?.questionResponses?.value ? [...previousBilanUniverContext.questionResponses.value] : [];
-      
-      // Ajouter la nouvelle question-réponse si elle existe
-      if (currentQuestionResponse) {
-        questionResponses.push(currentQuestionResponse);
-      }
-      
-      // Calculer l'univers avec l'intent (qui contient les chunks) et toutes les questions-réponses
-      const totalQuestions = BILAN_QUESTIONS.length;
-      const answeredQuestions = totalQuestions - (remainQuestion || 0);
-      const universe = await this.computeUniverse(intent as BilanQuestionIntent, questionResponses, totalQuestions, answeredQuestions);
-      
-      // Créer globalIntentInfos avec les résultats de l'univers
-      return {
-        bilanUniverContext: {
-          families: universe.families,
-          practices: universe.practices,
-          activities: universe.activities,
-          howerAngels: universe.howerAngels,
-          questionResponses: universe.questionResponses,
-          computedAt: new Date().toISOString()
-        }
-      };
+  
+    // Récupérer le bilanUniverContext précédent depuis les métadonnées
+    const previousBilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as {
+      families?: { info?: string; value?: any[] };
+      practices?: { info?: string; value?: any[] };
+      activities?: { info?: string; value?: any[] };
+      howerAngels?: { info?: string; value?: any[] };
+      questionResponses?: { info?: string; value?: Array<{ question?: string; response: string }> };
+      computedAt?: string;
+    } | undefined;
+    
+    // Récupérer remainQuestion directement depuis le contexte
+    const remainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
+    
+    // Calculer l'index de la question précédente (celle à laquelle l'utilisateur répond)
+    // Si remainQuestion est le nombre de questions restantes, la question précédente est à l'index:
+    // BILAN_QUESTIONS.length - remainQuestion - 1
+    // (car la question actuelle est à l'index BILAN_QUESTIONS.length - remainQuestion)
+    const previousQuestionIndex = remainQuestion !== undefined && remainQuestion >= 0
+      ? BILAN_QUESTIONS.length - remainQuestion - 1
+      : -1;
+    
+    // Récupérer la question précédente directement depuis BILAN_QUESTIONS
+    const previousQuestion = previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length
+      ? BILAN_QUESTIONS[previousQuestionIndex]?.question
+      : undefined;
+    
+    // Créer l'objet { question, response } pour la question actuelle
+    const currentQuestionResponse: { question?: string; response: string } | undefined = userMessage ? {
+      ...(previousQuestion ? { question: previousQuestion } : {}),
+      response: userMessage
+    } : undefined;
+    
+    // Accumuler les questions-réponses précédentes avec la nouvelle
+    const questionResponses: Array<{ question?: string; response: string }> = 
+      previousBilanUniverContext?.questionResponses?.value ? [...previousBilanUniverContext.questionResponses.value] : [];
+    
+    // Ajouter la nouvelle question-réponse si elle existe
+    if (currentQuestionResponse) {
+      questionResponses.push(currentQuestionResponse);
     }
     
-    // Sinon, utiliser le comportement du parent (sans userMessage pour compatibilité)
-    return super.computeGlobalIntentInfos(intent, context);
+    // Calculer l'univers avec l'intent (qui contient les chunks) et toutes les questions-réponses
+    const totalQuestions = BILAN_QUESTIONS.length;
+    const answeredQuestions = totalQuestions - (remainQuestion || 0);
+    const universe = await this.computeUniverse(intent as BilanQuestionIntent, questionResponses, totalQuestions, answeredQuestions);
+    
+    // Créer globalIntentInfos avec les résultats de l'univers
+    return {
+      bilanUniverContext: {
+        families: universe.families,
+        practices: universe.practices,
+        activities: universe.activities,
+        howerAngels: universe.howerAngels,
+        questionResponses: universe.questionResponses,
+        computedAt: new Date().toISOString()
+      }
+    };
+
   }
 
   /**
