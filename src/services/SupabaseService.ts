@@ -1270,9 +1270,10 @@ export class SupabaseService {
     try {
       console.log(`🔍 Recherche de pratiques pour ${situationChunks.length} chunks de situation`);
       
-      // Faire les appels en parallèle pour chaque chunk
+      // Faire les appels en parallèle pour chaque chunk avec une limite élevée et un seuil de similarité de 0.6
+      // On utilise une limite très élevée (1000) pour récupérer toutes les pratiques disponibles
       const searchPromises = situationChunks.map(chunk => 
-        this.searchVectorSimilarity('practices', 'vector_summary', chunk, 4)
+        this.searchVectorSimilarity('practices', 'vector_summary', chunk, 1000, 0.6)
       );
       
       const allResults = await Promise.all(searchPromises);
@@ -1314,13 +1315,27 @@ export class SupabaseService {
 
       const practicesWithType = practicesResults.map(mapPractice);
       
+      // Filtrer par similarité minimale de 0.6
+      const filteredPractices = practicesWithType.filter(p => p.relevanceScore >= 0.6);
+      
+      // Dédupliquer par ID en gardant le meilleur score
+      const practicesMap = new Map<string, any>();
+      filteredPractices.forEach(practice => {
+        const existing = practicesMap.get(practice.id);
+        if (!existing || (practice.relevanceScore > existing.relevanceScore)) {
+          practicesMap.set(practice.id, practice);
+        }
+      });
+      
+      const uniquePractices = Array.from(practicesMap.values());
+      
       // Trier par score de pertinence
-      practicesWithType.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      uniquePractices.sort((a, b) => b.relevanceScore - a.relevanceScore);
       
       return {
-        results: practicesWithType,
+        results: uniquePractices,
         searchTerm: situationChunks.join(' '),
-        total: practicesWithType.length
+        total: uniquePractices.length
       };
     } catch (error) {
       console.error(`❌ Erreur lors de la recherche de pratiques:`, error);
@@ -1346,9 +1361,10 @@ export class SupabaseService {
     try {
       console.log(`🔍 Recherche d'activités pour ${situationChunks.length} chunks de situation`);
       
-      // Faire les appels en parallèle pour chaque chunk
+      // Faire les appels en parallèle pour chaque chunk avec une limite élevée et un seuil de similarité de 0.6
+      // On utilise une limite très élevée (1000) pour récupérer toutes les activités disponibles
       const searchPromises = situationChunks.map(chunk => 
-        this.searchVectorSimilarity('activities', 'vector_summary', chunk, 4, 0.6)
+        this.searchVectorSimilarity('activities', 'vector_summary', chunk, 1000, 0.6)
       );
       
       const allResults = await Promise.all(searchPromises);
@@ -1398,13 +1414,27 @@ export class SupabaseService {
 
       const activitiesWithType = activitiesResults.map(mapActivity);
       
+      // Filtrer par similarité minimale de 0.6
+      const filteredActivities = activitiesWithType.filter(a => a.relevanceScore >= 0.6);
+      
+      // Dédupliquer par ID en gardant le meilleur score
+      const activitiesMap = new Map<string, any>();
+      filteredActivities.forEach(activity => {
+        const existing = activitiesMap.get(activity.id);
+        if (!existing || (activity.relevanceScore > existing.relevanceScore)) {
+          activitiesMap.set(activity.id, activity);
+        }
+      });
+      
+      const uniqueActivities = Array.from(activitiesMap.values());
+      
       // Trier par score de pertinence
-      activitiesWithType.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      uniqueActivities.sort((a, b) => b.relevanceScore - a.relevanceScore);
       
       return {
-        results: activitiesWithType,
+        results: uniqueActivities,
         searchTerm: situationChunks.join(' '),
-        total: activitiesWithType.length
+        total: uniqueActivities.length
       };
     } catch (error) {
       console.error(`❌ Erreur lors de la recherche d'activités:`, error);

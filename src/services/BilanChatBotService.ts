@@ -1139,16 +1139,12 @@ IMPORTANT :
     // Convertir la Map en Array pour compatibilité avec le code existant
     const familiesData: Array<{ id: string; name: string }> = Array.from(familiesMap.values());
     
-    // Calculer la dominance des familles
+    // Calculer la dominance des familles (uniquement basée sur les pratiques)
     const familyDominance = new Map<string, {
       id: string;
       name: string;
       practicesCount: number;
       practicesScore: number; // Somme des scores de pertinence des pratiques
-      activitiesCount: number;
-      activitiesScore: number; // Somme des scores de pertinence des activités
-      howerAngelsCount: number;
-      howerAngelsScore: number; // Somme des scores de pertinence des hower angels
       matchCount: number; // Nombre total de matchs pour cette famille
     }>();
     
@@ -1159,15 +1155,11 @@ IMPORTANT :
         name: family.name,
         practicesCount: 0,
         practicesScore: 0,
-        activitiesCount: 0,
-        activitiesScore: 0,
-        howerAngelsCount: 0,
-        howerAngelsScore: 0,
         matchCount: familyMatchCount.get(family.id) || 0
       });
     });
     
-    // Compter les pratiques par famille
+    // Compter les pratiques par famille (seules les pratiques comptent pour la dominance)
     practices.forEach((practice: any) => {
       const familyId = practiceFamilyMap.get(practice.id);
       if (familyId) {
@@ -1179,58 +1171,19 @@ IMPORTANT :
       }
     });
     
-    // Compter les activités par famille
-    activities.forEach((activity: any) => {
-      const familyId = activityFamilyMap.get(activity.id);
-      if (familyId) {
-        const family = familyDominance.get(familyId);
-        if (family) {
-          family.activitiesCount++;
-          family.activitiesScore += activity.relevanceScore || 0;
-        }
-      }
-    });
-    
-    // Compter les hower angels par famille (via leurs activités)
-    // Pour simplifier, on va considérer qu'un hower angel contribue à toutes les familles de ses activités
-    howerAngels.forEach((howerAngel: any) => {
-      const howerAngelActivities = howerAngel.activities || [];
-      const howerAngelFamilyIds = new Set<string>();
-      
-      // Récupérer les familles des activités du hower angel
-      howerAngelActivities.forEach((activity: any) => {
-        const familyId = activityFamilyMap.get(activity.id);
-        if (familyId) {
-          howerAngelFamilyIds.add(familyId);
-        }
-      });
-      
-      if (howerAngelFamilyIds.size > 0) {
-        const scorePerFamily = (howerAngel.relevanceScore || 0) / howerAngelFamilyIds.size;
-        howerAngelFamilyIds.forEach(familyId => {
-          const family = familyDominance.get(familyId);
-          if (family) {
-            family.howerAngelsCount++;
-            family.howerAngelsScore += scorePerFamily;
-          }
-        });
-      }
-    });
-    
     // Calculer le score de dominance global pour chaque famille
-    // Le score combine le nombre et les scores de pertinence des pratiques, activités et hower angels
+    // Le score est uniquement basé sur les pratiques
     const familiesWithDominance = Array.from(familyDominance.values()).map(family => {
-      // Score de dominance = (practicesScore * 0.4) + (activitiesScore * 0.3) + (howerAngelsScore * 0.3)
-      // On pondère plus les pratiques car elles sont plus directes
-      const dominanceScore = (family.practicesScore * 0.4) + (family.activitiesScore * 0.3) + (family.howerAngelsScore * 0.3);
+      // Score de dominance = practicesScore (uniquement les pratiques)
+      const dominanceScore = family.practicesScore;
       
       return {
         id: family.id,
         name: family.name,
         dominanceScore,
         practicesCount: family.practicesCount,
-        activitiesCount: family.activitiesCount,
-        howerAngelsCount: family.howerAngelsCount,
+        activitiesCount: 0, // Ne compte plus pour la dominance
+        howerAngelsCount: 0, // Ne compte plus pour la dominance
         matchCount: family.matchCount // Nombre total de matchs pour identifier les tendances
       };
     });
