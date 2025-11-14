@@ -962,6 +962,8 @@ IMPORTANT :
     // Récupérer les chunks depuis l'intent (dans universContext)
     const chunks = intent?.universContext?.chunks || [];
     
+    console.log("questionResponses ==> ", JSON.stringify(questionResponses));
+
     // Si pas de chunks, retourner un univers vide
     if (chunks.length === 0) {
       console.log('⚠️ [BILAN] Aucun chunk dans l\'intent pour calculer l\'univers');
