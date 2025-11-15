@@ -925,6 +925,8 @@ IMPORTANT :
       ? BILAN_QUESTIONS.length - remainQuestion - 1
       : -1;
     
+    console.log('💬 [BILAN] computeGlobalIntentInfos - previousQuestionIndex:', previousQuestionIndex);
+
     // Récupérer la question précédente directement depuis BILAN_QUESTIONS
     const previousQuestion = previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length
       ? BILAN_QUESTIONS[previousQuestionIndex]?.question
@@ -940,6 +942,8 @@ IMPORTANT :
     const questionResponses: Array<{ question?: string; response: string }> = 
       previousBilanUniverContext?.questionResponses?.value ? [...previousBilanUniverContext.questionResponses.value] : [];
     
+    console.log('💬 [BILAN] computeGlobalIntentInfos - previousBilanUniverContext.questionResponses.length:', questionResponses.length);
+
     // Ajouter la nouvelle question-réponse si elle existe
     if (currentQuestionResponse) {
       questionResponses.push(currentQuestionResponse);
