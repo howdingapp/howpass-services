@@ -818,7 +818,9 @@ IMPORTANT :
     const responseText = typeof aiResponse.response === 'string' 
       ? aiResponse.response 
       : String(aiResponse.response);
-    const finalResponseText = `${responseText}\n\n${currentQuestion.question}`;
+    const finalResponseText = responseText.trim() 
+      ? `${responseText}\n\n${currentQuestion.question}`
+      : currentQuestion.question;
 
     // Convertir les quick replies en format QuickReply (TextQuickReply) avec icônes
     const quickReplies = currentQuestion.quickReplies.map(qr => ({
