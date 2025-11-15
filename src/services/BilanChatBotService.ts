@@ -817,52 +817,43 @@ IMPORTANT :
   }
 
   /**
-   * Redéfinit generateFirstResponse pour construire la réponse finale avec question et quick replies
-   * Initialise également le compteur remainBilanQuestion dans le contexte
+   * Redéfinit beforeAiResponseSend pour construire la réponse finale avec question et quick replies
+   * Initialise également le compteur remainBilanQuestion si nécessaire
    */
-  public override async generateFirstResponse(context: HowanaContext): Promise<RecommendationMessageResponse> {
-    // Initialiser le compteur remainBilanQuestion si ce n'est pas déjà fait
-    context.metadata = {
-      ...context.metadata,
-      ['remainBilanQuestion']: BILAN_QUESTIONS.length
-    };
-    console.log(`📊 [BILAN] Initialisation de remainBilanQuestion à ${BILAN_QUESTIONS.length}`);
-
-    // Appeler la méthode parente pour obtenir la réponse IA
-    const aiResponse = await super.generateFirstResponse(context);
-
-    // Pour la première réponse, toujours ajouter la première question (index 0)
-    const firstQuestion = BILAN_QUESTIONS.length > 0 && BILAN_QUESTIONS[0] 
-      ? BILAN_QUESTIONS[0] 
-      : null;
-
-    if (firstQuestion) {
-      // Construire la réponse finale avec la première question
-      return this.buildFinalResponse(aiResponse, 0);
-    }
-
-    // Sinon, retourner la réponse telle quelle
-    return aiResponse;
-  }
-
-  /**
-   * Redéfinit generateAIResponse pour construire la réponse finale avec question et quick replies
-   */
-  public override async generateAIResponse(
-    context: HowanaContext, 
-    userMessage: string,
+  protected override async beforeAiResponseSend(
+    aiResponse: RecommendationMessageResponse, 
+    context: HowanaContext
   ): Promise<RecommendationMessageResponse> {
-    // Appeler la méthode parente pour obtenir la réponse IA
-    const aiResponse = await super.generateAIResponse(context, userMessage);
-
-    // Vérifier si on est en mode questions de bilan
+    // Si la réponse est de type summary, ne rien faire
+    if ((aiResponse as any).type === 'summary' || (aiResponse as any).message_type === 'summary') {
+      return aiResponse;
+    }
+    
+    // Initialiser le compteur remainBilanQuestion si ce n'est pas déjà fait
     const remainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
     
-    if (remainQuestion !== undefined && remainQuestion > 0) {
-      // Calculer l'index de la question actuelle
-      const currentQuestionIndex = BILAN_QUESTIONS.length - remainQuestion;
+    if (remainQuestion === undefined) {
+      // Initialiser le compteur remainBilanQuestion si ce n'est pas déjà fait
+      context.metadata = {
+        ...context.metadata,
+        ['remainBilanQuestion']: BILAN_QUESTIONS.length
+      };
+      console.log(`📊 [BILAN] Initialisation de remainBilanQuestion à ${BILAN_QUESTIONS.length}`);
       
-      // Construire la réponse finale
+      // Mettre à jour le contexte dans la réponse
+      aiResponse.updatedContext = context;
+    }
+    
+    // Récupérer la valeur actuelle (qui peut avoir été initialisée ci-dessus)
+    const currentRemainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
+    
+    // Si on est en mode questions de bilan (y compris la première réponse)
+    if (currentRemainQuestion !== undefined && currentRemainQuestion > 0) {
+      // Calculer l'index de la question actuelle
+      // Si currentRemainQuestion === BILAN_QUESTIONS.length, alors index = 0 (première question)
+      const currentQuestionIndex = BILAN_QUESTIONS.length - currentRemainQuestion;
+      
+      // Construire la réponse finale avec la question et les quick replies
       return this.buildFinalResponse(aiResponse, currentQuestionIndex);
     }
 

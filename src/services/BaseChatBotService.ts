@@ -1549,15 +1549,34 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
         haveNext: false,
       } as unknown as T;
       
-      // Appeler le callback avec la réponse automatique
-      await onIaResponse(aiResponse);
+      // Appeler beforeAiResponseSend pour permettre aux sous-classes de modifier la réponse
+      const finalResponse = await this.beforeAiResponseSend(aiResponse, context);
       
-      return context;
+      // Appeler le callback avec la réponse automatique
+      await onIaResponse(finalResponse);
+      
+      return finalResponse.updatedContext;
     }
     
     // Implémentation par défaut : génère une réponse IA et la passe au callback
     const aiResponse = await this.generateAIResponse(context, userMessage);
-    await onIaResponse(aiResponse);
-    return context;
+    
+    // Appeler beforeAiResponseSend pour permettre aux sous-classes de modifier la réponse
+    const finalResponse = await this.beforeAiResponseSend(aiResponse, aiResponse.updatedContext || context);
+    
+    await onIaResponse(finalResponse);
+    return finalResponse.updatedContext || context;
+  }
+
+  /**
+   * Fonction appelée avant d'envoyer la réponse IA via onIaResponse
+   * Permet aux sous-classes de modifier la réponse avant l'envoi
+   * @param aiResponse La réponse IA à envoyer
+   * @param context Le contexte de la conversation (peut être utilisé par les sous-classes)
+   * @returns La réponse modifiée (ou non modifiée par défaut)
+   */
+  protected async beforeAiResponseSend(aiResponse: T, _context: HowanaContext): Promise<T> {
+    // Par défaut, renvoyer la réponse sans modification
+    return aiResponse;
   }
 }
