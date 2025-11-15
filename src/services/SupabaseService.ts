@@ -807,11 +807,13 @@ export class SupabaseService {
         startDate.setFullYear(now.getFullYear() - (periodCount - 1));
       }
 
+      // Compter uniquement les conversations de type 'bilan' avec status 'completed'
       let query = this.supabase
         .from('howana_conversations')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId)
         .eq('conversation_type', 'bilan')
+        .eq('status', 'completed')
         .gte('created_at', startDate.toISOString())
         .lte('created_at', now.toISOString());
 
