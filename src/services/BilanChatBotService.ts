@@ -306,8 +306,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
     context: HowanaContext,
     userMessage: string,
     onIaResponse: (response: any) => Promise<void>,
-    forceSummary: boolean = false,
-    autoResponse?: string // Paramètre optionnel pour compatibilité avec la signature parente
+    _forceSummary: boolean = false,
+    _autoResponse?: string // Paramètre optionnel pour compatibilité avec la signature parente
   ): Promise<HowanaContext> {
     // Récupérer le nombre de questions restantes
     const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
@@ -326,28 +326,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
     // Si c'est la dernière réponse (newRemainQuestion === 0), forcer la génération du résumé
     if (newRemainQuestion === 0) {
       console.log('✅ [BILAN] Dernière réponse détectée, génération du résumé au lieu de la réponse');
-      
-      // Vérifier la présence d'un intent et le calculer si nécessaire
-      const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
-      let intent = currentIntentInfos?.intent;
-      
-      // Calculer globalIntentInfos avant de générer le résumé (nécessaire pour avoir l'univers)
-      if (intent) {
-        console.log('🔄 [BILAN] Intent disponible, calcul de globalIntentInfos');
-        const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
-        context.metadata = {
-          ...context.metadata,
-          ['globalIntentInfos']: globalIntentInfos
-        };
-      } else {
-        console.warn('⚠️ [BILAN] Aucun intent disponible pour calculer globalIntentInfos');
-      }
-      
-      // Passer forceSummary=true pour que BaseChatBotService génère le résumé
-      forceSummary = true;
-      
       // Appeler la méthode parente uniquement pour le forceSummary
-      return super.handleIntent(context, userMessage, onIaResponse, forceSummary, autoResponse);
+      return super.handleIntent(context, userMessage, onIaResponse, true);
     }
 
     // Utiliser autoResponse pour passer le texte de la réponse à handleIntent
