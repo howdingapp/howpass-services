@@ -783,6 +783,9 @@ IMPORTANT :
     aiResponse: RecommendationMessageResponse,
     questionIndex: number
   ): RecommendationMessageResponse {
+
+    console.log('💬 [BILAN] buildFinalResponse - questionIndex:', questionIndex);
+
     const currentQuestion = questionIndex >= 0 && questionIndex < BILAN_QUESTIONS.length 
       ? BILAN_QUESTIONS[questionIndex] 
       : null;
@@ -847,6 +850,8 @@ IMPORTANT :
     // Récupérer la valeur actuelle (qui peut avoir été initialisée ci-dessus)
     const currentRemainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
     
+    console.log('💬 [BILAN] beforeAiResponseSend:', currentRemainQuestion);
+
     // Si on est en mode questions de bilan (y compris la première réponse)
     if (currentRemainQuestion !== undefined && currentRemainQuestion > 0) {
       // Calculer l'index de la question actuelle
