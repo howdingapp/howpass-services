@@ -87,13 +87,17 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
     error?: string;
   }> {
     try {
+
+      console.log('💬 [BASE] StartConversation');
+
       // Démarrer la conversation via le service local
       const result = await this.conversationService.startConversation(request);
 
       // Générer automatiquement une première réponse IA basée sur le contexte
       try {
         const firstResponseResult = await this.generateFirstResponse(result.context);
-        
+
+        console.log('💬 [BASE] Will call onGenerateFirstAiResponse');
         // Appeler onGenerateFirstAiResponse pour permettre aux sous-classes d'intervenir
         const processedFirstResponse = await this.onGenerateFirstAiResponse(firstResponseResult, result.context);
         
