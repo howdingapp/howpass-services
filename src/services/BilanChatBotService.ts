@@ -914,8 +914,6 @@ IMPORTANT :
     // Récupérer le bilanUniverContext précédent depuis les métadonnées
     const previousBilanUniverContext = (context.metadata?.['globalIntentInfos'] as BilanGlobalIntentInfos | undefined)?.bilanUniverContext;
   
-    console.log('💬 [BILAN] computeGlobalIntentInfos - previousBilanUniverContext:', JSON.stringify(previousBilanUniverContext));
-
     // Récupérer remainQuestion directement depuis le contexte
     const remainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
     
