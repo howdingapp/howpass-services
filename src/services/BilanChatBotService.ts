@@ -857,7 +857,7 @@ IMPORTANT :
       // Calculer l'index de la question actuelle
       // Si currentRemainQuestion === BILAN_QUESTIONS.length, alors index = 0 (première question)
       const currentQuestionIndex = BILAN_QUESTIONS.length - currentRemainQuestion;
-      
+      console.log('💬 [BILAN] beforeAiResponseSend - index:', currentQuestionIndex);
       // Construire la réponse finale avec la question et les quick replies
       return this.buildFinalResponse(aiResponse, currentQuestionIndex);
     }
