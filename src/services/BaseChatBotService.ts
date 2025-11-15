@@ -93,19 +93,28 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       // Générer automatiquement une première réponse IA basée sur le contexte
       try {
         const firstResponseResult = await this.generateFirstResponse(result.context);
-        if (firstResponseResult.response) {
+        
+        // Appeler onGenerateFirstAiResponse pour permettre aux sous-classes d'intervenir
+        const processedFirstResponse = await this.onGenerateFirstAiResponse(firstResponseResult, result.context);
+        
+        if (processedFirstResponse.response) {
           // Utiliser le messageId d'OpenAI si disponible
-          const messageId = firstResponseResult.messageId;
+          const messageId = processedFirstResponse.messageId;
           
           // Sauvegarder le messageId d'OpenAI dans le contexte pour les réponses suivantes
           if (messageId) {
             result.context.previousCallId = messageId;
           }
           
+          // Mettre à jour le contexte avec celui de la réponse traitée
+          if (processedFirstResponse.updatedContext) {
+            result.context = processedFirstResponse.updatedContext;
+          }
+          
           // Mettre à jour l'entrée ai_response pré-créée
           if (request.aiResponseId) {
             await this.supabaseService.updateAIResponse(request.aiResponseId, {
-              response_text: firstResponseResult.response,
+              response_text: processedFirstResponse.response,
               metadata: { 
                 source: 'ai', 
                 model: this.AI_MODEL, 
@@ -1566,6 +1575,18 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
     
     await onIaResponse(finalResponse);
     return finalResponse.updatedContext || context;
+  }
+
+  /**
+   * Fonction appelée après la génération de la première réponse IA
+   * Permet aux sous-classes d'intervenir sur la première réponse avant qu'elle ne soit utilisée
+   * @param firstResponse La première réponse IA générée
+   * @param context Le contexte de la conversation
+   * @returns La réponse modifiée (ou non modifiée par défaut)
+   */
+  protected async onGenerateFirstAiResponse(firstResponse: T, _context: HowanaContext): Promise<T> {
+    // Par défaut, renvoyer la réponse sans modification
+    return firstResponse;
   }
 
   /**

@@ -823,8 +823,32 @@ IMPORTANT :
   }
 
   /**
+   * Redéfinit onGenerateFirstAiResponse pour initialiser remainBilanQuestion et ajouter la première question
+   */
+  protected override async onGenerateFirstAiResponse(
+    firstResponse: RecommendationMessageResponse,
+    context: HowanaContext
+  ): Promise<RecommendationMessageResponse> {
+    // Initialiser le compteur remainBilanQuestion si ce n'est pas déjà fait
+    const remainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
+    
+    if (remainQuestion === undefined) {
+      context.metadata = {
+        ...context.metadata,
+        ['remainBilanQuestion']: BILAN_QUESTIONS.length
+      };
+      console.log(`📊 [BILAN] Initialisation de remainBilanQuestion à ${BILAN_QUESTIONS.length}`);
+      
+      // Mettre à jour le contexte dans la réponse
+      firstResponse.updatedContext = context;
+    }
+    
+    // Construire la réponse finale avec la première question (index 0) et les quick replies
+    return this.buildFinalResponse(firstResponse, 0);
+  }
+
+  /**
    * Redéfinit beforeAiResponseSend pour construire la réponse finale avec question et quick replies
-   * Initialise également le compteur remainBilanQuestion si nécessaire
    */
   protected override async beforeAiResponseSend(
     aiResponse: RecommendationMessageResponse, 
@@ -835,26 +859,11 @@ IMPORTANT :
       return aiResponse;
     }
     
-    // Initialiser le compteur remainBilanQuestion si ce n'est pas déjà fait
-    const remainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
-    
-    if (remainQuestion === undefined) {
-      // Initialiser le compteur remainBilanQuestion si ce n'est pas déjà fait
-      context.metadata = {
-        ...context.metadata,
-        ['remainBilanQuestion']: BILAN_QUESTIONS.length
-      };
-      console.log(`📊 [BILAN] Initialisation de remainBilanQuestion à ${BILAN_QUESTIONS.length}`);
-      
-      // Mettre à jour le contexte dans la réponse
-      aiResponse.updatedContext = context;
-    }
-    
-    // Récupérer la valeur actuelle (qui peut avoir été initialisée ci-dessus)
+    // Récupérer la valeur actuelle de remainBilanQuestion
     const currentRemainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
     
     console.log('💬 [BILAN] beforeAiResponseSend:', currentRemainQuestion);
-
+    
     // Si on est en mode questions de bilan (y compris la première réponse)
     if (currentRemainQuestion !== undefined && currentRemainQuestion > 0) {
       // Calculer l'index de la question actuelle
