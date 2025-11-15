@@ -236,8 +236,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
       };
     }
     
-    // Dernière occurrence : cumuler les chunks des quickReplies au lieu d'appeler super.computeIntent
-    console.log(`📋 [BILAN] Dernière question, cumul des chunks des quickReplies`);
+    // Dernière occurrence : cumuler les chunks des quickReplies et calculer les chunks pour les réponses custom
+    console.log(`📋 [BILAN] Dernière question, cumul des chunks des quickReplies et calcul pour réponses custom`);
     
     // Récupérer toutes les questions-réponses existantes
     const existingQuestionResponses = existingGlobalIntentInfos?.bilanUniverContext?.questionResponses?.value || [];
@@ -258,11 +258,51 @@ export class BilanChatBotService extends RecommendationChatBotService {
       { question: previousQuestion, response: userMessage }
     ];
     
-    // Cumuler tous les chunks des quickReplies correspondant aux réponses
-    const allChunks: BilanChunk[] = [];
+    // Séparer les réponses qui matchent avec les quickReplies de celles qui sont custom
+    const matchedResponses: Array<{ question?: string; response: string }> = [];
+    const customResponses: Array<{ question?: string; response: string }> = [];
     
     for (let i = 0; i < questionResponses.length; i++) {
       const qr = questionResponses[i];
+      if (!qr || !qr.response) continue;
+      
+      // Normaliser la question pour éviter les problèmes de type
+      const normalizedQr: { question?: string; response: string } = qr.question 
+        ? { question: qr.question, response: qr.response }
+        : { response: qr.response };
+      
+      // Trouver l'index de la question dans BILAN_QUESTIONS
+      const questionIndex = BILAN_QUESTIONS.findIndex(q => q.question === qr.question);
+      if (questionIndex === -1) {
+        // Question non trouvée, considérer comme custom
+        customResponses.push(normalizedQr);
+        continue;
+      }
+      
+      const questionData = BILAN_QUESTIONS[questionIndex];
+      if (!questionData) {
+        customResponses.push(normalizedQr);
+        continue;
+      }
+      
+      // Trouver le quickReply correspondant à la réponse
+      const matchingQuickReply = questionData.quickReplies.find(
+        qrItem => qrItem.text === qr.response || qrItem.text.replace(/[🌿😴😰🤯💧🌀🌞🌸🛏️💆‍♀️💫💖⚖️🔮🌞⏰🕊️🔸💤🌺🌫️🔥🌧️🌊💔💫🌈😬⚡🌼💛🐾🐶🚫]/g, '').trim() === qr.response.trim()
+      );
+      
+      if (matchingQuickReply && matchingQuickReply.chunks && matchingQuickReply.chunks.length > 0) {
+        matchedResponses.push(normalizedQr);
+      } else {
+        // Réponse non trouvée dans les quickReplies, considérer comme custom
+        customResponses.push(normalizedQr);
+      }
+    }
+    
+    // Cumuler tous les chunks des quickReplies correspondant aux réponses matchées
+    const quickReplyChunks: BilanChunk[] = [];
+    
+    for (let i = 0; i < matchedResponses.length; i++) {
+      const qr = matchedResponses[i];
       if (!qr || !qr.response) continue;
       
       // Trouver l'index de la question dans BILAN_QUESTIONS
@@ -278,11 +318,37 @@ export class BilanChatBotService extends RecommendationChatBotService {
       );
       
       if (matchingQuickReply && matchingQuickReply.chunks) {
-        allChunks.push(...matchingQuickReply.chunks);
+        quickReplyChunks.push(...matchingQuickReply.chunks);
       }
     }
     
-    console.log(`✅ [BILAN] ${allChunks.length} chunks cumulés depuis les quickReplies`);
+    console.log(`✅ [BILAN] ${quickReplyChunks.length} chunks cumulés depuis les quickReplies`);
+    console.log(`📝 [BILAN] ${customResponses.length} réponse(s) custom détectée(s)`);
+    
+    // Si on a des réponses custom, appeler super.computeIntent sur ces réponses
+    let customChunks: BilanChunk[] = [];
+    let intentCost: number | null = null;
+    
+    if (customResponses.length > 0) {
+
+      console.log(`🔄 [BILAN] Appel de super.computeIntent pour les réponses custom`);
+      
+      // Appeler super.computeIntent avec le message combiné
+      const customIntentResult = await super.computeIntent(context, JSON.stringify(customResponses));
+      
+      if (customIntentResult.intent && customIntentResult.intent.universContext?.chunks) {
+        customChunks = customIntentResult.intent.universContext.chunks;
+        intentCost = customIntentResult.intentCost;
+        console.log(`✅ [BILAN] ${customChunks.length} chunks calculés depuis les réponses custom`);
+      } else {
+        console.warn(`⚠️ [BILAN] Aucun chunk trouvé dans l'intent calculé pour les réponses custom`);
+      }
+    }
+    
+    // Combiner tous les chunks (quickReplies + custom)
+    const allChunks: BilanChunk[] = [...quickReplyChunks, ...customChunks];
+    
+    console.log(`✅ [BILAN] Total: ${allChunks.length} chunks (${quickReplyChunks.length} quickReplies + ${customChunks.length} custom)`);
     
     // Retourner un intent avec les chunks cumulés
     return {
@@ -292,7 +358,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
           chunks: allChunks
         }
       },
-      intentCost: null,
+      intentCost: intentCost,
       globalIntentInfos: existingGlobalIntentInfos
     };
   }
