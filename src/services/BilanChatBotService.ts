@@ -60,7 +60,7 @@ export interface BilanGlobalIntentInfos {
     };
     questionResponses: {
       info: string;
-      value: Array<{ question?: string; response: string }>;
+      value: Array<{ question: string; index: number; response: string }>;
     };
     chunks: {
       info: string;
@@ -252,58 +252,46 @@ export class BilanChatBotService extends RecommendationChatBotService {
       ? BILAN_QUESTIONS[previousQuestionIndex]?.question
       : undefined;
     
-    // Ajouter la nouvelle question-réponse
-    const questionResponses = [
+    // Parser la réponse : si c'est un entier, c'est un index, sinon c'est du texte custom (index = -1)
+    let responseIndex = -1;
+    const parsedIndex = parseInt(userMessage, 10);
+    if (!isNaN(parsedIndex) && parsedIndex >= 0) {
+      responseIndex = parsedIndex;
+    }
+    
+    // Ajouter la nouvelle question-réponse avec l'index
+    const questionResponses: Array<{ question: string; index: number; response: string }> = [
       ...existingQuestionResponses,
-      { question: previousQuestion, response: userMessage }
+      { question: previousQuestion!, index: responseIndex, response: userMessage }
     ];
     
-    // Séparer les réponses qui matchent avec les quickReplies de celles qui sont custom
-    const matchedResponses: Array<{ question?: string; response: string }> = [];
-    const customResponses: Array<{ question?: string; response: string }> = [];
+    // Séparer les réponses standard (index >= 0) de celles qui sont custom (index == -1)
+    const standardResponses: Array<{ question: string; index: number; response: string }> = [];
+    const customResponses: Array<{ question: string; response: string }> = [];
     
     for (let i = 0; i < questionResponses.length; i++) {
       const qr = questionResponses[i];
       if (!qr || !qr.response) continue;
       
-      // Normaliser la question pour éviter les problèmes de type
-      const normalizedQr: { question?: string; response: string } = qr.question 
-        ? { question: qr.question, response: qr.response }
-        : { response: qr.response };
-      
-      // Trouver l'index de la question dans BILAN_QUESTIONS
-      const questionIndex = BILAN_QUESTIONS.findIndex(q => q.question === qr.question);
-      if (questionIndex === -1) {
-        // Question non trouvée, considérer comme custom
+      if (qr.index === -1) {
+        // Réponse custom : pas d'index valide
+        const normalizedQr: { question: string; response: string } = {
+          question: qr.question,
+          response: qr.response
+        };
         customResponses.push(normalizedQr);
-        continue;
-      }
-      
-      const questionData = BILAN_QUESTIONS[questionIndex];
-      if (!questionData) {
-        customResponses.push(normalizedQr);
-        continue;
-      }
-      
-      // Trouver le quickReply correspondant à la réponse
-      const matchingQuickReply = questionData.quickReplies.find(
-        qrItem => qrItem.text === qr.response || qrItem.text.replace(/[🌿😴😰🤯💧🌀🌞🌸🛏️💆‍♀️💫💖⚖️🔮🌞⏰🕊️🔸💤🌺🌫️🔥🌧️🌊💔💫🌈😬⚡🌼💛🐾🐶🚫]/g, '').trim() === qr.response.trim()
-      );
-      
-      if (matchingQuickReply && matchingQuickReply.chunks && matchingQuickReply.chunks.length > 0) {
-        matchedResponses.push(normalizedQr);
       } else {
-        // Réponse non trouvée dans les quickReplies, considérer comme custom
-        customResponses.push(normalizedQr);
+        // Réponse standard : index valide
+        standardResponses.push(qr);
       }
     }
     
-    // Cumuler tous les chunks des quickReplies correspondant aux réponses matchées
+    // Cumuler tous les chunks des quickReplies correspondant aux réponses standard
     const quickReplyChunks: BilanChunk[] = [];
     
-    for (let i = 0; i < matchedResponses.length; i++) {
-      const qr = matchedResponses[i];
-      if (!qr || !qr.response) continue;
+    for (let i = 0; i < standardResponses.length; i++) {
+      const qr = standardResponses[i];
+      if (!qr || qr.index < 0) continue;
       
       // Trouver l'index de la question dans BILAN_QUESTIONS
       const questionIndex = BILAN_QUESTIONS.findIndex(q => q.question === qr.question);
@@ -312,13 +300,12 @@ export class BilanChatBotService extends RecommendationChatBotService {
       const questionData = BILAN_QUESTIONS[questionIndex];
       if (!questionData) continue;
       
-      // Trouver le quickReply correspondant à la réponse
-      const matchingQuickReply = questionData.quickReplies.find(
-        qrItem => qrItem.text === qr.response || qrItem.text.replace(/[🌿😴😰🤯💧🌀🌞🌸🛏️💆‍♀️💫💖⚖️🔮🌞⏰🕊️🔸💤🌺🌫️🔥🌧️🌊💔💫🌈😬⚡🌼💛🐾🐶🚫]/g, '').trim() === qr.response.trim()
-      );
-      
-      if (matchingQuickReply && matchingQuickReply.chunks) {
-        quickReplyChunks.push(...matchingQuickReply.chunks);
+      // Récupérer le quickReply à l'index spécifié
+      if (qr.index >= 0 && qr.index < questionData.quickReplies.length) {
+        const quickReply = questionData.quickReplies[qr.index];
+        if (quickReply && quickReply.chunks) {
+          quickReplyChunks.push(...quickReply.chunks);
+        }
       }
     }
     
@@ -998,15 +985,25 @@ IMPORTANT :
       ? BILAN_QUESTIONS[previousQuestionIndex]?.question
       : undefined;
     
-    // Créer l'objet { question, response } pour la question actuelle
-    const currentQuestionResponse: { question?: string; response: string } | undefined = userMessage ? {
-      ...(previousQuestion ? { question: previousQuestion } : {}),
+    // Créer l'objet { question, index, response } pour la question actuelle
+    // Parser la réponse : si c'est un entier, c'est un index, sinon c'est du texte custom (index = -1)
+    let responseIndex = -1;
+    if (userMessage) {
+      const parsedIndex = parseInt(userMessage, 10);
+      if (!isNaN(parsedIndex) && parsedIndex >= 0) {
+        responseIndex = parsedIndex;
+      }
+    }
+    
+    const currentQuestionResponse: { question: string; index: number; response: string } | undefined = userMessage ? {
+      question: previousQuestion!,
+      index: responseIndex,
       response: userMessage
     } : undefined;
     
     // Accumuler les questions-réponses précédentes avec la nouvelle
-    const questionResponses: Array<{ question?: string; response: string }> = 
-      previousBilanUniverContext?.questionResponses?.value ? [...previousBilanUniverContext.questionResponses.value] : [];
+    const questionResponses: Array<{ question: string; index: number; response: string }> = 
+      previousBilanUniverContext?.questionResponses?.value || [];
     
     console.log('💬 [BILAN] computeGlobalIntentInfos - previousBilanUniverContext.questionResponses.length:', questionResponses.length);
 
@@ -1045,7 +1042,7 @@ IMPORTANT :
    */
   protected async computeUniverse(
     intent: BilanQuestionIntent, 
-    questionResponses?: Array<{ question?: string; response: string }>,
+    questionResponses?: Array<{ question: string; index: number; response: string }>,
     totalQuestions?: number,
     answeredQuestions?: number
   ): Promise<{
@@ -1075,7 +1072,7 @@ IMPORTANT :
     };
     questionResponses: {
       info: string;
-      value: Array<{ question?: string; response: string }>;
+      value: Array<{ question: string; index: number; response: string }>;
     };
     chunks: {
       info: string;
@@ -1099,7 +1096,7 @@ IMPORTANT :
         practices: { info: string; value: any[] };
         activities: { info: string; value: any[] };
         howerAngels: { info: string; value: any[] };
-        questionResponses: { info: string; value: Array<{ question?: string; response: string }> };
+        questionResponses: { info: string; value: Array<{ question: string; index: number; response: string }> };
         chunks: { info: string; value: BilanChunk[] };
       } = {
         families: {
@@ -1146,7 +1143,7 @@ IMPORTANT :
         practices: { info: string; value: any[] };
         activities: { info: string; value: any[] };
         howerAngels: { info: string; value: any[] };
-        questionResponses: { info: string; value: Array<{ question?: string; response: string }> };
+        questionResponses: { info: string; value: Array<{ question: string; index: number; response: string }> };
         chunks: { info: string; value: BilanChunk[] };
       } = {
         families: {
@@ -1406,7 +1403,7 @@ IMPORTANT :
       };
       questionResponses: {
         info: string;
-        value: Array<{ question?: string; response: string }>;
+        value: Array<{ question: string; index: number; response: string }>;
       };
       chunks: {
         info: string;
