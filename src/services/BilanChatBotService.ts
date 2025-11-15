@@ -829,19 +829,16 @@ IMPORTANT :
     firstResponse: RecommendationMessageResponse,
     context: HowanaContext
   ): Promise<RecommendationMessageResponse> {
-    // Initialiser le compteur remainBilanQuestion si ce n'est pas déjà fait
-    const remainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
+
+    context.metadata = {
+      ...context.metadata,
+      ['remainBilanQuestion']: BILAN_QUESTIONS.length
+    };
     
-    if (remainQuestion === undefined) {
-      context.metadata = {
-        ...context.metadata,
-        ['remainBilanQuestion']: BILAN_QUESTIONS.length
-      };
-      console.log(`📊 [BILAN] Initialisation de remainBilanQuestion à ${BILAN_QUESTIONS.length}`);
-      
-      // Mettre à jour le contexte dans la réponse
-      firstResponse.updatedContext = context;
-    }
+    console.log(`📊 [BILAN] onGenerateFirstAiResponse - Initialisation de remainBilanQuestion à ${BILAN_QUESTIONS.length}`);
+    
+    // Mettre à jour le contexte dans la réponse
+    firstResponse.updatedContext = context;
     
     // Construire la réponse finale avec la première question (index 0) et les quick replies
     return this.buildFinalResponse(firstResponse, 0);
