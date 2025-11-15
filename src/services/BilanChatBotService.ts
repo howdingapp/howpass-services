@@ -791,9 +791,12 @@ IMPORTANT :
       : null;
 
     if (!currentQuestion) {
+      console.log('💬 [BILAN] buildFinalResponse - no currentQuestion');
       // Si pas de question trouvée, retourner la réponse IA telle quelle
       return aiResponse;
     }
+
+    console.log('💬 [BILAN] buildFinalResponse - currentQuestion:', currentQuestion);
 
     // Construire la réponse finale : texte IA (toujours du texte dans ce cas) + saut de ligne + question
     const responseText = typeof aiResponse.response === 'string' 
