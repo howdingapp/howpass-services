@@ -1,7 +1,6 @@
 import { RecommendationChatBotService } from './RecommendationChatBotService';
 import { HowanaBilanContext, HowanaContext } from '../types/repositories';
 import { ChatBotOutputSchema, RecommendationMessageResponse } from '../types';
-import { sortSearchResultsBySimilarity } from '../utils/searchUtils';
 
 /**
  * Type de chunk pour les questions de bilan
@@ -1197,70 +1196,18 @@ IMPORTANT :
     console.log(`🔍 [BILAN] Calcul de l'univers avec ${allChunksTexts.length} chunks de texte`);
     
     // Réaliser les recherches sémantiques en parallèle avec withMatchInfos pour récupérer les chunks qui ont permis le matching
-    // clearDoublons = false pour pouvoir compter tous les matchs et les différents chunks qui ont matché
+    // Les fonctions de recherche font maintenant le regroupement et le tri en interne
     const [practicesResults, activitiesResults, howerAngelsResult] = await Promise.all([
-      this.supabaseService.searchPracticesBySituationChunks(allChunksTexts, true, false), // withMatchInfos = true, clearDoublons = false
-      this.supabaseService.searchActivitiesBySituationChunks(allChunksTexts, true, false), // withMatchInfos = true, clearDoublons = false
-      this.supabaseService.searchHowerAngelsByUserSituation(allChunksTexts, 10, true, false) // withMatchInfos = true, clearDoublons = false
+      this.supabaseService.searchPracticesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
+      this.supabaseService.searchActivitiesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
+      this.supabaseService.searchHowerAngelsByUserSituation(allChunksTexts, 10, true) // withMatchInfos = true
     ]);
     
-    const allPractices = practicesResults.results || [];
-    const allActivities = activitiesResults.results || [];
+    const practices = practicesResults.results || [];
+    const activities = activitiesResults.results || [];
     const howerAngels = howerAngelsResult.success ? (howerAngelsResult.data || []) : [];
     
-    console.log(`✅ [BILAN] ${allPractices.length} pratiques (avec doublons), ${allActivities.length} activités (avec doublons) et ${howerAngels.length} hower angels (avec doublons) trouvés`);
-    
-    // Compter les matchs par pratique et activité (pour identifier les tendances)
-    const practiceMatchCount = new Map<string, number>(); // practiceId -> nombre de matchs
-    const activityMatchCount = new Map<string, number>(); // activityId -> nombre de matchs
-    
-    // Compter les occurrences de chaque pratique
-    allPractices.forEach((practice: any) => {
-      const currentCount = practiceMatchCount.get(practice.id) || 0;
-      practiceMatchCount.set(practice.id, currentCount + 1);
-    });
-    
-    // Compter les occurrences de chaque activité
-    allActivities.forEach((activity: any) => {
-      const currentCount = activityMatchCount.get(activity.id) || 0;
-      activityMatchCount.set(activity.id, currentCount + 1);
-    });
-    
-    // Dédupliquer les pratiques en gardant le meilleur score et en ajoutant le matchCount
-    const practicesMap = new Map<string, any>();
-    allPractices.forEach((practice: any) => {
-      const existing = practicesMap.get(practice.id);
-      if (!existing || (practice.relevanceScore > existing.relevanceScore)) {
-        practicesMap.set(practice.id, {
-          ...practice,
-          matchCount: practiceMatchCount.get(practice.id) || 1
-        });
-      }
-    });
-    const practices = Array.from(practicesMap.values());
-    
-    // Dédupliquer les activités en gardant le meilleur score et en ajoutant le matchCount
-    const activitiesMap = new Map<string, any>();
-    allActivities.forEach((activity: any) => {
-      const existing = activitiesMap.get(activity.id);
-      if (!existing || (activity.relevanceScore > existing.relevanceScore)) {
-        activitiesMap.set(activity.id, {
-          ...activity,
-          matchCount: activityMatchCount.get(activity.id) || 1
-        });
-      }
-    });
-    const activities = Array.from(activitiesMap.values());
-    
-    // Trier par matchCount décroissant, puis par similarité si matchCount égal
-    const sortedPractices = sortSearchResultsBySimilarity(practices);
-    const sortedActivities = sortSearchResultsBySimilarity(activities);
-    
-    // Remplacer les tableaux triés
-    practices.length = 0;
-    practices.push(...sortedPractices);
-    activities.length = 0;
-    activities.push(...sortedActivities);
+    console.log(`✅ [BILAN] ${practices.length} pratiques, ${activities.length} activités et ${howerAngels.length} hower angels trouvés`);
     
     // Extraire les familles directement depuis les résultats de recherche (plus besoin de requêtes supplémentaires)
     const familyIds = new Set<string>();

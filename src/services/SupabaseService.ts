@@ -4,6 +4,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { EmbeddingService } from './EmbeddingService';
 import { HowanaContext } from '../types/repositories';
+import { sortSearchResultsBySimilarity } from '../utils/searchUtils';
 
 export const VIDEO_BUCKET= "videos";
 export const IMAGE_BUCKET= "images";
@@ -1263,8 +1264,7 @@ export class SupabaseService {
    */
   async searchPracticesBySituationChunks(
     situationChunks: string[],
-    withMatchInfos: boolean = false,
-    clearDoublons: boolean = true
+    withMatchInfos: boolean = false
   ): Promise<{
     results: any[];
     searchTerm: string;
@@ -1287,7 +1287,7 @@ export class SupabaseService {
         practicesResults = [...practicesResults, ...(practices || [])];
       });
       
-      console.log('🔍 Résultats de la recherche de pratiques:', practicesResults.length, "(clearDoublons = " + clearDoublons + ")");
+      console.log('🔍 Résultats de la recherche de pratiques:', practicesResults.length);
 
       // Mapper les résultats
       const mapPractice = (r: any) => {
@@ -1300,6 +1300,7 @@ export class SupabaseService {
           longDescription: r?.long_description,
           benefits: r?.benefits,
           relevanceScore,
+          similarity: relevanceScore,
           vectorSimilarity: r?.vector_similarity ?? null,
           bm25Similarity: r?.bm25_similarity ?? null,
           // Nouveaux champs : category et family
@@ -1323,31 +1324,36 @@ export class SupabaseService {
       // Filtrer par similarité minimale de 0.6
       const filteredPractices = practicesWithType.filter(p => p.relevanceScore >= 0.6);
       
-      let finalPractices: any[];
+      // Compter les matchs par pratique
+      const practiceMatchCount = new Map<string, number>();
+      filteredPractices.forEach((practice: any) => {
+        const currentCount = practiceMatchCount.get(practice.id) || 0;
+        practiceMatchCount.set(practice.id, currentCount + 1);
+      });
       
-      if (clearDoublons) {
-        // Dédupliquer par ID en gardant le meilleur score
-        const practicesMap = new Map<string, any>();
-        filteredPractices.forEach(practice => {
-          const existing = practicesMap.get(practice.id);
-          if (!existing || (practice.relevanceScore > existing.relevanceScore)) {
-            practicesMap.set(practice.id, practice);
-          }
-        });
-        
-        finalPractices = Array.from(practicesMap.values());
-        
-        // Trier par score de pertinence
-        finalPractices.sort((a, b) => b.relevanceScore - a.relevanceScore);
-      } else {
-        // Ne pas dédupliquer, garder tous les résultats pour compter les matchs
-        finalPractices = filteredPractices;
-      }
+      // Dédupliquer par ID en gardant le meilleur score et en ajoutant le matchCount
+      const practicesMap = new Map<string, any>();
+      filteredPractices.forEach(practice => {
+        const existing = practicesMap.get(practice.id);
+        if (!existing || (practice.relevanceScore > existing.relevanceScore)) {
+          practicesMap.set(practice.id, {
+            ...practice,
+            matchCount: practiceMatchCount.get(practice.id) || 1
+          });
+        }
+      });
       
+      const practices = Array.from(practicesMap.values());
+      
+      // Trier par matchCount décroissant, puis par similarité si matchCount égal
+      const sortedPractices = sortSearchResultsBySimilarity(practices);
+      
+      console.log('🔍 Résultats de la recherche de pratiques triés:', sortedPractices.length);
+
       return {
-        results: finalPractices,
+        results: sortedPractices,
         searchTerm: situationChunks.join(' '),
-        total: finalPractices.length
+        total: sortedPractices.length
       };
     } catch (error) {
       console.error(`❌ Erreur lors de la recherche de pratiques:`, error);
@@ -1364,8 +1370,7 @@ export class SupabaseService {
    */
   async searchActivitiesBySituationChunks(
     situationChunks: string[],
-    withMatchInfos: boolean = false,
-    clearDoublons: boolean = true
+    withMatchInfos: boolean = false
   ): Promise<{
     results: any[];
     searchTerm: string;
@@ -1406,6 +1411,9 @@ export class SupabaseService {
           address: r?.address,
           selectedKeywords: r?.selected_keywords,
           relevanceScore,
+          similarity: relevanceScore,
+          vectorSimilarity: r?.vector_similarity ?? null,
+          bm25Similarity: r?.bm25_similarity ?? null,
           // Nouveaux champs : practice -> category -> family
           practiceId: r?.practice_id ?? null,
           practiceTitle: r?.practice_title ?? null,
@@ -1430,31 +1438,36 @@ export class SupabaseService {
       // Filtrer par similarité minimale de 0.6
       const filteredActivities = activitiesWithType.filter(a => a.relevanceScore >= 0.6);
       
-      let finalActivities: any[];
+      // Compter les matchs par activité
+      const activityMatchCount = new Map<string, number>();
+      filteredActivities.forEach((activity: any) => {
+        const currentCount = activityMatchCount.get(activity.id) || 0;
+        activityMatchCount.set(activity.id, currentCount + 1);
+      });
       
-      if (clearDoublons) {
-        // Dédupliquer par ID en gardant le meilleur score
-        const activitiesMap = new Map<string, any>();
-        filteredActivities.forEach(activity => {
-          const existing = activitiesMap.get(activity.id);
-          if (!existing || (activity.relevanceScore > existing.relevanceScore)) {
-            activitiesMap.set(activity.id, activity);
-          }
-        });
-        
-        finalActivities = Array.from(activitiesMap.values());
-        
-        // Trier par score de pertinence
-        finalActivities.sort((a, b) => b.relevanceScore - a.relevanceScore);
-      } else {
-        // Ne pas dédupliquer, garder tous les résultats pour compter les matchs
-        finalActivities = filteredActivities;
-      }
+      // Dédupliquer par ID en gardant le meilleur score et en ajoutant le matchCount
+      const activitiesMap = new Map<string, any>();
+      filteredActivities.forEach(activity => {
+        const existing = activitiesMap.get(activity.id);
+        if (!existing || (activity.relevanceScore > existing.relevanceScore)) {
+          activitiesMap.set(activity.id, {
+            ...activity,
+            matchCount: activityMatchCount.get(activity.id) || 1
+          });
+        }
+      });
+      
+      const activities = Array.from(activitiesMap.values());
+      
+      // Trier par matchCount décroissant, puis par similarité si matchCount égal
+      const sortedActivities = sortSearchResultsBySimilarity(activities);
+      
+      console.log('🔍 Résultats de la recherche d\'activités triés:', sortedActivities.length);
       
       return {
-        results: finalActivities,
+        results: sortedActivities,
         searchTerm: situationChunks.join(' '),
-        total: finalActivities.length
+        total: sortedActivities.length
       };
     } catch (error) {
       console.error(`❌ Erreur lors de la recherche d'activités:`, error);
@@ -2107,8 +2120,7 @@ export class SupabaseService {
   async searchHowerAngelsByUserSituation(
     situationChunks: string[],
     limit: number = 2,
-    withMatchInfos: boolean = false,
-    clearDoublons: boolean = true
+    withMatchInfos: boolean = false
   ): Promise<{
     success: boolean;
     data?: Array<{
@@ -2184,25 +2196,27 @@ export class SupabaseService {
         howerAngelsResults = [...howerAngelsResults, ...(results || [])];
       });
 
-      let finalHowerAngelsResults: any[];
-      
-      if (clearDoublons) {
-        // Dédupliquer par ID en gardant le meilleur score de similarité
-        const uniqueHowerAngels = new Map<string, any>();
-        howerAngelsResults.forEach((user: any) => {
-          const existing = uniqueHowerAngels.get(user.id);
-          if (!existing || (user.similarity > existing.similarity)) {
-            uniqueHowerAngels.set(user.id, user);
-          }
-        });
-        finalHowerAngelsResults = Array.from(uniqueHowerAngels.values());
-      } else {
-        // Ne pas dédupliquer, garder tous les résultats pour compter les matchs
-        finalHowerAngelsResults = howerAngelsResults;
-      }
+      // Compter les matchs par hower angel
+      const howerAngelMatchCount = new Map<string, number>();
+      howerAngelsResults.forEach((user: any) => {
+        const currentCount = howerAngelMatchCount.get(user.id) || 0;
+        howerAngelMatchCount.set(user.id, currentCount + 1);
+      });
+
+      // Dédupliquer par ID en gardant le meilleur score de similarité et en ajoutant le matchCount
+      const uniqueHowerAngels = new Map<string, any>();
+      howerAngelsResults.forEach((user: any) => {
+        const existing = uniqueHowerAngels.get(user.id);
+        if (!existing || (user.similarity > existing.similarity)) {
+          uniqueHowerAngels.set(user.id, {
+            ...user,
+            matchCount: howerAngelMatchCount.get(user.id) || 1
+          });
+        }
+      });
 
       // Mapper les résultats avec les données enrichies de match_user_data
-      const howerAngels = finalHowerAngelsResults
+      const howerAngels = Array.from(uniqueHowerAngels.values())
         .map((user: any) => {
           const result: any = {
             id: user.id,
@@ -2233,7 +2247,9 @@ export class SupabaseService {
               status: activity.status,
               isActive: activity.is_active
             })),
-            relevanceScore: user.similarity
+            relevanceScore: user.similarity,
+            similarity: user.similarity,
+            matchCount: user.matchCount
           };
           if (withMatchInfos) {
             result.typicalSituations = user.typical_situations;
@@ -2243,11 +2259,13 @@ export class SupabaseService {
           return result;
         });
 
-      // Trier par score de pertinence
-      howerAngels.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      // Trier par matchCount décroissant, puis par similarité si matchCount égal
+      const sortedHowerAngels = sortSearchResultsBySimilarity(howerAngels);
+
+      console.log('🔍 Résultats de la recherche de hower angels triés:', sortedHowerAngels.length);
 
       // Limiter au nombre demandé
-      const limitedResults = howerAngels.slice(0, limit);
+      const limitedResults = sortedHowerAngels.slice(0, limit);
 
       console.log(`✅ ${limitedResults.length} hower angels trouvés`);
 
