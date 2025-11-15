@@ -331,25 +331,9 @@ export class BilanChatBotService extends RecommendationChatBotService {
       const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
       let intent = currentIntentInfos?.intent;
       
-      // Si l'intent n'existe pas, le calculer maintenant (car shouldComputeIntent était false avant)
-      if (!intent) {
-        console.log('🔄 [BILAN] Intent manquant, calcul de l\'intent pour la dernière réponse...');
-        const intentResult = await this.computeIntent(context, userMessage);
-        intent = intentResult.intent;
-        
-        // Mettre à jour le contexte avec l'intent calculé
-        context.metadata = {
-          ...context.metadata,
-          ['currentIntentInfos']: {
-            intent: intent || null,
-            intentCost: intentResult.intentCost || null,
-            intentContextText: null
-          }
-        };
-      }
-      
       // Calculer globalIntentInfos avant de générer le résumé (nécessaire pour avoir l'univers)
       if (intent) {
+        console.log('🔄 [BILAN] Intent disponible, calcul de globalIntentInfos');
         const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
         context.metadata = {
           ...context.metadata,
