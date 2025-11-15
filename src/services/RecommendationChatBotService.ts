@@ -1426,7 +1426,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     context: HowanaContext,
     userMessage: string,
     onIaResponse: (response: any) => Promise<void>,
-    forceSummary: boolean = false
+    forceSummary: boolean = false,
+    autoResponse?: string
   ): Promise<HowanaContext> {
     // Récupérer intent depuis le contexte
     const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
@@ -1434,7 +1435,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
     if (!intent) {
       console.warn('⚠️ Aucun intent trouvé dans le contexte, utilisation du comportement par défaut');
-      return super.handleIntent(context, userMessage, onIaResponse, forceSummary);
+      return super.handleIntent(context, userMessage, onIaResponse, forceSummary, autoResponse);
     }
 
     const typedIntent = intent;
@@ -1526,7 +1527,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     }
 
     // Appel unifié à super.handleIntent à la fin
-    return super.handleIntent(context, userMessage, onIaResponse, forceSummary);
+    return super.handleIntent(context, userMessage, onIaResponse, forceSummary, autoResponse);
   }
 
   /**

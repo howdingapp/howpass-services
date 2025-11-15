@@ -1508,7 +1508,8 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
     context: HowanaContext,
     userMessage: string,
     onIaResponse: (response: any) => Promise<void>,
-    forceSummary: boolean = false
+    forceSummary: boolean = false,
+    autoResponse?: string
   ): Promise<HowanaContext> {
     // Si forceSummary est true, générer le résumé au lieu d'une réponse normale
     if (forceSummary) {
@@ -1529,6 +1530,27 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
       
       // Appeler le callback avec la réponse de résumé
       await onIaResponse(summaryResponse);
+      
+      return context;
+    }
+    
+    // Si autoResponse est fourni, créer la structure aiResponse à partir du texte
+    if (autoResponse != undefined) {
+      console.log('✅ [BASE] Utilisation de autoResponse fourni, pas d\'appel à l\'IA');
+      
+      // Créer la structure de réponse au format attendu (basée sur la structure errorResponse)
+      const aiResponse = {
+        response: autoResponse,
+        messageId: `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        updatedContext: context,
+        cost_input: null,
+        cost_cached_input: null,
+        cost_output: null,
+        haveNext: false,
+      } as unknown as T;
+      
+      // Appeler le callback avec la réponse automatique
+      await onIaResponse(aiResponse);
       
       return context;
     }

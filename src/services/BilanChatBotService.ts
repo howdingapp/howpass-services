@@ -306,7 +306,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
     context: HowanaContext,
     userMessage: string,
     onIaResponse: (response: any) => Promise<void>,
-    forceSummary: boolean = false
+    forceSummary: boolean = false,
+    autoResponse?: string // Paramètre optionnel pour compatibilité avec la signature parente
   ): Promise<HowanaContext> {
     // Récupérer le nombre de questions restantes
     const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
@@ -362,35 +363,12 @@ export class BilanChatBotService extends RecommendationChatBotService {
       forceSummary = true;
       
       // Appeler la méthode parente uniquement pour le forceSummary
-      return super.handleIntent(context, userMessage, onIaResponse, forceSummary);
+      return super.handleIntent(context, userMessage, onIaResponse, forceSummary, autoResponse);
     }
-    
-    // Dans tous les autres cas, générer manuellement la réponse
-    console.log(`💬 [BILAN] Génération manuelle de la réponse (il reste ${newRemainQuestion} question(s))`);
-    
-    // Créer la structure de réponse manuellement (sans appel à l'IA)
-    // Le texte de réponse sera minimal, buildFinalResponse ajoutera la question
-    const aiResponse: RecommendationMessageResponse = {
-      messageId: `bilan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      response: '', // Texte vide, buildFinalResponse ajoutera la question suivante
-      quickReplies: [], // Vide, sera rempli par buildFinalResponse avec les quick replies de la question
-      cost_input: null,
-      cost_cached_input: null,
-      cost_output: null,
-      updatedContext: context
-    };
-    
-    // Calculer l'index de la question actuelle
-    const currentQuestionIndex = BILAN_QUESTIONS.length - (newRemainQuestion || 0);
-    
-    // Construire la réponse finale avec la question et les quick replies
-    const finalResponse = this.buildFinalResponse(aiResponse, currentQuestionIndex);
-    
-    // Envoyer la réponse via onIaResponse
-    await onIaResponse(finalResponse);
-    
-    // Retourner le contexte mis à jour
-    return finalResponse.updatedContext;
+
+    // Utiliser autoResponse pour passer le texte de la réponse à handleIntent
+    // handleIntent créera la structure aiResponse et continuera les calculs subséquents
+    return super.handleIntent(context, userMessage, onIaResponse, false, '');
   }
 
   /**
