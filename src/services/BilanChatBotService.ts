@@ -293,7 +293,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
         }
       },
       intentCost: null,
-      globalIntentInfos: null
+      globalIntentInfos: existingGlobalIntentInfos
     };
   }
 
