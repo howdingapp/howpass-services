@@ -1287,6 +1287,8 @@ export class SupabaseService {
         practicesResults = [...practicesResults, ...(practices || [])];
       });
       
+      console.log('🔍 Résultats de la recherche de pratiques:', practicesResults.length, "(clearDoublons = " + clearDoublons + ")");
+
       // Mapper les résultats
       const mapPractice = (r: any) => {
         const relevanceScore = r?.similarity ?? 0.8;
