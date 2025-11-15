@@ -254,15 +254,26 @@ export class BilanChatBotService extends RecommendationChatBotService {
     
     // Parser la réponse : si c'est un entier, c'est un index, sinon c'est du texte custom (index = -1)
     let responseIndex = -1;
+    let responseText = userMessage;
     const parsedIndex = parseInt(userMessage, 10);
     if (!isNaN(parsedIndex) && parsedIndex >= 0) {
       responseIndex = parsedIndex;
+      // Convertir l'index en texte correspondant pour l'univers
+      if (previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length) {
+        const questionData = BILAN_QUESTIONS[previousQuestionIndex];
+        if (questionData && responseIndex < questionData.quickReplies.length) {
+          const quickReply = questionData.quickReplies[responseIndex];
+          if (quickReply) {
+            responseText = quickReply.text;
+          }
+        }
+      }
     }
     
-    // Ajouter la nouvelle question-réponse avec l'index
+    // Ajouter la nouvelle question-réponse avec l'index et le texte converti
     const questionResponses: Array<{ question: string; index: number; response: string }> = [
       ...existingQuestionResponses,
-      { question: previousQuestion!, index: responseIndex, response: userMessage }
+      { question: previousQuestion!, index: responseIndex, response: responseText }
     ];
     
     // Séparer les réponses standard (index >= 0) de celles qui sont custom (index == -1)
@@ -995,10 +1006,22 @@ IMPORTANT :
       }
     }
     
+    // Convertir l'index en texte correspondant pour l'univers si c'est un index valide
+    let responseText = userMessage || '';
+    if (responseIndex >= 0 && previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length) {
+      const questionData = BILAN_QUESTIONS[previousQuestionIndex];
+      if (questionData && responseIndex < questionData.quickReplies.length) {
+        const quickReply = questionData.quickReplies[responseIndex];
+        if (quickReply) {
+          responseText = quickReply.text;
+        }
+      }
+    }
+    
     const currentQuestionResponse: { question: string; index: number; response: string } | undefined = userMessage ? {
       question: previousQuestion!,
       index: responseIndex,
-      response: userMessage
+      response: responseText
     } : undefined;
     
     // Accumuler les questions-réponses précédentes avec la nouvelle
