@@ -277,7 +277,8 @@ export class BilanChatBotService extends RecommendationChatBotService {
     ];
     
     // Séparer les réponses standard (index >= 0) de celles qui sont custom (index == -1)
-    const standardResponses: Array<{ question: string; index: number; response: string }> = [];
+    // Ajouter questionIndex (position dans questionResponses) pour les réponses standard
+    const standardResponses: Array<{ question: string; index: number; response: string; questionIndex: number }> = [];
     const customResponses: Array<{ question: string; response: string }> = [];
     
     for (let i = 0; i < questionResponses.length; i++) {
@@ -292,8 +293,11 @@ export class BilanChatBotService extends RecommendationChatBotService {
         };
         customResponses.push(normalizedQr);
       } else {
-        // Réponse standard : index valide
-        standardResponses.push(qr);
+        // Réponse standard : index valide, ajouter questionIndex (position dans questionResponses)
+        standardResponses.push({
+          ...qr,
+          questionIndex: i
+        });
       }
     }
     
@@ -304,19 +308,12 @@ export class BilanChatBotService extends RecommendationChatBotService {
       const qr = standardResponses[i];
       if (!qr || qr.index < 0) continue;
       
-      // Trouver l'index de la question dans BILAN_QUESTIONS
-      const questionIndex = BILAN_QUESTIONS.findIndex(q => q.question === qr.question);
-      if (questionIndex === -1) continue;
-      
-      const questionData = BILAN_QUESTIONS[questionIndex];
+      const questionData = BILAN_QUESTIONS[qr.questionIndex];
       if (!questionData) continue;
       
-      // Récupérer le quickReply à l'index spécifié
-      if (qr.index >= 0 && qr.index < questionData.quickReplies.length) {
-        const quickReply = questionData.quickReplies[qr.index];
-        if (quickReply && quickReply.chunks) {
-          quickReplyChunks.push(...quickReply.chunks);
-        }
+      const quickReply = questionData.quickReplies[qr.index];
+      if (quickReply && quickReply.chunks) {
+        quickReplyChunks.push(...quickReply.chunks);
       }
     }
     
