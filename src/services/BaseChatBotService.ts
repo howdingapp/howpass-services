@@ -95,11 +95,8 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
       // Générer automatiquement une première réponse IA basée sur le contexte
       try {
-        const firstResponseResult = await this.generateFirstResponse(result.context);
-
-        console.log('💬 [BASE] Will call onGenerateFirstAiResponse');
-        // Appeler onGenerateFirstAiResponse pour permettre aux sous-classes d'intervenir
-        const processedFirstResponse = await this.onGenerateFirstAiResponse(firstResponseResult, result.context);
+        // generateFirstResponse appelle déjà onGenerateFirstAiResponse en interne
+        const processedFirstResponse = await this.generateFirstResponse(result.context);
         
         if (processedFirstResponse.response) {
           // Utiliser le messageId d'OpenAI si disponible
@@ -160,8 +157,22 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
 
   /**
    * Générer une première réponse IA basée sur le contexte de la conversation
+   * Appelle _generateFirstResponse puis onGenerateFirstAiResponse pour permettre aux sous-classes d'intervenir
    */
   public async generateFirstResponse(context: HowanaContext): Promise<T> {
+    // Générer la première réponse IA
+    const firstResponse = await this._generateFirstResponse(context);
+    
+    // Appeler onGenerateFirstAiResponse pour permettre aux sous-classes d'intervenir
+    const processedResponse = await this.onGenerateFirstAiResponse(firstResponse, context);
+    
+    return processedResponse;
+  }
+
+  /**
+   * Génération interne de la première réponse IA (sans hook)
+   */
+  private async _generateFirstResponse(context: HowanaContext): Promise<T> {
     try {
       console.log('🔍 Génération de la première réponse IA pour la conversation:', context.id);
 
