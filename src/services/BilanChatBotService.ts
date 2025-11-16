@@ -7,6 +7,11 @@ import {
   BilanUniverContext,
   BilanGlobalIntentInfos
 } from '../types/bilan';
+import {
+  PracticeSearchResult,
+  ActivitySearchResult,
+  HowerAngelSearchResult
+} from '../types/search';
 import { BaseChatBotService } from './BaseChatBotService';
 
 /**
@@ -1264,22 +1269,22 @@ IMPORTANT :
       this.supabaseService.searchHowerAngelsByUserSituation(allChunksTexts, 10, true) // withMatchInfos = true
     ]);
     
-    const practices = practicesResults.results || [];
-    const activities = activitiesResults.results || [];
-    const howerAngels = howerAngelsResult.success ? (howerAngelsResult.data || []) : [];
+    const practices: PracticeSearchResult[] = practicesResults.results || [];
+    const activities: ActivitySearchResult[] = activitiesResults.results || [];
+    const howerAngels: HowerAngelSearchResult[] = howerAngelsResult.success ? (howerAngelsResult.data || []) : [];
     
     console.log(`✅ [BILAN] ${practices.length} pratiques, ${activities.length} activités et ${howerAngels.length} hower angels trouvés`);
     
     // Extraire les familles directement depuis les résultats de recherche (plus besoin de requêtes supplémentaires)
     const familyIds = new Set<string>();
-    const familiesMap = new Map<string, { id: string; name: string; description?: string }>(); // familyId -> {id, name, description}
+    const familiesMap = new Map<string, { id: string; name: string; description?: string | undefined }>(); // familyId -> {id, name, description}
     const practiceFamilyMap = new Map<string, string>(); // practiceId -> familyId
     const activityFamilyMap = new Map<string, string>(); // activityId -> familyId
     const familyMatchCount = new Map<string, number>(); // familyId -> nombre total de matchs
     
     // Extraire les familles depuis les pratiques et compter les matchs
     // Une pratique qui a matché X fois contribue pour X à sa famille
-    practices.forEach((practice: any) => {
+    practices.forEach((practice: PracticeSearchResult) => {
       if (practice.familyId) {
         familyIds.add(practice.familyId);
         practiceFamilyMap.set(practice.id, practice.familyId);
@@ -1292,11 +1297,14 @@ IMPORTANT :
         
         // Stocker les informations de la famille si disponibles
         if (practice.familyName) {
-          familiesMap.set(practice.familyId, {
+          const familyInfo: { id: string; name: string; description?: string } = {
             id: practice.familyId,
-            name: practice.familyName,
-            description: practice.familyDescription || undefined
-          });
+            name: practice.familyName
+          };
+          if (practice.familyDescription) {
+            familyInfo.description = practice.familyDescription;
+          }
+          familiesMap.set(practice.familyId, familyInfo);
         }
       }
     });
@@ -1304,18 +1312,21 @@ IMPORTANT :
     // Extraire les familles depuis les activités (uniquement pour le mapping, pas pour le comptage)
     // Les activités ne contribuent PAS au comptage des familles car elles dépendent des utilisateurs
     // et peuvent biaiser les statistiques. Seules les pratiques (fixes) contribuent.
-    activities.forEach((activity: any) => {
+    activities.forEach((activity: ActivitySearchResult) => {
       if (activity.familyId) {
         // On garde le mapping pour référence, mais on ne compte pas les matchs
         activityFamilyMap.set(activity.id, activity.familyId);
         
         // Stocker les informations de la famille si disponibles (uniquement si pas déjà présente)
         if (activity.familyName && !familiesMap.has(activity.familyId)) {
-          familiesMap.set(activity.familyId, {
+          const familyInfo: { id: string; name: string; description?: string } = {
             id: activity.familyId,
-            name: activity.familyName,
-            description: activity.familyDescription || undefined
-          });
+            name: activity.familyName
+          };
+          if (activity.familyDescription) {
+            familyInfo.description = activity.familyDescription;
+          }
+          familiesMap.set(activity.familyId, familyInfo);
         }
       }
     });
@@ -1345,7 +1356,7 @@ IMPORTANT :
     
     // Compter les pratiques par famille (seules les pratiques comptent pour la dominance)
     // Une pratique qui a matché X fois contribue pour X à sa famille
-    practices.forEach((practice: any) => {
+    practices.forEach((practice: PracticeSearchResult) => {
       const familyId = practiceFamilyMap.get(practice.id);
       if (familyId) {
         const family = familyDominance.get(familyId);
@@ -1413,18 +1424,18 @@ IMPORTANT :
     // Enrichir les pratiques et activités avec les chunks qui ont permis le matching
     // chunkText contient le fragment de chunk de la base de données qui a matché
     // matchCount est déjà présent dans les pratiques et activités après déduplication
-    const practicesWithMatchCount = practices.map((practice: any) => ({
+    const practicesWithMatchCount = practices.map((practice: PracticeSearchResult) => ({
       ...practice,
       matchingChunks: practice.chunkText || null // Fragment de chunk de la BD qui a permis le matching
     }));
     
-    const activitiesWithMatchCount = activities.map((activity: any) => ({
+    const activitiesWithMatchCount = activities.map((activity: ActivitySearchResult) => ({
       ...activity,
       matchingChunks: activity.chunkText || null // Fragment de chunk de la BD qui a permis le matching
     }));
     
     // Enrichir les hower angels avec les chunks qui ont permis le matching
-    const howerAngelsWithChunks = howerAngels.map((howerAngel: any) => ({
+    const howerAngelsWithChunks = howerAngels.map((howerAngel: HowerAngelSearchResult) => ({
       ...howerAngel,
       matchingChunks: howerAngel.chunkText || null // Fragment de chunk de la BD qui a permis le matching
     }));

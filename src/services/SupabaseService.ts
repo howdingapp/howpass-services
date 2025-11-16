@@ -5,6 +5,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { EmbeddingService } from './EmbeddingService';
 import { HowanaContext } from '../types/repositories';
 import { sortSearchResultsBySimilarity } from '../utils/searchUtils';
+import {
+  SituationChunk,
+  SearchPracticesBySituationChunksResponse,
+  SearchActivitiesBySituationChunksResponse,
+  SearchHowerAngelsByUserSituationResponse,
+  PracticeSearchResult,
+  ActivitySearchResult,
+  HowerAngelSearchResult
+} from '../types/search';
 
 export const VIDEO_BUCKET= "videos";
 export const IMAGE_BUCKET= "images";
@@ -1263,13 +1272,9 @@ export class SupabaseService {
    * Recherche uniquement des pratiques basée sur des chunks de situation
    */
   async searchPracticesBySituationChunks(
-    situationChunks: string[],
+    situationChunks: SituationChunk[],
     withMatchInfos: boolean = false
-  ): Promise<{
-    results: any[];
-    searchTerm: string;
-    total: number;
-  }> {
+  ): Promise<SearchPracticesBySituationChunksResponse> {
     try {
       console.log(`🔍 Recherche de pratiques pour ${situationChunks.length} chunks de situation`);
       
@@ -1290,9 +1295,9 @@ export class SupabaseService {
       console.log('🔍 Résultats de la recherche de pratiques:', practicesResults.length);
 
       // Mapper les résultats
-      const mapPractice = (r: any) => {
+      const mapPractice = (r: any): PracticeSearchResult => {
         const relevanceScore = r?.similarity ?? 0.8;
-        const result: any = {
+        const result: PracticeSearchResult = {
           type: 'practice',
           id: r?.id,
           title: r?.title,
@@ -1392,13 +1397,9 @@ export class SupabaseService {
    * Recherche uniquement des activités basée sur des chunks de situation
    */
   async searchActivitiesBySituationChunks(
-    situationChunks: string[],
+    situationChunks: SituationChunk[],
     withMatchInfos: boolean = false
-  ): Promise<{
-    results: any[];
-    searchTerm: string;
-    total: number;
-  }> {
+  ): Promise<SearchActivitiesBySituationChunksResponse> {
     try {
       console.log(`🔍 Recherche d'activités pour ${situationChunks.length} chunks de situation`);
       
@@ -1417,9 +1418,9 @@ export class SupabaseService {
       });
       
       // Mapper les résultats
-      const mapActivity = (r: any) => {
+      const mapActivity = (r: any): ActivitySearchResult => {
         const relevanceScore = r?.similarity ?? 0.8;
-        const result: any = {
+        const result: ActivitySearchResult = {
           type: 'activity',
           id: r?.id,
           title: r?.title,
@@ -2164,48 +2165,10 @@ export class SupabaseService {
    * Utilise match_user_data pour récupérer les données enrichies (activités, spécialités transformées)
    */
   async searchHowerAngelsByUserSituation(
-    situationChunks: string[],
+    situationChunks: SituationChunk[],
     limit: number = 2,
     withMatchInfos: boolean = false
-  ): Promise<{
-    success: boolean;
-    data?: Array<{
-      id: string;
-      userId: string;
-      firstName?: string;
-      lastName?: string;
-      email?: string;
-      specialties?: Array<{
-        id: string;
-        title: string;
-        shortDescription?: string;
-      }>;
-      experience?: string;
-      profile: string;
-      activities?: Array<{
-        id: string;
-        title: string;
-        shortDescription?: string;
-        longDescription?: string;
-        durationMinutes?: number;
-        participants?: number;
-        rating?: number;
-        price?: number;
-        benefits?: any;
-        locationType?: string;
-        address?: any;
-        selectedKeywords?: any;
-        presentationImagePublicUrl?: string;
-        presentationVideoPublicUrl?: string;
-        status?: string;
-        isActive?: boolean;
-      }>;
-      relevanceScore: number;
-    }>;
-    searchTerm: string;
-    total: number;
-    error?: string;
-  }> {
+  ): Promise<SearchHowerAngelsByUserSituationResponse> {
     try {
       console.log(`🔍 Recherche de hower angels pour ${situationChunks.length} chunks de situation`);
 
@@ -2286,8 +2249,8 @@ export class SupabaseService {
 
       // Mapper les résultats avec les données enrichies de match_user_data
       const howerAngels = Array.from(uniqueHowerAngels.values())
-        .map((user: any) => {
-          const result: any = {
+        .map((user: any): HowerAngelSearchResult => {
+          const result: HowerAngelSearchResult = {
             id: user.id,
             userId: user.user_id,
             firstName: user.first_name,

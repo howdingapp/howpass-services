@@ -1,3 +1,9 @@
+import {
+  PracticeSearchResult,
+  ActivitySearchResult,
+  HowerAngelSearchResult
+} from './search';
+
 export interface BilanScores {
   principaux: {
     niveauEnergie: number;
@@ -119,9 +125,9 @@ export interface BilanFamily {
  */
 export interface BilanUniverContext {
   families?: { info?: string; value?: BilanFamily[] };
-  practices?: { info?: string; value?: any[] };
-  activities?: { info?: string; value?: any[] };
-  howerAngels?: { info?: string; value?: any[] };
+  practices?: { info?: string; value?: PracticeSearchResult[] };
+  activities?: { info?: string; value?: ActivitySearchResult[] };
+  howerAngels?: { info?: string; value?: HowerAngelSearchResult[] };
   questionResponses?: { info?: string; value?: Array<{ question?: string; response: string }> };
   chunks?: { info?: string; value?: BilanChunk[] };
   computedAt?: string;
@@ -137,15 +143,15 @@ export interface BilanUniverContextComplete {
   };
   practices: {
     info: string;
-    value: any[];
+    value: PracticeSearchResult[];
   };
   activities: {
     info: string;
-    value: any[];
+    value: ActivitySearchResult[];
   };
   howerAngels: {
     info: string;
-    value: any[];
+    value: HowerAngelSearchResult[];
   };
   questionResponses: {
     info: string;
