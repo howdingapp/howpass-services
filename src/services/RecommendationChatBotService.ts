@@ -2036,7 +2036,12 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       return true; // Erreur gérée
     }
     
-    const howerAngels: HowerAngelItem[] = howerAngelsResult.data || [];
+    const howerAngels: HowerAngelItem[] = howerAngelsResult.data
+      ? howerAngelsResult.data.map(item => ({
+          ...item,
+          profile: item.profile || '' // Garantir que profile est toujours présent
+        }))
+      : [];
     console.log(`✅ ${howerAngels.length} hower angels trouvés`);
     
     // Ajouter les résultats dans les métadonnées
@@ -2076,7 +2081,12 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     
     const activities: ActivityItem[] = activitiesResults.results || [];
     const practices: PracticeItem[] = practicesResults.results || [];
-    const howerAngels: HowerAngelItem[] = howerAngelsResult.success ? (howerAngelsResult.data || []) : [];
+    const howerAngels: HowerAngelItem[] = howerAngelsResult.success && howerAngelsResult.data
+      ? howerAngelsResult.data.map(item => ({
+          ...item,
+          profile: item.profile || '' // Garantir que profile est toujours présent
+        }))
+      : [];
     
     if (!howerAngelsResult.success) {
       console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
