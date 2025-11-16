@@ -98,11 +98,67 @@ export interface BilanAnalysis {
 }
 
 /**
+ * Interface pour la recommandation prioritaire du bilan
+ */
+export interface BilanTop1Recommandation {
+  id: string;
+  type: 'activity' | 'practice';
+  reason: string;
+  name?: string; // Enrichi après génération
+}
+
+/**
+ * Interface pour un élément de recommandation ordonnée (pratique ou activité)
+ */
+export interface BilanOrderedRecommendationItem {
+  id: string;
+  relevanceScore: number;
+  reason: string;
+  name?: string; // Enrichi après génération
+}
+
+/**
+ * Interface pour le panneau de recommandations top du bilan
+ */
+export interface BilanTopRecommendedPanel {
+  orderedTopPractices?: BilanOrderedRecommendationItem[];
+  orderedTopActivities?: BilanOrderedRecommendationItem[];
+  summary: string;
+}
+
+/**
+ * Interface pour une recommandation par famille dans le bilan
+ */
+export interface BilanFamilyRecommendation {
+  familyId: string;
+  familyName: string;
+  orderedRecommendedPractices?: Array<{ id: string; name?: string }>;
+  orderedRecommendedActivities?: Array<{ id: string; name?: string }>;
+  reason: string;
+}
+
+/**
+ * Interface pour la recommandation spécifique au bilan
+ * Les champs sont optionnels selon la disponibilité des activités/pratiques
+ */
+export interface BilanRecommendation {
+  top1Recommandation?: BilanTop1Recommandation;
+  topRecommendedPanel?: BilanTopRecommendedPanel;
+  byFamilyRecommendedPanel: BilanFamilyRecommendation[];
+  activitiesReasons?: string;
+  practicesReasons?: string;
+  relevanceScore: number;
+  reasoning: string;
+  benefits: string[];
+  nextSteps: string[];
+}
+
+/**
  * Interface pour les résumés de conversation de bilan
  */
 export interface BilanSummary {
   userProfile: UserProfile;
-  recommendation: Recommendation;
+  recommendation: BilanRecommendation;
   importanteKnowledge: string[];
   univers: BilanUniverse;
 }

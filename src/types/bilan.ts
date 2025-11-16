@@ -107,6 +107,24 @@ export interface BilanQuestionIntent {
 }
 
 /**
+ * Structure simplifiée d'une pratique pour le top 4
+ */
+export interface BilanFamilyTopPractice {
+  id: string;
+  title: string;
+  relevanceScore: number;
+}
+
+/**
+ * Structure simplifiée d'une activité pour le top 4
+ */
+export interface BilanFamilyTopActivity {
+  id: string;
+  title: string;
+  relevanceScore: number;
+}
+
+/**
  * Structure d'une famille dans le bilan
  */
 export interface BilanFamily {
@@ -118,6 +136,8 @@ export interface BilanFamily {
   activitiesCount: number;
   howerAngelsCount: number;
   matchCount: number;
+  topPractices: BilanFamilyTopPractice[]; // Top 4 des pratiques associées à cette famille
+  topActivities: BilanFamilyTopActivity[]; // Top 4 des activités associées à cette famille
 }
 
 /**

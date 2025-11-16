@@ -5,7 +5,8 @@ import {
   BilanChunk,
   BilanQuestionIntent,
   BilanUniverContext,
-  BilanGlobalIntentInfos
+  BilanGlobalIntentInfos,
+  BilanFamily
 } from '../types/bilan';
 import {
   PracticeSearchResult,
@@ -456,6 +457,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
   /**
    * Redéfinit getActivitiesAndPracticesConstraints pour utiliser l'univers du contexte
    * au lieu de context.recommendations
+   * Inclut les pratiques et activités de l'univers ainsi que les top 4 de chaque famille
    */
   protected getActivitiesAndPracticesConstraints(context: HowanaContext): {
     availableActivityIds: string[];
@@ -470,12 +472,41 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     const practicesFromUniverse = (bilanUniverContext?.practices?.value || []).slice(0, 10);
     const activitiesFromUniverse = (bilanUniverContext?.activities?.value || []).slice(0, 10);
 
+    // Extraire les IDs des top practices et top activities de chaque famille
+    const families = bilanUniverContext?.families?.value || [];
+    const topPracticeIds = new Set<string>();
+    const topActivityIds = new Set<string>();
+    
+    families.forEach((family: BilanFamily) => {
+      // Ajouter les IDs des top 4 pratiques de cette famille
+      if (family.topPractices && Array.isArray(family.topPractices)) {
+        family.topPractices.forEach((practice: any) => {
+          if (practice.id) {
+            topPracticeIds.add(practice.id);
+          }
+        });
+      }
+      
+      // Ajouter les IDs des top 4 activités de cette famille
+      if (family.topActivities && Array.isArray(family.topActivities)) {
+        family.topActivities.forEach((activity: any) => {
+          if (activity.id) {
+            topActivityIds.add(activity.id);
+          }
+        });
+      }
+    });
+
     // Extraire uniquement les IDs pour créer les enums
-    const availableActivityIds = activitiesFromUniverse.map((item: any) => item.id).filter((id: any) => id);
-    const availablePracticeIds = practicesFromUniverse.map((item: any) => item.id).filter((id: any) => id);
+    const availableActivityIdsFromUniverse = activitiesFromUniverse.map((item: any) => item.id).filter((id: any) => id);
+    const availablePracticeIdsFromUniverse = practicesFromUniverse.map((item: any) => item.id).filter((id: any) => id);
+    
+    // Combiner les IDs de l'univers avec les top IDs des familles (sans doublons)
+    const availableActivityIds = Array.from(new Set([...availableActivityIdsFromUniverse, ...Array.from(topActivityIds)]));
+    const availablePracticeIds = Array.from(new Set([...availablePracticeIdsFromUniverse, ...Array.from(topPracticeIds)]));
     const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
 
-    console.log(`📋 [BILAN] Contraintes générées depuis l'univers avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques (IDs uniquement, limité aux 10 meilleurs)`);
+    console.log(`📋 [BILAN] Contraintes générées depuis l'univers avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques (incluant les top 4 de chaque famille)`);
 
     return {
       availableActivityIds,
@@ -487,6 +518,24 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
   protected override getSummaryOutputSchema(context: HowanaContext): any {
     const constraints = this.getActivitiesAndPracticesConstraints(context);
     const { availableActivityIds, availablePracticeIds, allAvailableIds } = constraints;
+
+    // Récupérer les familles avec leurs pourcentages pour la description
+    const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;
+    const families = bilanUniverContext?.families?.value || [];
+    
+    // Construire la description avec les pourcentages de dominance
+    let recommendationDescription = "Recommandation personnalisée basée sur l'analyse du bilan de bien-être. ";
+    
+    if (families.length > 0) {
+      const familiesInfo = families.map((family: BilanFamily) => 
+        `${family.name}: ${family.dominancePercentage.toFixed(1)}%`
+      ).join(', ');
+      
+      recommendationDescription += `Les domaines de bien-être identifiés et leur représentation sont : ${familiesInfo}. `;
+      recommendationDescription += "Idéalement, tes recommandations devraient être représentatives de ces pourcentages (par exemple, si une famille représente 40% de la dominance, environ 40% de tes recommandations devraient provenir de cette famille). ";
+    }
+    
+    recommendationDescription += "Cependant, tu as la responsabilité finale de choisir ce qui semble le mieux correspondre aux besoins et réponses de l'utilisateur, même si cela ne correspond pas exactement aux pourcentages calculés. Priorise toujours la pertinence et l'adéquation avec les besoins exprimés par l'utilisateur.";
 
     console.log(`📋 [BILANS] Contraintes générées avec ${availableActivityIds.length} activités et ${availablePracticeIds.length} pratiques (IDs uniquement):`, {
       availableActivityIds,
@@ -505,7 +554,8 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
             recommendation: this.getBilanRecommendationSchemaFragment(
               availableActivityIds,
               availablePracticeIds,
-              "Recommandation personnalisée basée sur l'analyse du bilan de bien-être"
+              recommendationDescription,
+              families
             ),
             importanteKnowledge: {
               type: "array",
@@ -515,7 +565,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           },
           required: ["userProfile", "recommendation", "importanteKnowledge"],
           additionalProperties: false,
-          description: `Résumé personnalisé de votre bilan de bien-être avec recommandations adaptées. Les recommandations sont contraintes aux ${allAvailableIds.length} éléments disponibles dans le contexte.`
+          description: `Résumé personnalisé de votre bilan de bien-être avec recommandations adaptées. Les recommandations sont contraintes aux ${allAvailableIds.length} éléments disponibles dans le contexte (incluant les pratiques et activités de l'univers ainsi que les top 4 de chaque famille identifiée).`
         },
         strict: true
       }
@@ -529,99 +579,238 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
   protected getBilanRecommendationSchemaFragment(
     availableActivityIds: string[],
     availablePracticeIds: string[],
-    description: string = "Recommandation personnalisée basée sur l'analyse du bilan de bien-être"
+    description: string = "Recommandation personnalisée basée sur l'analyse du bilan de bien-être",
+    families: BilanFamily[] = []
   ): any {
     const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
     
-    return {
+    // Vérifier si les tableaux sont vides pour éviter les enums vides
+    const hasActivities = availableActivityIds.length > 0;
+    const hasPractices = availablePracticeIds.length > 0;
+    
+    // Schéma réutilisable pour un item de recommandation avec juste un ID
+    const recommendationItemSchema = (availableIds: string[], idDescription: string) => ({
       type: "object",
       properties: {
-        recommendedCategories: {
-          type: "array",
-          minItems: availablePracticeIds.length > 0 ? 1 : 0,
-          maxItems: availablePracticeIds.length > 0 ? Math.max(2, availablePracticeIds.length) : 0,
-          items: {
-            type: "object",
-            properties: {
-              id: {
-                type: "string",
-                enum: availablePracticeIds,
-                description: "Identifiant unique de la pratique de bien-être recommandée"
-              }
-            },
-            required: ["id"],
-            additionalProperties: false
+        id: {
+          type: "string",
+          enum: availableIds,
+          description: idDescription
+        }
+      },
+      required: ["id"],
+      additionalProperties: false
+    });
+    
+    // Construire les propriétés conditionnellement
+    const properties: any = {};
+    
+    // top1Recommandation seulement si on a au moins un ID disponible
+    if (allAvailableIds.length > 0) {
+      properties.top1Recommandation = {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            enum: allAvailableIds,
+            description: "Identifiant unique de la recommandation prioritaire (activité ou pratique)"
           },
-          description: "Pratiques de bien-être recommandées basées sur l'analyse des besoins de l'utilisateur"
-        },
-        recommendedActivities: {
-          type: "array",
-          minItems: availableActivityIds.length > 0 ? 1 : 0,
-          maxItems: availableActivityIds.length > 0 ? Math.max(2, availableActivityIds.length) : 0,
-          items: {
-            type: "object",
-            properties: {
-              id: {
-                type: "string",
-                enum: availableActivityIds,
-                description: "Identifiant unique de l'activité de bien-être recommandée"
-              }
-            },
-            required: ["id"],
-            additionalProperties: false
+          type: {
+            type: "string",
+            enum: ["activity", "practice"],
+            description: "Type de la recommandation prioritaire"
           },
-          description: "Activités de bien-être recommandées basées sur l'analyse des besoins de l'utilisateur"
+          reason: {
+            type: "string",
+            description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation est prioritaire pour vous (formulé en vous parlant directement)"
+          }
         },
-        activitiesReasons: {
-          type: "string",
-          description: "Message destiné à l'utilisateur expliquant pourquoi ces activités vous correspondent (formulé en vous parlant directement l'un à l'autre)"
-        },
-        practicesReasons: {
-          type: "string",
-          description: "Message destiné à l'utilisateur expliquant pourquoi ces pratiques vous correspondent (formulé en vous parlant directement l'un à l'autre)"
-        },
-        relevanceScore: {
-          type: "number",
-          description: "Score de pertinence de la recommandation (0 = non pertinent, 1 = très pertinent)"
-        },
-        reasoning: {
-          type: "string",
-          description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation vous correspond (formulé en vous parlant directement l'un à l'autre)"
-        },
-        benefits: {
-          type: "array",
-          items: { type: "string" },
-          description: "Messages destinés à l'utilisateur listant les bénéfices concrets que vous pourrez retirer (formulés en vous parlant directement)"
-        },
-        nextSteps: {
-          type: "array",
-          items: { type: "string" },
-          description: "Messages destinés à l'utilisateur décrivant les actions concrètes à entreprendre pour progresser dans votre bien-être (formulés en vous parlant directement)"
-        },
-        top1Recommandation: {
+        required: ["id", "type", "reason"],
+        additionalProperties: false,
+        description: "Recommandation prioritaire unique, sélectionnée parmi les activités et pratiques disponibles"
+      };
+    }
+    
+    // topRecommendedPanel avec propriétés conditionnelles
+    const topRecommendedPanelProperties: any = {};
+    const topRecommendedPanelRequired: string[] = [];
+    
+    if (hasPractices) {
+      topRecommendedPanelProperties.orderedTopPractices = {
+        type: "array",
+        items: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              enum: allAvailableIds,
-              description: "Identifiant unique de la recommandation prioritaire (activité ou pratique)"
+              enum: availablePracticeIds,
+              description: "Identifiant unique de la pratique de bien-être"
             },
-            type: {
-              type: "string",
-              enum: ["activity", "practice"],
-              description: "Type de la recommandation prioritaire"
+            relevanceScore: {
+              type: "number",
+              description: "Score de pertinence de cette pratique (0 = non pertinent, 1 = très pertinent)"
             },
             reason: {
               type: "string",
-              description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation est prioritaire pour vous (formulé en vous parlant directement)"
+              description: "Message destiné à l'utilisateur expliquant pourquoi cette pratique a été choisie et pourquoi elle est à cette position dans l'ordre (du plus pertinent au moins pertinent), formulé en vous parlant directement"
             }
           },
-          required: ["id", "type", "reason"],
-          additionalProperties: false,
-          description: "Recommandation prioritaire unique, sélectionnée parmi les activités et pratiques disponibles"
-        }
+          required: ["id", "relevanceScore", "reason"],
+          additionalProperties: false
+        },
+        description: "Top des pratiques les plus pertinentes pour l'utilisateur, ordonnées par pertinence décroissante (du plus pertinent au moins pertinent)"
+      };
+      topRecommendedPanelRequired.push("orderedTopPractices");
+    }
+    
+    if (hasActivities) {
+      topRecommendedPanelProperties.orderedTopActivities = {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              enum: availableActivityIds,
+              description: "Identifiant unique de l'activité de bien-être"
+            },
+            relevanceScore: {
+              type: "number",
+              description: "Score de pertinence de cette activité (0 = non pertinent, 1 = très pertinent)"
+            },
+            reason: {
+              type: "string",
+              description: "Message destiné à l'utilisateur expliquant pourquoi cette activité a été choisie et pourquoi elle est à cette position dans l'ordre (du plus pertinent au moins pertinent), formulé en vous parlant directement"
+            }
+          },
+          required: ["id", "relevanceScore", "reason"],
+          additionalProperties: false
+        },
+        description: "Top des activités les plus pertinentes pour l'utilisateur, ordonnées par pertinence décroissante (du plus pertinent au moins pertinent)"
+      };
+      topRecommendedPanelRequired.push("orderedTopActivities");
+    }
+    
+    // Ajouter topRecommendedPanel seulement si on a au moins des pratiques ou des activités
+    if (hasPractices || hasActivities) {
+      topRecommendedPanelProperties.summary = {
+        type: "string",
+        description: "Message destiné à l'utilisateur résumant pourquoi ces recommandations ont été choisies et pourquoi cet ordre spécifique (formulé en vous parlant directement)"
+      };
+      topRecommendedPanelRequired.push("summary");
+      
+      properties.topRecommendedPanel = {
+        type: "object",
+        properties: topRecommendedPanelProperties,
+        required: topRecommendedPanelRequired,
+        additionalProperties: false,
+        description: "Panneau regroupant les meilleures recommandations (pratiques et activités) avec leurs scores de pertinence"
+      };
+    }
+    
+    // byFamilyRecommendedPanel avec propriétés conditionnelles
+    const byFamilyPanelItemProperties: any = {
+      familyId: {
+        type: "string",
+        enum: families.map((f: BilanFamily) => f.id),
+        description: "Identifiant de la famille de bien-être"
       },
-      required: ["recommendedCategories", "recommendedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "reasoning", "benefits", "nextSteps", "top1Recommandation"],
+      familyName: {
+        type: "string",
+        description: "Nom de la famille de bien-être"
+      }
+    };
+    const byFamilyPanelItemRequired: string[] = ["familyId", "familyName"];
+    
+    if (hasPractices) {
+      byFamilyPanelItemProperties.orderedRecommendedPractices = {
+        type: "array",
+        items: recommendationItemSchema(
+          availablePracticeIds,
+          "Identifiant unique de la pratique recommandée pour cette famille"
+        ),
+        description: "Pratiques recommandées pour cette famille, ordonnées par pertinence décroissante (idéalement représentatives du pourcentage de dominance de la famille)"
+      };
+      byFamilyPanelItemRequired.push("orderedRecommendedPractices");
+    }
+    
+    if (hasActivities) {
+      byFamilyPanelItemProperties.orderedRecommendedActivities = {
+        type: "array",
+        items: recommendationItemSchema(
+          availableActivityIds,
+          "Identifiant unique de l'activité recommandée pour cette famille"
+        ),
+        description: "Activités recommandées pour cette famille, ordonnées par pertinence décroissante (idéalement représentatives du pourcentage de dominance de la famille)"
+      };
+      byFamilyPanelItemRequired.push("orderedRecommendedActivities");
+    }
+    
+    byFamilyPanelItemProperties.reason = {
+      type: "string",
+      description: "Message destiné à l'utilisateur expliquant pourquoi ces choix spécifiques ont été faits pour cette famille et pourquoi cet ordre de recommandation (du plus pertinent au moins pertinent), formulé en vous parlant directement"
+    };
+    byFamilyPanelItemRequired.push("reason");
+    
+    properties.byFamilyRecommendedPanel = {
+      type: "array",
+      items: {
+        type: "object",
+        properties: byFamilyPanelItemProperties,
+        required: byFamilyPanelItemRequired,
+        additionalProperties: false
+      },
+      description: "Recommandations organisées par famille de bien-être, permettant de structurer les suggestions selon les domaines identifiés"
+    };
+    
+    // Champs conditionnels pour les raisons
+    if (hasActivities) {
+      properties.activitiesReasons = {
+        type: "string",
+        description: "Message destiné à l'utilisateur expliquant pourquoi ces activités vous correspondent (formulé en vous parlant directement l'un à l'autre)"
+      };
+    }
+    
+    if (hasPractices) {
+      properties.practicesReasons = {
+        type: "string",
+        description: "Message destiné à l'utilisateur expliquant pourquoi ces pratiques vous correspondent (formulé en vous parlant directement l'un à l'autre)"
+      };
+    }
+    
+    // Propriétés toujours présentes
+    properties.relevanceScore = {
+      type: "number",
+      description: "Score de pertinence de la recommandation (0 = non pertinent, 1 = très pertinent)"
+    };
+    properties.reasoning = {
+      type: "string",
+      description: "Message destiné à l'utilisateur expliquant pourquoi cette recommandation vous correspond (formulé en vous parlant directement l'un à l'autre)"
+    };
+    properties.benefits = {
+      type: "array",
+      items: { type: "string" },
+      description: "Messages destinés à l'utilisateur listant les bénéfices concrets que vous pourrez retirer (formulés en vous parlant directement)"
+    };
+    properties.nextSteps = {
+      type: "array",
+      items: { type: "string" },
+      description: "Messages destinés à l'utilisateur décrivant les actions concrètes à entreprendre pour progresser dans votre bien-être (formulés en vous parlant directement)"
+    };
+    
+    // Construire le tableau required conditionnellement
+    const required: string[] = [];
+    if (properties.top1Recommandation) required.push("top1Recommandation");
+    if (properties.topRecommendedPanel) required.push("topRecommendedPanel");
+    if (properties.byFamilyRecommendedPanel) required.push("byFamilyRecommendedPanel");
+    if (properties.activitiesReasons) required.push("activitiesReasons");
+    if (properties.practicesReasons) required.push("practicesReasons");
+    required.push("relevanceScore", "reasoning", "benefits", "nextSteps");
+    
+    return {
+      type: "object",
+      properties,
+      required,
       additionalProperties: false,
       description
     };
@@ -1141,6 +1330,8 @@ IMPORTANT :
         activitiesCount: number;
         howerAngelsCount: number;
         matchCount: number;
+        topPractices: Array<{ id: string; title: string; relevanceScore: number }>;
+        topActivities: Array<{ id: string; title: string; relevanceScore: number }>;
       }>;
     };
     practices: {
@@ -1421,6 +1612,61 @@ IMPORTANT :
     const totalPercentage = familiesWithPercentage.reduce((sum, f) => sum + f.dominancePercentage, 0);
     console.log(`📊 [BILAN] Somme des pourcentages: ${totalPercentage.toFixed(2)}%`);
     
+    // Grouper les pratiques et activités par famille pour calculer le top 4
+    const practicesByFamily = new Map<string, PracticeSearchResult[]>();
+    const activitiesByFamily = new Map<string, ActivitySearchResult[]>();
+    
+    // Grouper les pratiques par famille
+    practices.forEach((practice: PracticeSearchResult) => {
+      const familyId = practiceFamilyMap.get(practice.id);
+      if (familyId) {
+        const familyPractices = practicesByFamily.get(familyId) || [];
+        familyPractices.push(practice);
+        practicesByFamily.set(familyId, familyPractices);
+      }
+    });
+    
+    // Grouper les activités par famille
+    activities.forEach((activity: ActivitySearchResult) => {
+      const familyId = activityFamilyMap.get(activity.id);
+      if (familyId) {
+        const familyActivities = activitiesByFamily.get(familyId) || [];
+        familyActivities.push(activity);
+        activitiesByFamily.set(familyId, familyActivities);
+      }
+    });
+    
+    // Ajouter le top 4 des pratiques et activités à chaque famille
+    const familiesWithTopItems = familiesWithPercentage.map(family => {
+      // Top 4 des pratiques pour cette famille (triées par relevanceScore décroissant)
+      const familyPractices = practicesByFamily.get(family.id) || [];
+      const topPractices = familyPractices
+        .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
+        .slice(0, 4)
+        .map(practice => ({
+          id: practice.id,
+          title: practice.title,
+          relevanceScore: practice.relevanceScore
+        }));
+      
+      // Top 4 des activités pour cette famille (triées par relevanceScore décroissant)
+      const familyActivities = activitiesByFamily.get(family.id) || [];
+      const topActivities = familyActivities
+        .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
+        .slice(0, 4)
+        .map(activity => ({
+          id: activity.id,
+          title: activity.title,
+          relevanceScore: activity.relevanceScore
+        }));
+      
+      return {
+        ...family,
+        topPractices,
+        topActivities
+      };
+    });
+    
     // Enrichir les pratiques et activités avec les chunks qui ont permis le matching
     // chunkText contient le fragment de chunk de la base de données qui a matché
     // matchCount est déjà présent dans les pratiques et activités après déduplication
@@ -1457,6 +1703,8 @@ IMPORTANT :
           activitiesCount: number;
           howerAngelsCount: number;
           matchCount: number;
+          topPractices: Array<{ id: string; title: string; relevanceScore: number }>;
+          topActivities: Array<{ id: string; title: string; relevanceScore: number }>;
         }>;
       };
       practices: {
@@ -1481,8 +1729,8 @@ IMPORTANT :
       };
     } = {
       families: {
-        info: 'Liste des familles de pratiques bien-être identifiées à partir des réponses de l\'utilisateur, classées par score de dominance. Chaque famille représente un domaine de bien-être (ex: méditation, yoga, sophrologie, etc.) et contient le nombre de pratiques, activités et hower angels associés, ainsi qu\'un pourcentage de dominance (somme = 100%).',
-        value: familiesWithPercentage
+        info: 'Liste des familles de pratiques bien-être identifiées à partir des réponses de l\'utilisateur, classées par score de dominance. Chaque famille représente un domaine de bien-être (ex: méditation, yoga, sophrologie, etc.) et contient le nombre de pratiques, activités et hower angels associés, ainsi qu\'un pourcentage de dominance (somme = 100%). Chaque famille inclut également le top 4 des pratiques et activités associées, triées par score de pertinence.',
+        value: familiesWithTopItems
       },
       practices: {
         info: 'Liste des pratiques bien-être HOW PASS identifiées comme pertinentes pour l\'utilisateur basées sur ses réponses au questionnaire. Chaque pratique inclut un score de pertinence et un compteur de matchs indiquant combien de fois elle a été trouvée dans les recherches sémantiques.',
