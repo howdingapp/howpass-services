@@ -617,22 +617,14 @@ export class BilanChatBotService extends RecommendationChatBotService {
         // Enrichir recommendedCategories (pratiques)
         if (summary.recommendation?.recommendedCategories && Array.isArray(summary.recommendation.recommendedCategories)) {
           summary.recommendation.recommendedCategories = summary.recommendation.recommendedCategories.map((item: any) => {
-            console.log("item to set", JSON.stringify(item, null, 2));
-            console.log("practicesMap for id", practicesMap.get(item.id));
-            if (item.id && !item.name) {
-              return { ...item, name: practicesMap.get(item.id) || 'Pratique sans nom' };
-            }
-            return item;
+            return { ...item, name: practicesMap.get(item.id) || 'Pratique sans nom' };
           });
         }
         
         // Enrichir recommendedActivities
         if (summary.recommendation?.recommendedActivities && Array.isArray(summary.recommendation.recommendedActivities)) {
           summary.recommendation.recommendedActivities = summary.recommendation.recommendedActivities.map((item: any) => {
-            if (item.id && !item.name) {
-              return { ...item, name: activitiesMap.get(item.id) || 'Activité sans nom' };
-            }
-            return item;
+            return { ...item, name: activitiesMap.get(item.id) || 'Activité sans nom' };
           });
         }
         
