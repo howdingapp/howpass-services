@@ -1,12 +1,13 @@
-import { RecommendationChatBotService } from './RecommendationChatBotService';
-import { HowanaBilanContext, HowanaContext } from '../types/repositories';
-import { ChatBotOutputSchema, RecommendationMessageResponse } from '../types';
+
+import { HowanaBilanContext, HowanaContext, HowanaRecommandationContext } from '../types/repositories';
+import { ChatBotOutputSchema, ExtractedRecommandations, GlobalRecommendationIntentInfos, OpenAIToolsDescription, RecommendationMessageResponse } from '../types';
 import {
   BilanChunk,
   BilanQuestionIntent,
   BilanUniverContext,
   BilanGlobalIntentInfos
 } from '../types/bilan';
+import { BaseChatBotService } from './BaseChatBotService';
 
 /**
  * Questions de bilan prédéfinies avec leurs réponses suggérées
@@ -98,8 +99,8 @@ const BILAN_QUESTIONS: Array<{
   //}
 ];
 
-export class BilanChatBotService extends RecommendationChatBotService {
-  
+export class BilanChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
+    
   /**
    * Règles par défaut pour les bilans (format tableau)
    */
@@ -144,6 +145,34 @@ export class BilanChatBotService extends RecommendationChatBotService {
       - Pour toute autre question (y compris compte/connexion, abonnement/prix, sécurité/données, support/bugs), ne pas utiliser 'faq_search'
       - Si la question concerne des recommandations personnalisées d'activités/pratiques, utilise 'activities_and_practices'`
     ];
+  }
+
+  protected buildSummarySystemPrompt(_context: HowanaContext): string {
+    return "A partir des informations contextuelles, génère un résumé structuré détaillé qui permettra de comprendre les besoins de l'utilisateur et les recommandations proposées.";
+  }
+
+  protected getStartConversationOutputSchema(_context: HowanaContext): ChatBotOutputSchema {
+    // Pas de schéma de sortie spécifique pour startConversation
+    // L'IA répond librement selon le prompt
+    return null;
+  }
+
+  protected getToolsDescription(_context: HowanaContext, _forceSummaryToolCall:boolean, _forWoo:boolean = false): OpenAIToolsDescription | null {
+    return null;
+  }
+
+  protected async callTool(toolName: string, _toolArgs: any, _context: HowanaContext): Promise<any> {
+    throw new Error(`Outil non supporté: ${toolName}`);
+  }
+
+  protected extractRecommandationsFromToolResponse(toolId: string, _response: any): ExtractedRecommandations {
+    console.log(`🔧 Extraction pour l'outil: ${toolId}`);
+    
+    const activities: ExtractedRecommandations['activities'] = [];
+    const practices: ExtractedRecommandations['practices'] = [];
+
+    console.log(`🔧 Extraction terminée: ${activities.length} activités, ${practices.length} pratiques`);
+    return { activities, practices };
   }
 
   /**
@@ -350,10 +379,66 @@ export class BilanChatBotService extends RecommendationChatBotService {
   }
 
   /**
+     * Informations contextuelles des conversations précédentes
+     */
+  protected getPreviousConversationContext(context: HowanaRecommandationContext & HowanaContext): string {
+    if (!context.lastHowanaRecommandation) return '';
+
+    let previousContext = `\n\nCONTEXTE DE LA DERNIÈRE RECOMMANDATION HOWANA:`;
+    
+    if (context.lastHowanaRecommandation.userProfile) {
+      const profile = context.lastHowanaRecommandation.userProfile;
+      if (profile.supposedEmotionalState) {
+        previousContext += `\n- État émotionnel précédent: ${profile.supposedEmotionalState}`;
+      }
+      if (profile.supposedCurrentNeeds && profile.supposedCurrentNeeds.length > 0) {
+        previousContext += `\n- Besoins précédents: ${profile.supposedCurrentNeeds.join(', ')}`;
+      }
+      if (profile.supposedPreferences && profile.supposedPreferences.length > 0) {
+        previousContext += `\n- Préférences précédentes: ${profile.supposedPreferences.join(', ')}`;
+      }
+      if (profile.supposedConstraints && profile.supposedConstraints.length > 0) {
+        previousContext += `\n- Contraintes précédentes: ${profile.supposedConstraints.join(', ')}`;
+      }
+    }
+
+    if (context.lastHowanaRecommandation.recommendedCategories && context.lastHowanaRecommandation.recommendedCategories.length > 0) {
+      const categories = context.lastHowanaRecommandation.recommendedCategories.map(cat => cat.name).join(', ');
+      previousContext += `\n- Pratiques recommandées précédemment: ${categories}`;
+    }
+
+    if (context.lastHowanaRecommandation.recommendedActivities && context.lastHowanaRecommandation.recommendedActivities.length > 0) {
+      const activities = context.lastHowanaRecommandation.recommendedActivities.map(act => act.name).join(', ');
+      previousContext += `\n- Activités recommandées précédemment: ${activities}`;
+    }
+
+    if (context.lastHowanaRecommandation.activitiesReasons) {
+      previousContext += `\n- Raisons des activités précédentes: ${context.lastHowanaRecommandation.activitiesReasons}`;
+    }
+
+    if (context.lastHowanaRecommandation.practicesReasons) {
+      previousContext += `\n- Raisons des pratiques précédentes: ${context.lastHowanaRecommandation.practicesReasons}`;
+    }
+
+    if (context.lastHowanaRecommandation.importanteKnowledge && context.lastHowanaRecommandation.importanteKnowledge.length > 0) {
+      previousContext += `\n- Connaissances importantes précédentes: ${context.lastHowanaRecommandation.importanteKnowledge.join(', ')}`;
+    }
+
+    if (context.lastHowanaRecommandation.top1Recommandation) {
+      const top1 = context.lastHowanaRecommandation.top1Recommandation;
+      previousContext += `\n- Recommandation prioritaire précédente: ${top1.name} (${top1.type === 'activity' ? 'activité' : 'pratique'}) - ${top1.reason}`;
+    }
+
+    previousContext += `\n\nUtilise ces informations pour comprendre l'évolution de l'utilisateur et adapter tes questions et recommandations. Évite de répéter exactement les mêmes suggestions.`;
+
+    return previousContext;
+  }
+
+  /**
    * Redéfinit getActivitiesAndPracticesConstraints pour utiliser l'univers du contexte
    * au lieu de context.recommendations
    */
-  protected override getActivitiesAndPracticesConstraints(context: HowanaContext): {
+  protected getActivitiesAndPracticesConstraints(context: HowanaContext): {
     availableActivityIds: string[];
     availablePracticeIds: string[];
     allAvailableIds: string[];
@@ -518,6 +603,40 @@ export class BilanChatBotService extends RecommendationChatBotService {
         }
       },
       required: ["recommendedCategories", "recommendedActivities", "activitiesReasons", "practicesReasons", "relevanceScore", "reasoning", "benefits", "nextSteps", "top1Recommandation"],
+      additionalProperties: false,
+      description
+    };
+  }
+
+  /**
+   * Schéma réutilisable pour le profil utilisateur
+   * @param description Description personnalisée du champ
+   */
+  protected getUserProfileSchemaFragment(description: string = "Profil utilisateur analysé à partir de la conversation"): any {
+    return {
+      type: "object",
+      properties: {
+        supposedEmotionalState: {
+          type: "string",
+          description: "État émotionnel actuel de l'utilisateur, formulé de son point de vue (ex: 'Je me sens stressé', 'Je ressens de la fatigue')"
+        },
+        supposedCurrentNeeds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Besoins actuels identifiés, formulés du point de vue de l'utilisateur (ex: 'J'ai besoin de me détendre', 'Je veux retrouver de l'énergie')"
+        },
+        supposedPreferences: {
+          type: "array",
+          items: { type: "string" },
+          description: "Préférences de l'utilisateur, formulées de son point de vue (ex: 'J'aime les activités en groupe', 'Je préfère le matin')"
+        },
+        supposedConstraints: {
+          type: "array",
+          items: { type: "string" },
+          description: "Contraintes identifiées, formulées du point de vue de l'utilisateur (ex: 'Je n'ai que 30 minutes', 'Je ne peux pas sortir')"
+        }
+      },
+      required: ["supposedEmotionalState", "supposedCurrentNeeds", "supposedPreferences", "supposedConstraints"],
       additionalProperties: false,
       description
     };
@@ -1331,6 +1450,211 @@ IMPORTANT :
     };
     
     return result;
+  }
+
+  /**
+   * Valide une réponse IA générée
+   * @param response La réponse IA à valider
+   * @param context Le contexte de la conversation
+   * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (T optionnel)
+   */
+  protected async validateResponse(
+    response: RecommendationMessageResponse, 
+    context: HowanaContext
+  ): Promise<{
+    isValid: boolean;
+    reason?: string;
+    finalObject?: RecommendationMessageResponse;
+  }> {
+    // Validation de base : vérifier que la réponse contient le champ response
+    if (!response || !response.response) {
+      return {
+        isValid: false,
+        reason: 'La réponse ne contient pas le champ "response" requis'
+      };
+    }
+
+    // Validation de base : vérifier que la réponse n'est pas vide
+    if (typeof response.response !== 'string' || response.response.trim().length === 0) {
+      return {
+        isValid: false,
+        reason: 'La réponse est vide'
+      };
+    }
+
+    // Vérifier les IDs des quickReplies si présents
+    if (response.quickReplies && Array.isArray(response.quickReplies) && response.quickReplies.length > 0) {
+      // Regexp pour extraire un UUID valide depuis une chaîne (même avec d'autres caractères)
+      // Format UUID: "d1e210f7-3f60-4151-83b5-12ec51e21b67"
+      const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+      
+      // Récupérer le globalIntentInfos depuis le contexte pour vérifier les IDs
+      const globalIntentInfos = context.metadata?.['globalIntentInfos'] as GlobalRecommendationIntentInfos | undefined;
+      
+      if (!globalIntentInfos) {
+        return {
+          isValid: false,
+          reason: 'Impossible de valider les quickReplies : globalIntentInfos non disponible dans le contexte'
+        };
+      }
+
+      // Créer des Sets pour vérifier rapidement l'existence des IDs
+      // Activities : depuis globalIntentInfos.activities ET depuis howerAngels[].activities
+      const activityIds = new Set(globalIntentInfos.activities.map(a => a.id));
+      globalIntentInfos.howerAngels.forEach(howerAngel => {
+        if (howerAngel.activities) {
+          howerAngel.activities.forEach(activity => {
+            if (activity.id) {
+              activityIds.add(activity.id);
+            }
+          });
+        }
+      });
+
+      // Practices : depuis globalIntentInfos.practices ET depuis howerAngels[].specialties
+      const practiceIds = new Set(globalIntentInfos.practices.map(p => p.id));
+      globalIntentInfos.howerAngels.forEach(howerAngel => {
+        if (howerAngel.specialties) {
+          howerAngel.specialties.forEach(specialty => {
+            if (specialty.id) {
+              practiceIds.add(specialty.id);
+            }
+          });
+        }
+      });
+
+      const howerAngelUserIds = new Set(globalIntentInfos.howerAngels.map(h => h.userId));
+
+      // Copie de la réponse pour modification si nécessaire
+      const correctedResponse: RecommendationMessageResponse = { 
+        ...response,
+        quickReplies: response.quickReplies.map(qr => ({ ...qr }))
+      };
+      let hasCorrections = false;
+
+      // Vérifier chaque quickReply
+      for (let i = 0; i < response.quickReplies.length; i++) {
+        const quickReply = response.quickReplies[i];
+        
+        if (!quickReply) {
+          continue;
+        }
+        
+        const correctedQuickReply = correctedResponse.quickReplies[i];
+        if (!correctedQuickReply) {
+          continue;
+        }
+        
+        // Vérifier activityId si présent
+        if (quickReply.activityId) {
+          const originalActivityId = quickReply.activityId;
+          const trimmedId = originalActivityId.trim();
+          
+          // Essayer d'extraire un UUID valide depuis la chaîne
+          const uuidMatch = trimmedId.match(uuidRegex);
+          if (!uuidMatch) {
+            return {
+              isValid: false,
+              reason: `Impossible d'extraire un activityId valide (format UUID) depuis "${trimmedId}" dans la quickReply ${i + 1}`
+            };
+          }
+          
+          const activityId = uuidMatch[0];
+          
+          // Vérifier l'existence dans le contexte
+          if (!activityIds.has(activityId)) {
+            return {
+              isValid: false,
+              reason: `L'activityId "${activityId}" dans la quickReply ${i + 1} n'existe pas dans le contexte`
+            };
+          }
+          
+          // Corriger l'ID si nécessaire (utiliser l'UUID extrait)
+          if (originalActivityId !== activityId) {
+            correctedQuickReply.activityId = activityId;
+            hasCorrections = true;
+          }
+        }
+
+        // Vérifier practiceId si présent
+        if (quickReply.practiceId) {
+          const originalPracticeId = quickReply.practiceId;
+          const trimmedId = originalPracticeId.trim();
+          
+          // Essayer d'extraire un UUID valide depuis la chaîne
+          const uuidMatch = trimmedId.match(uuidRegex);
+          if (!uuidMatch) {
+            return {
+              isValid: false,
+              reason: `Impossible d'extraire un practiceId valide (format UUID) depuis "${trimmedId}" dans la quickReply ${i + 1}`
+            };
+          }
+          
+          const practiceId = uuidMatch[0];
+          
+          // Vérifier l'existence dans le contexte
+          if (!practiceIds.has(practiceId)) {
+            return {
+              isValid: false,
+              reason: `Le practiceId "${practiceId}" dans la quickReply ${i + 1} n'existe pas dans le contexte`
+            };
+          }
+          
+          // Corriger l'ID si nécessaire (utiliser l'UUID extrait)
+          if (originalPracticeId !== practiceId) {
+            correctedQuickReply.practiceId = practiceId;
+            hasCorrections = true;
+          }
+        }
+
+        // Vérifier les autres types de quickReplies qui pourraient avoir des IDs
+        // (par exemple howerAngelId pour les quickReplies de type 'hower_angel_rdv')
+        const quickReplyAny = quickReply as any;
+        const correctedQuickReplyAny = correctedQuickReply as any;
+        if (quickReplyAny.howerAngelId) {
+          const originalHowerAngelId = String(quickReplyAny.howerAngelId);
+          const trimmedId = originalHowerAngelId.trim();
+          
+          // Essayer d'extraire un UUID valide depuis la chaîne
+          const uuidMatch = trimmedId.match(uuidRegex);
+          if (!uuidMatch) {
+            return {
+              isValid: false,
+              reason: `Impossible d'extraire un howerAngelId valide (format UUID) depuis "${trimmedId}" dans la quickReply ${i + 1}`
+            };
+          }
+          
+          const howerAngelId = uuidMatch[0];
+          
+          // Vérifier l'existence dans le contexte
+          if (!howerAngelUserIds.has(howerAngelId)) {
+            return {
+              isValid: false,
+              reason: `Le howerAngelId "${howerAngelId}" dans la quickReply ${i + 1} n'existe pas dans le contexte`
+            };
+          }
+          
+          // Corriger l'ID si nécessaire (utiliser l'UUID extrait)
+          if (originalHowerAngelId !== howerAngelId) {
+            correctedQuickReplyAny.howerAngelId = howerAngelId;
+            hasCorrections = true;
+          }
+        }
+      }
+
+      // Si des corrections ont été faites, retourner la réponse corrigée
+      if (hasCorrections) {
+        return {
+          isValid: true,
+          finalObject: correctedResponse
+        };
+      }
+    }
+
+    // Toutes les validations sont passées
+    return {
+      isValid: true
+    };
   }
 
 }
