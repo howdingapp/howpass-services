@@ -1131,6 +1131,7 @@ IMPORTANT :
         id: string;
         name: string;
         dominanceScore: number;
+        dominancePercentage: number;
         practicesCount: number;
         activitiesCount: number;
         howerAngelsCount: number;
@@ -1376,8 +1377,38 @@ IMPORTANT :
     // Trier par score de dominance décroissant
     familiesWithDominance.sort((a, b) => b.dominanceScore - a.dominanceScore);
     
-    console.log(`📊 [BILAN] Classement de ${familiesWithDominance.length} familles par dominance:`, 
-      familiesWithDominance.map(f => `${f.name} (${f.dominanceScore.toFixed(2)}, ${f.matchCount} matchs)`).join(', '));
+    // Calculer les pourcentages de dominance (somme = 100%)
+    const totalDominanceScore = familiesWithDominance.reduce((sum, family) => sum + family.dominanceScore, 0);
+    const familiesWithPercentage = familiesWithDominance.map(family => {
+      const dominancePercentage = totalDominanceScore > 0 
+        ? (family.dominanceScore / totalDominanceScore) * 100 
+        : 0;
+      
+      return {
+        ...family,
+        dominancePercentage: Math.round(dominancePercentage * 100) / 100 // Arrondir à 2 décimales
+      };
+    });
+    
+    // Ajuster le dernier pourcentage pour que la somme fasse exactement 100%
+    if (familiesWithPercentage.length > 0 && totalDominanceScore > 0) {
+      const sum = familiesWithPercentage.reduce((s, f) => s + f.dominancePercentage, 0);
+      const diff = 100 - sum;
+      if (Math.abs(diff) > 0.01) { // Si la différence est significative (> 0.01%)
+        const lastFamily = familiesWithPercentage[familiesWithPercentage.length - 1];
+        if (lastFamily) {
+          lastFamily.dominancePercentage = 
+            Math.round((lastFamily.dominancePercentage + diff) * 100) / 100;
+        }
+      }
+    }
+    
+    console.log(`📊 [BILAN] Classement de ${familiesWithPercentage.length} familles par dominance:`, 
+      familiesWithPercentage.map(f => `${f.name} (${f.dominanceScore.toFixed(2)}, ${f.dominancePercentage.toFixed(2)}%, ${f.matchCount} matchs)`).join(', '));
+    
+    // Vérifier que la somme des pourcentages fait bien 100%
+    const totalPercentage = familiesWithPercentage.reduce((sum, f) => sum + f.dominancePercentage, 0);
+    console.log(`📊 [BILAN] Somme des pourcentages: ${totalPercentage.toFixed(2)}%`);
     
     // Enrichir les pratiques et activités avec les chunks qui ont permis le matching
     // chunkText contient le fragment de chunk de la base de données qui a matché
@@ -1410,6 +1441,7 @@ IMPORTANT :
           id: string;
           name: string;
           dominanceScore: number;
+          dominancePercentage: number;
           practicesCount: number;
           activitiesCount: number;
           howerAngelsCount: number;
@@ -1438,8 +1470,8 @@ IMPORTANT :
       };
     } = {
       families: {
-        info: 'Liste des familles de pratiques bien-être identifiées à partir des réponses de l\'utilisateur, classées par score de dominance. Chaque famille représente un domaine de bien-être (ex: méditation, yoga, sophrologie, etc.) et contient le nombre de pratiques, activités et hower angels associés.',
-        value: familiesWithDominance
+        info: 'Liste des familles de pratiques bien-être identifiées à partir des réponses de l\'utilisateur, classées par score de dominance. Chaque famille représente un domaine de bien-être (ex: méditation, yoga, sophrologie, etc.) et contient le nombre de pratiques, activités et hower angels associés, ainsi qu\'un pourcentage de dominance (somme = 100%).',
+        value: familiesWithPercentage
       },
       practices: {
         info: 'Liste des pratiques bien-être HOW PASS identifiées comme pertinentes pour l\'utilisateur basées sur ses réponses au questionnaire. Chaque pratique inclut un score de pertinence et un compteur de matchs indiquant combien de fois elle a été trouvée dans les recherches sémantiques.',

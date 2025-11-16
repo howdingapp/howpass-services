@@ -101,10 +101,24 @@ export interface BilanQuestionIntent {
 }
 
 /**
+ * Structure d'une famille dans le bilan
+ */
+export interface BilanFamily {
+  id: string;
+  name: string;
+  dominanceScore: number;
+  dominancePercentage: number; // Pourcentage de dominance (0-100), somme de toutes les familles = 100%
+  practicesCount: number;
+  activitiesCount: number;
+  howerAngelsCount: number;
+  matchCount: number;
+}
+
+/**
  * Structure de bilanUniverContext (version avec propriétés optionnelles)
  */
 export interface BilanUniverContext {
-  families?: { info?: string; value?: any[] };
+  families?: { info?: string; value?: BilanFamily[] };
   practices?: { info?: string; value?: any[] };
   activities?: { info?: string; value?: any[] };
   howerAngels?: { info?: string; value?: any[] };
@@ -119,15 +133,7 @@ export interface BilanUniverContext {
 export interface BilanUniverContextComplete {
   families: {
     info: string;
-    value: Array<{
-      id: string;
-      name: string;
-      dominanceScore: number;
-      practicesCount: number;
-      activitiesCount: number;
-      howerAngelsCount: number;
-      matchCount: number;
-    }>;
+    value: BilanFamily[];
   };
   practices: {
     info: string;
