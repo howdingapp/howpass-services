@@ -1324,21 +1324,44 @@ export class SupabaseService {
       // Filtrer par similarité minimale de 0.6
       const filteredPractices = practicesWithType.filter(p => p.relevanceScore >= 0.6);
       
-      // Compter les matchs par pratique
+      // Compter les matchs par pratique et collecter les chunks et scores
       const practiceMatchCount = new Map<string, number>();
+      const practiceChunks = new Map<string, Set<string>>(); // practiceId -> Set de chunks
+      const practiceScores = new Map<string, Array<{ similarity: number; bm25Similarity: number | null; vectorSimilarity: number | null }>>(); // practiceId -> Array de scores
+      
       filteredPractices.forEach((practice: any) => {
         const currentCount = practiceMatchCount.get(practice.id) || 0;
         practiceMatchCount.set(practice.id, currentCount + 1);
+        
+        // Collecter les chunks si disponibles
+        if (withMatchInfos && practice.chunkText) {
+          if (!practiceChunks.has(practice.id)) {
+            practiceChunks.set(practice.id, new Set());
+          }
+          practiceChunks.get(practice.id)!.add(practice.chunkText);
+        }
+        
+        // Collecter les scores
+        if (!practiceScores.has(practice.id)) {
+          practiceScores.set(practice.id, []);
+        }
+        practiceScores.get(practice.id)!.push({
+          similarity: practice.similarity || practice.relevanceScore,
+          bm25Similarity: practice.bm25Similarity,
+          vectorSimilarity: practice.vectorSimilarity
+        });
       });
       
-      // Dédupliquer par ID en gardant le meilleur score et en ajoutant le matchCount
+      // Dédupliquer par ID en gardant le meilleur score et en ajoutant le matchCount, chunks et scores
       const practicesMap = new Map<string, any>();
       filteredPractices.forEach(practice => {
         const existing = practicesMap.get(practice.id);
         if (!existing || (practice.relevanceScore > existing.relevanceScore)) {
           practicesMap.set(practice.id, {
             ...practice,
-            matchCount: practiceMatchCount.get(practice.id) || 1
+            matchCount: practiceMatchCount.get(practice.id) || 1,
+            chunks: Array.from(practiceChunks.get(practice.id) || []),
+            matchScores: practiceScores.get(practice.id) || []
           });
         }
       });
@@ -1438,21 +1461,44 @@ export class SupabaseService {
       // Filtrer par similarité minimale de 0.6
       const filteredActivities = activitiesWithType.filter(a => a.relevanceScore >= 0.6);
       
-      // Compter les matchs par activité
+      // Compter les matchs par activité et collecter les chunks et scores
       const activityMatchCount = new Map<string, number>();
+      const activityChunks = new Map<string, Set<string>>(); // activityId -> Set de chunks
+      const activityScores = new Map<string, Array<{ similarity: number; bm25Similarity: number | null; vectorSimilarity: number | null }>>(); // activityId -> Array de scores
+      
       filteredActivities.forEach((activity: any) => {
         const currentCount = activityMatchCount.get(activity.id) || 0;
         activityMatchCount.set(activity.id, currentCount + 1);
+        
+        // Collecter les chunks si disponibles
+        if (withMatchInfos && activity.chunkText) {
+          if (!activityChunks.has(activity.id)) {
+            activityChunks.set(activity.id, new Set());
+          }
+          activityChunks.get(activity.id)!.add(activity.chunkText);
+        }
+        
+        // Collecter les scores
+        if (!activityScores.has(activity.id)) {
+          activityScores.set(activity.id, []);
+        }
+        activityScores.get(activity.id)!.push({
+          similarity: activity.similarity || activity.relevanceScore,
+          bm25Similarity: activity.bm25Similarity,
+          vectorSimilarity: activity.vectorSimilarity
+        });
       });
       
-      // Dédupliquer par ID en gardant le meilleur score et en ajoutant le matchCount
+      // Dédupliquer par ID en gardant le meilleur score et en ajoutant le matchCount, chunks et scores
       const activitiesMap = new Map<string, any>();
       filteredActivities.forEach(activity => {
         const existing = activitiesMap.get(activity.id);
         if (!existing || (activity.relevanceScore > existing.relevanceScore)) {
           activitiesMap.set(activity.id, {
             ...activity,
-            matchCount: activityMatchCount.get(activity.id) || 1
+            matchCount: activityMatchCount.get(activity.id) || 1,
+            chunks: Array.from(activityChunks.get(activity.id) || []),
+            matchScores: activityScores.get(activity.id) || []
           });
         }
       });
@@ -2196,21 +2242,44 @@ export class SupabaseService {
         howerAngelsResults = [...howerAngelsResults, ...(results || [])];
       });
 
-      // Compter les matchs par hower angel
+      // Compter les matchs par hower angel et collecter les chunks et scores
       const howerAngelMatchCount = new Map<string, number>();
+      const howerAngelChunks = new Map<string, Set<string>>(); // howerAngelId -> Set de chunks
+      const howerAngelScores = new Map<string, Array<{ similarity: number; bm25Similarity: number | null; vectorSimilarity: number | null }>>(); // howerAngelId -> Array de scores
+      
       howerAngelsResults.forEach((user: any) => {
         const currentCount = howerAngelMatchCount.get(user.id) || 0;
         howerAngelMatchCount.set(user.id, currentCount + 1);
+        
+        // Collecter les chunks si disponibles
+        if (withMatchInfos && user.chunk_text) {
+          if (!howerAngelChunks.has(user.id)) {
+            howerAngelChunks.set(user.id, new Set());
+          }
+          howerAngelChunks.get(user.id)!.add(user.chunk_text);
+        }
+        
+        // Collecter les scores
+        if (!howerAngelScores.has(user.id)) {
+          howerAngelScores.set(user.id, []);
+        }
+        howerAngelScores.get(user.id)!.push({
+          similarity: user.similarity || 0,
+          bm25Similarity: user.bm25_similarity ?? null,
+          vectorSimilarity: user.vector_similarity ?? null
+        });
       });
 
-      // Dédupliquer par ID en gardant le meilleur score de similarité et en ajoutant le matchCount
+      // Dédupliquer par ID en gardant le meilleur score de similarité et en ajoutant le matchCount, chunks et scores
       const uniqueHowerAngels = new Map<string, any>();
       howerAngelsResults.forEach((user: any) => {
         const existing = uniqueHowerAngels.get(user.id);
         if (!existing || (user.similarity > existing.similarity)) {
           uniqueHowerAngels.set(user.id, {
             ...user,
-            matchCount: howerAngelMatchCount.get(user.id) || 1
+            matchCount: howerAngelMatchCount.get(user.id) || 1,
+            chunks: Array.from(howerAngelChunks.get(user.id) || []),
+            matchScores: howerAngelScores.get(user.id) || []
           });
         }
       });
@@ -2249,7 +2318,9 @@ export class SupabaseService {
             })),
             relevanceScore: user.similarity,
             similarity: user.similarity,
-            matchCount: user.matchCount
+            matchCount: user.matchCount,
+            chunks: user.chunks || [],
+            matchScores: user.matchScores || []
           };
           if (withMatchInfos) {
             result.typicalSituations = user.typical_situations;
