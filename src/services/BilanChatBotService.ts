@@ -1,6 +1,6 @@
 
 import { HowanaBilanContext, HowanaContext, HowanaRecommandationContext } from '../types/repositories';
-import { ChatBotOutputSchema, ExtractedRecommandations, GlobalRecommendationIntentInfos, OpenAIToolsDescription, RecommendationMessageResponse } from '../types';
+import { ChatBotOutputSchema, ExtractedRecommandations, GlobalRecommendationIntentInfos, OpenAIToolsDescription, RecommendationIntent, RecommendationMessageResponse } from '../types';
 import {
   BilanChunk,
   BilanQuestionIntent,
@@ -337,6 +337,11 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     _forceSummary: boolean = false,
     _autoResponse?: string // Paramètre optionnel pour compatibilité avec la signature parente
   ): Promise<HowanaContext> {
+
+    // Récupérer intent depuis le contexte
+    const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
+    const intent = currentIntentInfos?.intent as RecommendationIntent | undefined;
+
     // Récupérer le nombre de questions restantes
     const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
     
@@ -351,6 +356,15 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       console.log(`📉 [BILAN] Décrémentation de remainBilanQuestion: ${remainBilanQuestion} -> ${newRemainQuestion}`);
     }
     
+    // Toujours calculer globalIntentInfos avant les handlers (avec userMessage pour les services qui en ont besoin)
+    let globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
+    
+    context.metadata = {
+      ...context.metadata,
+      ['globalIntentInfos']: globalIntentInfos
+    };
+
+
     // Si c'est la dernière réponse (newRemainQuestion === 0), forcer la génération du résumé
     if (newRemainQuestion === 0) {
       console.log('✅ [BILAN] Dernière réponse détectée, génération du résumé au lieu de la réponse');
