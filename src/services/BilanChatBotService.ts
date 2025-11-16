@@ -617,6 +617,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
         // Enrichir recommendedCategories (pratiques)
         if (summary.recommendation?.recommendedCategories && Array.isArray(summary.recommendation.recommendedCategories)) {
           summary.recommendation.recommendedCategories = summary.recommendation.recommendedCategories.map((item: any) => {
+            console.log("result will be", { ...item, name: practicesMap.get(item.id) || 'Pratique sans nom' });
             return { ...item, name: practicesMap.get(item.id) || 'Pratique sans nom' };
           });
         }
@@ -624,6 +625,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
         // Enrichir recommendedActivities
         if (summary.recommendation?.recommendedActivities && Array.isArray(summary.recommendation.recommendedActivities)) {
           summary.recommendation.recommendedActivities = summary.recommendation.recommendedActivities.map((item: any) => {
+            console.log("result will be", { ...item, name: activitiesMap.get(item.id) || 'Activité sans nom' });
             return { ...item, name: activitiesMap.get(item.id) || 'Activité sans nom' };
           });
         }
