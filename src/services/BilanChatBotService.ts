@@ -631,7 +631,7 @@ export class BilanChatBotService extends RecommendationChatBotService {
         }
         
         // Enrichir top1Recommandation
-        if (summary.recommendation?.top1Recommandation?.id && !summary.recommendation.top1Recommandation.name) {
+        if (summary.recommendation?.top1Recommandation?.id) {
           const top1Id = summary.recommendation.top1Recommandation.id;
           const top1Type = summary.recommendation.top1Recommandation.type;
           if (top1Type === 'practice') {
