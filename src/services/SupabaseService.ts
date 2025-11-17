@@ -634,6 +634,40 @@ export class SupabaseService {
   }
 
   /**
+   * Récupérer l'email d'un utilisateur depuis auth.users
+   */
+  async getUserEmail(userId: string): Promise<{
+    success: boolean;
+    email?: string;
+    error?: string;
+  }> {
+    try {
+      const { data, error } = await this.supabase.auth.admin.getUserById(userId);
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération de l\'email utilisateur:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      const email = data?.user?.email;
+      return {
+        success: true,
+        ...(email && { email })
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération de l\'email utilisateur:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
    * Compter les messages valides créés aujourd'hui par un utilisateur
    * Les messages valides sont ceux avec valid_for_limit = true et qui ne proviennent pas de conversations de type 'activity'
    */
