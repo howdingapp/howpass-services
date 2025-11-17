@@ -151,7 +151,7 @@ export class IAController {
       // Vérifier si l'utilisateur est dans la liste des emails de développement
       const emailResult = await this.supabaseService.getUserEmail(userId);
       if (emailResult.success && emailResult.email) {
-        const devEmails = process.env['DEV_EMAIL']?.split(',').map(email => email.trim()) || [];
+        const devEmails = process.env['DEV_EMAIL']?.split(';').map(email => email.trim()) || [];
         if (devEmails.includes(emailResult.email)) {
           console.log(`🔓 Utilisateur de développement détecté (${emailResult.email}), aucune limite appliquée`);
           return false; // Pas de limite pour les emails de développement
