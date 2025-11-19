@@ -1447,83 +1447,31 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       ['globalIntentInfos']: globalIntentInfos
     };
 
-    // Router vers la fonction appropriée selon le type d'intent
-    switch (typedIntent?.intent) {
-      case 'know_more':
-        context = await this.handleKnowMoreIntent(intent, context, userMessage, globalIntentInfos);
-        break;
-      
-      case 'take_rdv':
-        context = await this.handleTakeRdvIntent(intent, context, userMessage, globalIntentInfos);
-        break;
-      
-      case 'confirmation':
-        // Appeler directement le handler approprié selon l'intent original
-        if (intent.confirmationContext?.intent === 'know_more') {
-          context = await this.handleKnowMoreIntent(intent, context, userMessage, globalIntentInfos);
-        } else if (intent.confirmationContext?.intent === 'take_rdv') {
-          context = await this.handleTakeRdvIntent(intent, context, userMessage, globalIntentInfos);
-        } else {
-          console.warn('⚠️ Intent original manquant ou non géré dans confirmationContext');
-        }
-        break;
-      
-      case 'search_activities':
-      case 'search_hower_angel':
-      case 'search_advices':
-        if (!typedIntent.searchContext) {
-          console.log('⚠️ Aucun searchContext dans l\'intent');
-          break;
-        }
-        const { searchChunks, searchType } = typedIntent.searchContext;
-        if (!searchChunks || searchChunks.length === 0) {
-          console.log('⚠️ Aucun searchChunks dans l\'intent');
-          break;
-        }
-        try {
-          // Pour les recherches, effectuer les recherches d'abord
-          switch (searchType) {
-            case 'activity':
-              context = await this.handleSearchActivityIntent(searchChunks, context, intent);
-              break;
-            case 'practice':
-              context = await this.handleSearchPracticeIntent(searchChunks, context, intent);
-              break;
-            case 'hower_angel':
-              const handled = await this.handleSearchHowerAngelIntent(searchChunks, context, intent);
-              if (handled) {
-                // Si une erreur s'est produite, le contexte a déjà été mis à jour
-                break;
-              }
-              break;
-            default:
-              console.warn(`⚠️ searchType non reconnu: ${searchType}`);
-          }
-        } catch (error) {
-          console.error('❌ Erreur lors du traitement de l\'intent:', error);
-        }
-        break;
-      
-      case 'discover':
-        if (!typedIntent.discoverContext) {
-          console.log('⚠️ Aucun discoverContext dans l\'intent');
-          break;
-        }
-        const { chunks } = typedIntent.discoverContext;
-        if (!chunks || chunks.length === 0) {
-          console.log('⚠️ Aucun chunks dans discoverContext');
-          break;
-        }
-        try {
-          context = await this.handleDiscoverIntent(chunks, context, intent);
-        } catch (error) {
-          console.error('❌ Erreur lors du traitement de l\'intent discover:', error);
-        }
-        break;
-      
-      default:
-        // Pour les autres intents, pas de traitement spécial
-        break;
+    // Récupérer les IDs disponibles une seule fois
+    const { availablePracticeIds, availableActivityIds, availableHowerAngelIds } = this.getAvailableIds(context);
+
+    // Mapper chaque intent à sa fonction de gestion (même map que dans getIntentSchema)
+    const intentHandlerMap: Record<string, (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext>> = {
+      take_rdv: this.getRdvContextInfo(context).handle,
+      search_hower_angel: this.getSearchHowerAngelContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
+      search_activities: this.getSearchActivitiesContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
+      search_practice: this.getSearchPracticeContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
+      search_advices: this.getSearchAdvicesContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
+      discover: this.getDiscoverContextInfo(context).handle,
+      know_more: this.getKnowMoreContextInfo(context).handle,
+      confirmation: this.getConfirmationContextInfo(context).handle
+    };
+
+    // Appeler le handler approprié selon le type d'intent
+    const handler = intentHandlerMap[typedIntent?.intent];
+    if (handler) {
+      try {
+        context = await handler(intent, context, userMessage, globalIntentInfos);
+      } catch (error) {
+        console.error(`❌ Erreur lors du traitement de l'intent ${typedIntent?.intent}:`, error);
+      }
+    } else {
+      console.warn(`⚠️ Aucun handler trouvé pour l'intent: ${typedIntent?.intent}`);
     }
 
     // Appel unifié à super.handleIntent à la fin
@@ -1531,590 +1479,1138 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
   }
 
   /**
-   * Gère l'intent "know_more" - valorise intentResults avec les messages contextuels du globalIntentInfos
-   * Peut aussi être appelé depuis un intent "confirmation" pour continuer le traitement
+   * Récupère les IDs disponibles depuis le contexte
    */
-  private async handleKnowMoreIntent(
-    intent: RecommendationIntent,
-    context: HowanaContext,
-    _userMessage: string,
-    globalIntentInfos: GlobalRecommendationIntentInfos | undefined
-  ): Promise<HowanaContext> {
-    if (!globalIntentInfos) {
-      return context;
-    }
-    console.log('ℹ️ Intent "know_more" détecté - valorisation de intentResults avec les messages contextuels');
+  protected getAvailableIds(context: HowanaContext): {
+    availablePracticeIds: string[];
+    availableActivityIds: string[];
+    availableHowerAngelIds: string[];
+  } {
+    const recommendations = context.recommendations || { activities: [], practices: [] };
+    const availablePracticeIds = recommendations.practices?.map((item: any) => item.id).filter((id: any) => id) || [];
+    const availableActivityIds = recommendations.activities?.map((item: any) => item.id).filter((id: any) => id) || [];
     
-    // Si c'est une confirmation, reconstruire le contexte depuis confirmationContext
-    let type: 'hower_angel' | 'activity' | 'practice' | 'subject';
-    let designation: string;
+    // Récupérer les hower angels depuis globalIntentInfos ou intentResults
+    const globalIntentInfos = context.metadata?.['globalIntentInfos'] as any;
+    const intentResults = context.metadata?.['intentResults'] as any;
+    const availableHowerAngelIds: string[] = [];
     
-    if (intent.intent === 'confirmation' && intent.confirmationContext) {
-      // Reconstruire le contexte depuis confirmationContext et globalIntentInfos
-      const confirmationType = intent.confirmationContext.type;
-      type = confirmationType;
-      
-      // Récupérer la désignation depuis l'élément confirmé dans globalIntentInfos
-      if (confirmationType === 'hower_angel' && globalIntentInfos.focusedHowerAngel) {
-        const howerAngel = globalIntentInfos.focusedHowerAngel;
-        designation = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
-      } else if (confirmationType === 'activity' && globalIntentInfos.focusedActivity) {
-        designation = globalIntentInfos.focusedActivity.title;
-      } else if (confirmationType === 'practice' && globalIntentInfos.focusedPractice) {
-        designation = globalIntentInfos.focusedPractice.title;
-      } else {
-        console.warn('⚠️ Élément confirmé non trouvé dans globalIntentInfos');
-        return context;
-      }
-    } else {
-      // Cas normal : utiliser knowMoreContext
-      if (!intent.knowMoreContext) {
-        console.warn('⚠️ knowMoreContext manquant dans l\'intent know_more');
-        return context;
-      }
-      type = intent.knowMoreContext.type;
-      designation = intent.knowMoreContext.designation;
+    if (globalIntentInfos?.howerAngels) {
+      globalIntentInfos.howerAngels.forEach((item: any) => {
+        if (item.userId) availableHowerAngelIds.push(item.userId);
+      });
     }
-    let intentResultsText = '';
-
-    // Construire le message contextuel selon le type et l'état de l'élément dans globalIntentInfos
-    if (type === 'hower_angel') {
-      if (globalIntentInfos.focusedHowerAngel) {
-        // Élément focused existe
-        const howerAngel = globalIntentInfos.focusedHowerAngel;
-        intentResultsText = `L'utilisateur souhaite en savoir plus sur le hower angel suivant : ${JSON.stringify({
-          id: howerAngel.id,
-          userId: howerAngel.userId,
-          firstName: howerAngel.firstName,
-          lastName: howerAngel.lastName,
-          profile: howerAngel.profile,
-          specialties: howerAngel.specialties,
-        }, null, 2)}`;
-      } else if (globalIntentInfos.pendingConfirmations.focusedHowerAngel) {
-        // Élément en attente de confirmation
-        const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
-        const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
-        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cet élément n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}"dont il veut en savoir plus.`;
-      } else {
-        // Élément non trouvé, demander des précisions
-        intentResultsText = `L'utilisateur mentionne "${designation}" mais cet élément n'a pas pu être identifié avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, spécialité, etc.).`;
-      }
-    } else if (type === 'activity') {
-      if (globalIntentInfos.focusedActivity) {
-        // Élément focused existe
-        const activity = globalIntentInfos.focusedActivity;
-        intentResultsText = `L'utilisateur souhaite en savoir plus sur l'activité suivante : ${JSON.stringify({
-          id: activity.id,
-          title: activity.title,
-          shortDescription: activity.shortDescription,
-          longDescription: activity.longDescription,
-        }, null, 2)}`;
-      } else if (globalIntentInfos.pendingConfirmations.focusedActivity) {
-        // Élément en attente de confirmation
-        const pendingActivity = globalIntentInfos.pendingConfirmations.focusedActivity;
-        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingActivity.title}" dont il veut en savoir plus.`;
-      } else {
-        // Élément non trouvé, demander des précisions
-        intentResultsText = `L'utilisateur mentionne "${designation}" mais cette activité n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type d'activité, etc.).`;
-      }
-    } else if (type === 'practice') {
-      if (globalIntentInfos.focusedPractice) {
-        // Élément focused existe
-        const practice = globalIntentInfos.focusedPractice;
-        intentResultsText = `L'utilisateur souhaite en savoir plus sur la pratique suivante : ${JSON.stringify({
-          id: practice.id,
-          title: practice.title,
-          shortDescription: practice.shortDescription,
-          longDescription: practice.longDescription,
-        }, null, 2)}`;
-      } else if (globalIntentInfos.pendingConfirmations.focusedPractice) {
-        // Élément en attente de confirmation
-        const pendingPractice = globalIntentInfos.pendingConfirmations.focusedPractice;
-        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette pratique n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingPractice.title}" dont il veut en savoir plus.`;
-      } else {
-        // Élément non trouvé, demander des précisions
-        intentResultsText = `L'utilisateur mentionne "${designation}" mais cette pratique n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type de pratique, etc.).`;
-      }
-    } else if (type === 'subject') {
-      if (globalIntentInfos.focusedFaqs && globalIntentInfos.focusedFaqs.length > 0) {
-        // FAQ trouvées
-        const faqs = globalIntentInfos.focusedFaqs;
-        intentResultsText = `L'utilisateur souhaite en savoir plus sur le sujet "${designation}". FAQ trouvées : ${JSON.stringify(faqs.map(faq => ({
-          id: faq.id,
-          question: faq.question,
-        })), null, 2)}`;
-      } else {
-        // Sujet non trouvé, demander des précisions
-        intentResultsText = `L'utilisateur mentionne le sujet "${designation}" mais aucune information pertinente n'a été trouvée. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement.`;
-      }
+    if (intentResults?.howerAngels) {
+      intentResults.howerAngels.forEach((item: any) => {
+        if (item.userId && !availableHowerAngelIds.includes(item.userId)) {
+          availableHowerAngelIds.push(item.userId);
+        }
+      });
     }
-
-    // Mettre à jour le contexte avec intentResults (string)
-    context.metadata = {
-      ...context.metadata,
-      ['intentResults']: intentResultsText
+    
+    return {
+      availablePracticeIds,
+      availableActivityIds,
+      availableHowerAngelIds
     };
-
-    return context;
   }
 
   /**
-   * Gère l'intent "take_rdv" - valorise intentResults avec les informations de rendez-vous et les URLs
-   * Peut aussi être appelé depuis un intent "confirmation" pour continuer le traitement
+   * Construit les informations de contexte pour rdvContext (fragment, description, handle)
    */
-  private async handleTakeRdvIntent(
-    intent: RecommendationIntent,
-    context: HowanaContext,
-    _userMessage: string,
-    globalIntentInfos: GlobalRecommendationIntentInfos | undefined
-  ): Promise<HowanaContext> {
-    if (!globalIntentInfos) {
-      return context;
-    }
-    console.log('ℹ️ Intent "take_rdv" détecté - valorisation de intentResults avec les informations de rendez-vous');
-    
-    // Si c'est une confirmation, reconstruire le contexte depuis confirmationContext
-    let type: 'hower_angel' | 'activity' | 'practice';
-    let designation: string;
-    
-    if (intent.intent === 'confirmation' && intent.confirmationContext) {
-      // Reconstruire le contexte depuis confirmationContext et globalIntentInfos
-      const confirmationType = intent.confirmationContext.type;
-      type = confirmationType;
-      
-      // Récupérer la désignation depuis l'élément confirmé dans globalIntentInfos
-      if (confirmationType === 'hower_angel' && globalIntentInfos.focusedHowerAngel) {
-        const howerAngel = globalIntentInfos.focusedHowerAngel;
-        designation = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
-      } else if (confirmationType === 'activity' && globalIntentInfos.focusedActivity) {
-        designation = globalIntentInfos.focusedActivity.title;
-      } else if (confirmationType === 'practice' && globalIntentInfos.focusedPractice) {
-        designation = globalIntentInfos.focusedPractice.title;
-      } else {
-        console.warn('⚠️ Élément confirmé non trouvé dans globalIntentInfos');
-        return context;
-      }
-    } else {
-      // Cas normal : utiliser rdvContext
-      if (!intent.rdvContext) {
-        console.warn('⚠️ rdvContext manquant dans l\'intent take_rdv');
-        return context;
-      }
-      type = intent.rdvContext.type;
-      designation = intent.rdvContext.designation || '';
-    }
-    let intentResultsText = '';
-
-    // Construire le message contextuel selon le type
-    if (type === 'hower_angel') {
-      if (globalIntentInfos.focusedHowerAngel) {
-        const howerAngel = globalIntentInfos.focusedHowerAngel;
-        
-        // Si on n'a pas de focusedActivity, fournir l'objet howerAngel complet
-        if (!globalIntentInfos.focusedActivity) {
-          intentResultsText = `L'utilisateur souhaite prendre rendez-vous avec le hower angel suivant : ${JSON.stringify(howerAngel, null, 2)}\n\n`;
-          intentResultsText += `IMPORTANT: Tu dois choisir les 2 activités les plus pertinentes parmi celles disponibles dans l'objet ci-dessus (en utilisant leurs IDs dans les quickReplies de type 'activity_rdv' avec activityId) et mentionner l'option "voir toutes les activités" comme 3ème choix (en utilisant un quickReply de type 'hower_angel_rdv' avec howerAngelId=${howerAngel.userId} et text='Voir toutes les activités').`;
-        } else {
-          // On a une focusedActivity, utiliser son ID
-          const activity = globalIntentInfos.focusedActivity;
-          
-          intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour l'activité suivante : ${JSON.stringify({
-            id: activity.id,
-            title: activity.title,
-            shortDescription: activity.shortDescription,
-            longDescription: activity.longDescription,
-          }, null, 2)}\n\n`;
-          
-          intentResultsText += `ID de l'activité pour rendez-vous: ${activity.id}`;
+  protected getRdvContextInfo(_context: HowanaContext): { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> } {
+    return {
+      fragment: {
+        type: ["object", "null"],
+        description: "Contexte de rendez-vous si l'intent est 'take_rdv'",
+        properties: {
+          type: {
+            type: "string",
+            description: "Type de rendez-vous",
+            enum: ["hower_angel", "activity", "practice"]
+          },
+          id: {
+            type: "string",
+            description: "ID associé au type de rendez-vous (ID du hower_angel, de l'activité ou de la pratique)"
+          },
+          designation: {
+            type: ["string", "null"],
+            description: "Nom du hower angel, de la pratique ou de l'activité mentionné (peut être null si non connu)"
+          },
+          format: {
+            type: ["string", "null"],
+            description: "Format de recommandation préféré par l'utilisateur si expressément mentionné : 'remote' (à distance/en ligne), 'inPerson' (en personne/présentiel), ou 'any' (les deux formats acceptés). Si l'utilisateur n'a pas expressément décidé, utiliser null (sera traité comme 'inPerson' par défaut)",
+            enum: ["remote", "inPerson", "any"]
+          }
+        },
+        required: ["type", "id", "format", "designation"],
+        additionalProperties: false
+      },
+      description: "take_rdv: Demande explicite de prendre un rendez-vous avec une personne précise ou une activité (déduite du contexte)",
+      handle: async (intent, context, _userMessage, globalIntentInfos) => {
+        if (!globalIntentInfos) {
+          return context;
         }
-      } else if (globalIntentInfos.pendingConfirmations.focusedHowerAngel) {
-        const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
-        const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
-        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais ce hower angel n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}" pour lequel il veut prendre rendez-vous.`;
-      } else {
-        intentResultsText = `L'utilisateur mentionne "${designation}" mais ce hower angel n'a pas pu être identifié avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, spécialité, etc.).`;
-      }
-    } else if (type === 'activity') {
-      // Vérifier d'abord s'il y a un hower angel en pending confirmation
-      if (globalIntentInfos.pendingConfirmations.focusedHowerAngel) {
-        const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
-        const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
-        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais le hower angel n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}" dont il parle.`;
-      } else {
-        // Vérifier d'abord si on a une activité disponible (focused ou pending)
-        const activity = globalIntentInfos.focusedActivity || globalIntentInfos.pendingConfirmations.focusedActivity;
+        console.log('ℹ️ Intent "take_rdv" détecté - valorisation de intentResults avec les informations de rendez-vous');
         
-        if (activity) {
-          // On a une activité, comportement normal
-          if (globalIntentInfos.focusedActivity) {
-            intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour l'activité suivante : ${JSON.stringify({
-              id: activity.id,
-              title: activity.title,
-              shortDescription: activity.shortDescription,
-              longDescription: activity.longDescription,
-            }, null, 2)}\n\n`;
-            
-            intentResultsText += `ID de l'activité pour rendez-vous: ${activity.id}`;
+        // Si c'est une confirmation, reconstruire le contexte depuis confirmationContext
+        let type: 'hower_angel' | 'activity' | 'practice';
+        let designation: string;
+        
+        if (intent.intent === 'confirmation' && intent.confirmationContext) {
+          // Reconstruire le contexte depuis confirmationContext et globalIntentInfos
+          const confirmationType = intent.confirmationContext.type;
+          type = confirmationType;
+          
+          // Récupérer la désignation depuis l'élément confirmé dans globalIntentInfos
+          if (confirmationType === 'hower_angel' && globalIntentInfos.focusedHowerAngel) {
+            const howerAngel = globalIntentInfos.focusedHowerAngel;
+            designation = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
+          } else if (confirmationType === 'activity' && globalIntentInfos.focusedActivity) {
+            designation = globalIntentInfos.focusedActivity.title;
+          } else if (confirmationType === 'practice' && globalIntentInfos.focusedPractice) {
+            designation = globalIntentInfos.focusedPractice.title;
           } else {
-            // Activité en pending
-            intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${activity.title}" pour laquelle il veut prendre rendez-vous.`;
+            console.warn('⚠️ Élément confirmé non trouvé dans globalIntentInfos');
+            return context;
           }
         } else {
-          // Pas d'activité, vérifier si on a une pratique (focused ou pending) avec un hower angel
-          const practice = globalIntentInfos.focusedPractice || globalIntentInfos.pendingConfirmations.focusedPractice;
-          
-          if (practice && globalIntentInfos.focusedHowerAngel) {
-            // Chercher les activités du hower angel qui correspondent à cette pratique
+          // Cas normal : utiliser rdvContext
+          if (!intent.rdvContext) {
+            console.warn('⚠️ rdvContext manquant dans l\'intent take_rdv');
+            return context;
+          }
+          type = intent.rdvContext.type;
+          designation = intent.rdvContext.designation || '';
+        }
+        let intentResultsText = '';
+
+        // Construire le message contextuel selon le type
+        if (type === 'hower_angel') {
+          if (globalIntentInfos.focusedHowerAngel) {
             const howerAngel = globalIntentInfos.focusedHowerAngel;
-            const matchingActivities = howerAngel.activities?.filter(activity => {
-              // Vérifier si l'activité correspond à la pratique via les selectedKeywords
-              if (activity.selectedKeywords && Array.isArray(activity.selectedKeywords)) {
-                return activity.selectedKeywords.some((keyword: any) => 
-                  keyword === practice.id || 
-                  (typeof keyword === 'object' && keyword.id === practice.id)
-                );
-              }
-              return false;
-            }) || [];
             
-            if (matchingActivities.length > 0) {
-              // Des activités correspondent à la pratique
-              const howerAngelFullName = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
-              intentResultsText = `L'utilisateur recherche une activité qui correspond à la pratique "${practice.title}". `;
-              intentResultsText += `Voici les activités disponibles du hower angel "${howerAngelFullName}" qui correspondent à cette pratique : ${JSON.stringify(matchingActivities.map(activity => ({
-                id: activity.id,
-                title: activity.title,
-                shortDescription: activity.shortDescription,
-                longDescription: activity.longDescription,
-                durationMinutes: activity.durationMinutes,
-                participants: activity.participants,
-                rating: activity.rating,
-                price: activity.price,
-                benefits: activity.benefits,
-                locationType: activity.locationType,
-                address: activity.address,
-                selectedKeywords: activity.selectedKeywords
-              })), null, 2)}`;
+            // Si on n'a pas de focusedActivity, fournir l'objet howerAngel complet
+            if (!globalIntentInfos.focusedActivity) {
+              intentResultsText = `L'utilisateur souhaite prendre rendez-vous avec le hower angel suivant : ${JSON.stringify(howerAngel, null, 2)}\n\n`;
+              intentResultsText += `IMPORTANT: Tu dois choisir les 2 activités les plus pertinentes parmi celles disponibles dans l'objet ci-dessus (en utilisant leurs IDs dans les quickReplies de type 'activity_rdv' avec activityId) et mentionner l'option "voir toutes les activités" comme 3ème choix (en utilisant un quickReply de type 'hower_angel_rdv' avec howerAngelId=${howerAngel.userId} et text='Voir toutes les activités').`;
             } else {
-              // Aucune activité ne correspond - récupérer toutes les activités du hower angel
-              const howerAngelFullName = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
-              const allActivities = howerAngel.activities || [];
+              // On a une focusedActivity, utiliser son ID
+              const activity = globalIntentInfos.focusedActivity;
               
-              // Mapper les activités en ActivityItem
-              const activityItems: ActivityItem[] = allActivities.map((activity: any) => ({
-                type: 'activity' as const,
+              intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour l'activité suivante : ${JSON.stringify({
                 id: activity.id,
                 title: activity.title,
                 shortDescription: activity.shortDescription,
                 longDescription: activity.longDescription,
-                durationMinutes: activity.durationMinutes,
-                participants: activity.participants,
-                rating: activity.rating,
-                price: activity.price,
-                benefits: activity.benefits,
-                locationType: activity.locationType,
-                address: activity.address,
-                selectedKeywords: activity.selectedKeywords,
-                typicalSituations: activity.typicalSituations,
-                relevanceScore: 0.5 // Score par défaut pour les activités disponibles
-              }));
+              }, null, 2)}\n\n`;
               
-              // Ajouter les activités dans le contexte via intentResults
-              const activityIntentResults: IntentResults = { 
-                activities: activityItems, 
-                practices: [], 
-                howerAngels: [] 
-              };
+              intentResultsText += `ID de l'activité pour rendez-vous: ${activity.id}`;
+            }
+          } else if (globalIntentInfos.pendingConfirmations.focusedHowerAngel) {
+            const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
+            const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
+            intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais ce hower angel n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}" pour lequel il veut prendre rendez-vous.`;
+          } else {
+            intentResultsText = `L'utilisateur mentionne "${designation}" mais ce hower angel n'a pas pu être identifié avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, spécialité, etc.).`;
+          }
+        } else if (type === 'activity') {
+          // Vérifier d'abord s'il y a un hower angel en pending confirmation
+          if (globalIntentInfos.pendingConfirmations.focusedHowerAngel) {
+            const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
+            const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
+            intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais le hower angel n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}" dont il parle.`;
+          } else {
+            // Vérifier d'abord si on a une activité disponible (focused ou pending)
+            const activity = globalIntentInfos.focusedActivity || globalIntentInfos.pendingConfirmations.focusedActivity;
+            
+            if (activity) {
+              // On a une activité, comportement normal
+              if (globalIntentInfos.focusedActivity) {
+                intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour l'activité suivante : ${JSON.stringify({
+                  id: activity.id,
+                  title: activity.title,
+                  shortDescription: activity.shortDescription,
+                  longDescription: activity.longDescription,
+                }, null, 2)}\n\n`;
+                
+                intentResultsText += `ID de l'activité pour rendez-vous: ${activity.id}`;
+              } else {
+                // Activité en pending
+                intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${activity.title}" pour laquelle il veut prendre rendez-vous.`;
+              }
+            } else {
+              // Pas d'activité, vérifier si on a une pratique (focused ou pending) avec un hower angel
+              const practice = globalIntentInfos.focusedPractice || globalIntentInfos.pendingConfirmations.focusedPractice;
+              
+              if (practice && globalIntentInfos.focusedHowerAngel) {
+                // Chercher les activités du hower angel qui correspondent à cette pratique
+                const howerAngel = globalIntentInfos.focusedHowerAngel;
+                const matchingActivities = howerAngel.activities?.filter(activity => {
+                  // Vérifier si l'activité correspond à la pratique via les selectedKeywords
+                  if (activity.selectedKeywords && Array.isArray(activity.selectedKeywords)) {
+                    return activity.selectedKeywords.some((keyword: any) => 
+                      keyword === practice.id || 
+                      (typeof keyword === 'object' && keyword.id === practice.id)
+                    );
+                  }
+                  return false;
+                }) || [];
+                
+                if (matchingActivities.length > 0) {
+                  // Des activités correspondent à la pratique
+                  const howerAngelFullName = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
+                  intentResultsText = `L'utilisateur recherche une activité qui correspond à la pratique "${practice.title}". `;
+                  intentResultsText += `Voici les activités disponibles du hower angel "${howerAngelFullName}" qui correspondent à cette pratique : ${JSON.stringify(matchingActivities.map(activity => ({
+                    id: activity.id,
+                    title: activity.title,
+                    shortDescription: activity.shortDescription,
+                    longDescription: activity.longDescription,
+                    durationMinutes: activity.durationMinutes,
+                    participants: activity.participants,
+                    rating: activity.rating,
+                    price: activity.price,
+                    benefits: activity.benefits,
+                    locationType: activity.locationType,
+                    address: activity.address,
+                    selectedKeywords: activity.selectedKeywords
+                  })), null, 2)}`;
+                } else {
+                  // Aucune activité ne correspond - récupérer toutes les activités du hower angel
+                  const howerAngelFullName = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
+                  const allActivities = howerAngel.activities || [];
+                  
+                  // Mapper les activités en ActivityItem
+                  const activityItems: ActivityItem[] = allActivities.map((activity: any) => ({
+                    type: 'activity' as const,
+                    id: activity.id,
+                    title: activity.title,
+                    shortDescription: activity.shortDescription,
+                    longDescription: activity.longDescription,
+                    durationMinutes: activity.durationMinutes,
+                    participants: activity.participants,
+                    rating: activity.rating,
+                    price: activity.price,
+                    benefits: activity.benefits,
+                    locationType: activity.locationType,
+                    address: activity.address,
+                    selectedKeywords: activity.selectedKeywords,
+                    typicalSituations: activity.typicalSituations,
+                    relevanceScore: 0.5 // Score par défaut pour les activités disponibles
+                  }));
+                  
+                  // Ajouter les activités dans le contexte via intentResults
+                  const activityIntentResults: IntentResults = { 
+                    activities: activityItems, 
+                    practices: [], 
+                    howerAngels: [] 
+                  };
+                  context.metadata = {
+                    ...context.metadata,
+                    ['intentResults']: activityIntentResults
+                  };
+                  
+                  // Construire le message pour l'IA
+                  intentResultsText = `L'utilisateur mentionne "${designation}" mais le hower angel "${howerAngelFullName}" ne propose pas encore d'activité spécifique pour la pratique "${practice.title}". `;
+                  intentResultsText += `Cependant, ce hower angel propose ${allActivities.length} autre(s) activité(s) disponible(s). `;
+                  intentResultsText += `Tu dois informer l'utilisateur que ce hower angel ne propose pas encore d'activité pour cette pratique, mais qu'il peut :\n`;
+                  intentResultsText += `1. Voir les autres activités disponibles de ce hower angel (tu dois proposer les 2 activités les plus pertinentes parmi celles disponibles dans le contexte, en utilisant des quickReplies de type 'activity_rdv' avec activityId)\n`;
+                  intentResultsText += `2. Contacter directement le hower angel (en utilisant un quickReply de type 'hower_angel_rdv' avec howerAngelId=${howerAngel.userId} et text='Voir le profil')\n\n`;
+                  intentResultsText += `Voici toutes les activités disponibles du hower angel "${howerAngelFullName}" : ${JSON.stringify(activityItems.map(activity => ({
+                    id: activity.id,
+                    title: activity.title,
+                    shortDescription: activity.shortDescription,
+                    longDescription: activity.longDescription,
+                    durationMinutes: activity.durationMinutes,
+                    participants: activity.participants,
+                    rating: activity.rating,
+                    price: activity.price,
+                    benefits: activity.benefits,
+                    locationType: activity.locationType,
+                    address: activity.address,
+                    selectedKeywords: activity.selectedKeywords
+                  })), null, 2)}`;
+                }
+              } else {
+                // Pas d'activité, pas de pratique avec hower angel
+                intentResultsText = `L'utilisateur mentionne "${designation}" mais cette activité n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type d'activité, etc.).`;
+              }
+            }
+          }
+        } else if (type === 'practice') {
+          // Vérifier d'abord s'il y a un hower angel en pending confirmation
+          if (globalIntentInfos.pendingConfirmations.focusedHowerAngel) {
+            const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
+            const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
+            intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais le hower angel n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}" dont il parle.`;
+          } else {
+            // Vérifier si on a une pratique (focused ou pending)
+            const practice = globalIntentInfos.focusedPractice || globalIntentInfos.pendingConfirmations.focusedPractice;
+            
+            if (practice && globalIntentInfos.focusedHowerAngel) {
+              // Si on a une pratique ET un hower angel, chercher les activités du hower angel qui correspondent à cette pratique
+              const howerAngel = globalIntentInfos.focusedHowerAngel;
+              const matchingActivities = howerAngel.activities?.filter(activity => {
+                // Vérifier si l'activité correspond à la pratique via les selectedKeywords
+                if (activity.selectedKeywords && Array.isArray(activity.selectedKeywords)) {
+                  return activity.selectedKeywords.some((keyword: any) => 
+                    keyword === practice.id || 
+                    (typeof keyword === 'object' && keyword.id === practice.id)
+                  );
+                }
+                return false;
+              }) || [];
+              
+              if (matchingActivities.length > 0) {
+                // Des activités correspondent à la pratique
+                const howerAngelFullName = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
+                intentResultsText = `L'utilisateur recherche une activité qui correspond à la pratique "${practice.title}". `;
+                intentResultsText += `Voici les activités disponibles du hower angel "${howerAngelFullName}" qui correspondent à cette pratique : ${JSON.stringify(matchingActivities.map(activity => ({
+                  id: activity.id,
+                  title: activity.title,
+                  shortDescription: activity.shortDescription,
+                  longDescription: activity.longDescription,
+                  durationMinutes: activity.durationMinutes,
+                  participants: activity.participants,
+                  rating: activity.rating,
+                  price: activity.price,
+                  benefits: activity.benefits,
+                  locationType: activity.locationType,
+                  address: activity.address,
+                  selectedKeywords: activity.selectedKeywords
+                })), null, 2)}`;
+              } else {
+                // Aucune activité ne correspond, utiliser le comportement par défaut
+                intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour la pratique suivante : ${JSON.stringify({
+                  id: practice.id,
+                  title: practice.title,
+                  shortDescription: practice.shortDescription,
+                  longDescription: practice.longDescription,
+                }, null, 2)}\n\n`;
+                
+                intentResultsText += `ID de la pratique pour rendez-vous: ${practice.id}`;
+              }
+            } else if (globalIntentInfos.focusedPractice) {
+              // Pratique focused mais pas de hower angel
+              const practice = globalIntentInfos.focusedPractice;
+              
+              intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour la pratique suivante : ${JSON.stringify({
+                id: practice.id,
+                title: practice.title,
+                shortDescription: practice.shortDescription,
+                longDescription: practice.longDescription,
+              }, null, 2)}\n\n`;
+              
+              intentResultsText += `ID de la pratique pour rendez-vous: ${practice.id}`;
+            } else if (globalIntentInfos.pendingConfirmations.focusedPractice) {
+              const pendingPractice = globalIntentInfos.pendingConfirmations.focusedPractice;
+              intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette pratique n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingPractice.title}" pour laquelle il veut prendre rendez-vous.`;
+            } else {
+              intentResultsText = `L'utilisateur mentionne "${designation}" mais cette pratique n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type de pratique, etc.).`;
+            }
+          }
+        }
+
+        // Mettre à jour le contexte avec intentResults
+        // Si intentResults est déjà un objet (IntentResults), ne pas l'écraser avec le texte
+        // mais mettre le texte dans intentResultsText pour le prompt
+        const existingIntentResults = context.metadata?.['intentResults'];
+        const isIntentResultsObject = existingIntentResults && typeof existingIntentResults === 'object' && !Array.isArray(existingIntentResults) && 'activities' in existingIntentResults;
+        
+        const updatedMetadata: any = {
+          ...context.metadata,
+          // Ne pas écraser l'objet IntentResults si on l'a déjà mis, mais mettre le texte dans intentResultsText
+          ...(isIntentResultsObject ? { ['intentResultsText']: intentResultsText } : { ['intentResults']: intentResultsText })
+        };
+        
+        context.metadata = updatedMetadata;
+
+        return context;
+      }
+    };
+  }
+
+  /**
+   * Construit le fragment de schéma pour searchContext (base commune)
+   */
+  protected getBaseSearchContextFragment(): any {
+    return {
+      searchType: {
+        type: "string",
+        description: "Type de recherche à effectuer",
+        enum: ["activity", "hower_angel", "practice"]
+      },
+      searchFormat: {
+        type: "string",
+        description: "Format de recherche : 'from_user_situation' pour une recherche basée sur la situation de l'utilisateur, 'from_name_query' pour une recherche par nom",
+        enum: ["from_user_situation", "from_name_query"]
+      },
+      searchChunks: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            type: {
+              type: "string",
+              description: `Type du chunk. Valeurs possibles:
+- "hower_angel_name_info": Recherche par nom complet d'un hower angel
+- "user_situation_chunk": Fragment de situation utilisateur (de son point de vue, par exemple: "Je me sens...", "J'ai besoin...")
+- "i_have_symptome_chunk": Fragment décrivant un symptôme que l'utilisateur a (par exemple: "J'ai des maux de tête", "Je ressens de la fatigue")
+- "with_benefit_chunk": Fragment décrivant un bénéfice recherché (par exemple: "pour me détendre", "pour réduire le stress")
+- "category_name_info": Nom d'une catégorie d'activité ou de pratique`,
+              enum: ["hower_angel_name_info", "user_situation_chunk", "i_have_symptome_chunk", "with_benefit_chunk", "category_name_info"]
+            },
+            text: {
+              type: "string",
+              description: "Texte du chunk (par exemple: \"Marie Dupont\" pour un nom complet, ou \"Je me sens...\" pour un fragment de situation)"
+            }
+          },
+          required: ["type", "text"],
+          additionalProperties: false
+        },
+        description: "Chunks représentant la situation de l'utilisateur (de son point de vue, par exemple: \"Je me sens...\", \"J'ai besoin...\") ou bien la recherche demandée (par exemple: \"sphorologie\", \"activité douce\", \"Marie Dupont\" pour rechercher un hower angel par nom, ...). Chaque chunk doit avoir un type pour indiquer s'il s'agit d'un nom complet ou d'un fragment de situation utilisateur."
+      }
+    };
+  }
+
+  /**
+   * Construit les informations de contexte pour searchContext - search_hower_angel (fragment, description, handle)
+   */
+  protected getSearchHowerAngelContextInfo(
+    _availablePracticeIds: string[],
+    _availableActivityIds: string[],
+    _availableHowerAngelIds: string[]
+  ): { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> } {
+    const properties = this.getBaseSearchContextFragment();
+    
+    return {
+      fragment: {
+        type: ["object", "null"],
+        description: "Contexte de recherche pour les requêtes sémantiques (recherche de hower angels)",
+        properties,
+        required: ["searchChunks", "searchType", "searchFormat"],
+        additionalProperties: false
+      },
+      description: "search_hower_angel: Demande explicite d'information sur une personne ou bien sur une catégorie de personne",
+      handle: async (intent, context, _userMessage, _globalIntentInfos) => {
+        if (!intent.searchContext) {
+          console.log('⚠️ Aucun searchContext dans l\'intent');
+          return context;
+        }
+        const { searchChunks } = intent.searchContext;
+        if (!searchChunks || searchChunks.length === 0) {
+          console.log('⚠️ Aucun searchChunks dans l\'intent');
+          return context;
+        }
+        try {
+          const searchChunksTexts = searchChunks.map(chunk => chunk.text);
+          console.log(`🔍 Recherche de hower angels avec ${searchChunks.length} chunks`);
+          
+          const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunksTexts);
+          if (!howerAngelsResult.success) {
+            console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
+            // Recalculer globalIntentInfos même en cas d'erreur
+            const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+            context.metadata = {
+              ...context.metadata,
+              ['globalIntentInfos']: globalIntentInfos
+            };
+            return context;
+          }
+          
+          const howerAngels: HowerAngelItem[] = howerAngelsResult.data
+            ? howerAngelsResult.data.map(item => ({
+                ...item,
+                profile: item.profile || '' // Garantir que profile est toujours présent
+              }))
+            : [];
+          console.log(`✅ ${howerAngels.length} hower angels trouvés`);
+          
+          // Ajouter les résultats dans les métadonnées
+          const howerAngelIntentResults: IntentResults = { activities: [], practices: [], howerAngels };
+          context.metadata = {
+            ...context.metadata,
+            ['intentResults']: howerAngelIntentResults
+          };
+
+          // Recalculer globalIntentInfos pour avoir accès aux intentResults
+          const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+          context.metadata = {
+            ...context.metadata,
+            ['globalIntentInfos']: globalIntentInfos
+          };
+        } catch (error) {
+          console.error('❌ Erreur lors du traitement de l\'intent:', error);
+        }
+        return context;
+      }
+    };
+  }
+
+  /**
+   * Construit les informations de contexte pour searchContext - search_activities (fragment, description, handle)
+   */
+  protected getSearchActivitiesContextInfo(
+    _availablePracticeIds: string[],
+    _availableActivityIds: string[],
+    _availableHowerAngelIds: string[]
+  ): { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> } {
+    const properties = this.getBaseSearchContextFragment();
+    
+    return {
+      fragment: {
+        type: ["object", "null"],
+        description: "Contexte de recherche pour les requêtes sémantiques (recherche d'activités)",
+        properties,
+        required: ["searchChunks", "searchType", "searchFormat"],
+        additionalProperties: false
+      },
+      description: "search_activities: Recherche d'une activité particulière ou un type d'activité",
+      handle: async (intent, context, _userMessage, _globalIntentInfos) => {
+        if (!intent.searchContext) {
+          console.log('⚠️ Aucun searchContext dans l\'intent');
+          return context;
+        }
+        const { searchChunks, searchType } = intent.searchContext;
+        if (!searchChunks || searchChunks.length === 0) {
+          console.log('⚠️ Aucun searchChunks dans l\'intent');
+          return context;
+        }
+        try {
+          const searchChunksTexts = searchChunks.map(chunk => chunk.text);
+          
+          // Pour les recherches, effectuer les recherches d'abord
+          switch (searchType) {
+            case 'activity':
+              console.log(`🔍 Recherche d'activités avec ${searchChunks.length} chunks`);
+              const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunksTexts);
+              const activities: ActivityItem[] = activitiesResults.results || [];
+              console.log(`✅ ${activities.length} activités trouvées`);
+              
+              // Ajouter les résultats dans les métadonnées
+              const activityIntentResults: IntentResults = { activities, practices: [], howerAngels: [] };
               context.metadata = {
                 ...context.metadata,
                 ['intentResults']: activityIntentResults
               };
+
+              // Recalculer globalIntentInfos pour avoir accès aux intentResults
+              const globalIntentInfosActivity = await this.computeGlobalIntentInfos(intent, context);
+              context.metadata = {
+                ...context.metadata,
+                ['globalIntentInfos']: globalIntentInfosActivity
+              };
+              return context;
               
-              // Construire le message pour l'IA
-              intentResultsText = `L'utilisateur mentionne "${designation}" mais le hower angel "${howerAngelFullName}" ne propose pas encore d'activité spécifique pour la pratique "${practice.title}". `;
-              intentResultsText += `Cependant, ce hower angel propose ${allActivities.length} autre(s) activité(s) disponible(s). `;
-              intentResultsText += `Tu dois informer l'utilisateur que ce hower angel ne propose pas encore d'activité pour cette pratique, mais qu'il peut :\n`;
-              intentResultsText += `1. Voir les autres activités disponibles de ce hower angel (tu dois proposer les 2 activités les plus pertinentes parmi celles disponibles dans le contexte, en utilisant des quickReplies de type 'activity_rdv' avec activityId)\n`;
-              intentResultsText += `2. Contacter directement le hower angel (en utilisant un quickReply de type 'hower_angel_rdv' avec howerAngelId=${howerAngel.userId} et text='Voir le profil')\n\n`;
-              intentResultsText += `Voici toutes les activités disponibles du hower angel "${howerAngelFullName}" : ${JSON.stringify(activityItems.map(activity => ({
-                id: activity.id,
-                title: activity.title,
-                shortDescription: activity.shortDescription,
-                longDescription: activity.longDescription,
-                durationMinutes: activity.durationMinutes,
-                participants: activity.participants,
-                rating: activity.rating,
-                price: activity.price,
-                benefits: activity.benefits,
-                locationType: activity.locationType,
-                address: activity.address,
-                selectedKeywords: activity.selectedKeywords
-              })), null, 2)}`;
-            }
-          } else {
-            // Pas d'activité, pas de pratique avec hower angel
-            intentResultsText = `L'utilisateur mentionne "${designation}" mais cette activité n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type d'activité, etc.).`;
+            case 'practice':
+              console.log(`🔍 Recherche de pratiques avec ${searchChunks.length} chunks`);
+              const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunksTexts);
+              const practices: PracticeItem[] = practicesResults.results || [];
+              console.log(`✅ ${practices.length} pratiques trouvées`);
+              
+              // Ajouter les résultats dans les métadonnées
+              const practiceIntentResults: IntentResults = { activities: [], practices, howerAngels: [] };
+              context.metadata = {
+                ...context.metadata,
+                ['intentResults']: practiceIntentResults
+              };
+
+              // Recalculer globalIntentInfos pour avoir accès aux intentResults
+              const globalIntentInfosPractice = await this.computeGlobalIntentInfos(intent, context);
+              context.metadata = {
+                ...context.metadata,
+                ['globalIntentInfos']: globalIntentInfosPractice
+              };
+              return context;
+              
+            case 'hower_angel':
+              console.log(`🔍 Recherche de hower angels avec ${searchChunks.length} chunks`);
+              const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunksTexts);
+              if (!howerAngelsResult.success) {
+                console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
+                // Recalculer globalIntentInfos même en cas d'erreur
+                const globalIntentInfosError = await this.computeGlobalIntentInfos(intent, context);
+                context.metadata = {
+                  ...context.metadata,
+                  ['globalIntentInfos']: globalIntentInfosError
+                };
+                return context;
+              }
+              
+              const howerAngels: HowerAngelItem[] = howerAngelsResult.data
+                ? howerAngelsResult.data.map(item => ({
+                    ...item,
+                    profile: item.profile || '' // Garantir que profile est toujours présent
+                  }))
+                : [];
+              console.log(`✅ ${howerAngels.length} hower angels trouvés`);
+              
+              // Ajouter les résultats dans les métadonnées
+              const howerAngelIntentResults: IntentResults = { activities: [], practices: [], howerAngels };
+              context.metadata = {
+                ...context.metadata,
+                ['intentResults']: howerAngelIntentResults
+              };
+
+              // Recalculer globalIntentInfos pour avoir accès aux intentResults
+              const globalIntentInfosHowerAngel = await this.computeGlobalIntentInfos(intent, context);
+              context.metadata = {
+                ...context.metadata,
+                ['globalIntentInfos']: globalIntentInfosHowerAngel
+              };
+              return context;
+              
+            default:
+              console.warn(`⚠️ searchType non reconnu: ${searchType}`);
+              return context;
           }
+        } catch (error) {
+          console.error('❌ Erreur lors du traitement de l\'intent:', error);
+          return context;
         }
       }
-    } else if (type === 'practice') {
-      // Vérifier d'abord s'il y a un hower angel en pending confirmation
-      if (globalIntentInfos.pendingConfirmations.focusedHowerAngel) {
-        const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
-        const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
-        intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais le hower angel n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}" dont il parle.`;
-      } else {
-        // Vérifier si on a une pratique (focused ou pending)
-        const practice = globalIntentInfos.focusedPractice || globalIntentInfos.pendingConfirmations.focusedPractice;
-        
-        if (practice && globalIntentInfos.focusedHowerAngel) {
-          // Si on a une pratique ET un hower angel, chercher les activités du hower angel qui correspondent à cette pratique
-          const howerAngel = globalIntentInfos.focusedHowerAngel;
-          const matchingActivities = howerAngel.activities?.filter(activity => {
-            // Vérifier si l'activité correspond à la pratique via les selectedKeywords
-            if (activity.selectedKeywords && Array.isArray(activity.selectedKeywords)) {
-              return activity.selectedKeywords.some((keyword: any) => 
-                keyword === practice.id || 
-                (typeof keyword === 'object' && keyword.id === practice.id)
-              );
-            }
-            return false;
-          }) || [];
+    };
+  }
+
+  /**
+   * Construit les informations de contexte pour searchContext - search_practice (fragment, description, handle)
+   */
+  protected getSearchPracticeContextInfo(
+    _availablePracticeIds: string[],
+    _availableActivityIds: string[],
+    _availableHowerAngelIds: string[]
+  ): { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> } {
+    const properties = this.getBaseSearchContextFragment();
+    
+    return {
+      fragment: {
+        type: ["object", "null"],
+        description: "Contexte de recherche pour les requêtes sémantiques (recherche de pratiques)",
+        properties,
+        required: ["searchChunks", "searchType", "searchFormat"],
+        additionalProperties: false
+      },
+      description: "search_practice: Recherche d'une pratique particulière ou un type de pratique",
+      handle: async (intent, context, _userMessage, _globalIntentInfos) => {
+        if (!intent.searchContext) {
+          console.log('⚠️ Aucun searchContext dans l\'intent');
+          return context;
+        }
+        const { searchChunks } = intent.searchContext;
+        if (!searchChunks || searchChunks.length === 0) {
+          console.log('⚠️ Aucun searchChunks dans l\'intent');
+          return context;
+        }
+        try {
+          // Pour search_practice, on recherche toujours des pratiques
+          const searchChunksTexts = searchChunks.map(chunk => chunk.text);
+          console.log(`🔍 Recherche de pratiques avec ${searchChunks.length} chunks`);
           
-          if (matchingActivities.length > 0) {
-            // Des activités correspondent à la pratique
-            const howerAngelFullName = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
-            intentResultsText = `L'utilisateur recherche une activité qui correspond à la pratique "${practice.title}". `;
-            intentResultsText += `Voici les activités disponibles du hower angel "${howerAngelFullName}" qui correspondent à cette pratique : ${JSON.stringify(matchingActivities.map(activity => ({
+          const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunksTexts);
+          const practices: PracticeItem[] = practicesResults.results || [];
+          console.log(`✅ ${practices.length} pratiques trouvées`);
+          
+          // Ajouter les résultats dans les métadonnées
+          const practiceIntentResults: IntentResults = { activities: [], practices, howerAngels: [] };
+          context.metadata = {
+            ...context.metadata,
+            ['intentResults']: practiceIntentResults
+          };
+
+          // Recalculer globalIntentInfos pour avoir accès aux intentResults
+          const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+          context.metadata = {
+            ...context.metadata,
+            ['globalIntentInfos']: globalIntentInfos
+          };
+
+          return context;
+        } catch (error) {
+          console.error('❌ Erreur lors du traitement de l\'intent:', error);
+          return context;
+        }
+      }
+    };
+  }
+
+  /**
+   * Construit les informations de contexte pour searchContext - search_advices (fragment, description, handle)
+   */
+  protected getSearchAdvicesContextInfo(
+    availablePracticeIds: string[],
+    availableActivityIds: string[],
+    availableHowerAngelIds: string[]
+  ): { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> } {
+    const properties = this.getBaseSearchContextFragment();
+
+    // Ajouter targetPractice si des IDs sont disponibles
+    if (availablePracticeIds.length > 0) {
+      properties.targetPractice = {
+        type: ["string", "null"],
+        description: "ID de la pratique ciblée pour le conseil (doit être une pratique existante dans le contexte)",
+        enum: [null, ...availablePracticeIds]
+      };
+    }
+
+    // Ajouter targetActivity si des IDs sont disponibles
+    if (availableActivityIds.length > 0) {
+      properties.targetActivity = {
+        type: ["string", "null"],
+        description: "ID de l'activité ciblée pour le conseil (doit être une activité existante dans le contexte)",
+        enum: [null, ...availableActivityIds]
+      };
+    }
+
+    // Ajouter targetHowerAngel si des IDs sont disponibles
+    if (availableHowerAngelIds.length > 0) {
+      properties.targetHowerAngel = {
+        type: ["string", "null"],
+        description: "ID du hower angel ciblé pour le conseil (doit être un hower angel existant dans le contexte)",
+        enum: [null, ...availableHowerAngelIds]
+      };
+    }
+
+    return {
+      fragment: {
+        type: ["object", "null"],
+        description: "Contexte de recherche pour les requêtes sémantiques (recherche de conseils)",
+        properties,
+        required: ["searchChunks", "searchType", "searchFormat"],
+        additionalProperties: false
+      },
+      description: "search_advices: Recherche de conseil explicite sur une problématique",
+      handle: async (intent, context, _userMessage, _globalIntentInfos) => {
+        if (!intent.searchContext) {
+          console.log('⚠️ Aucun searchContext dans l\'intent');
+          return context;
+        }
+        const { searchChunks, searchType } = intent.searchContext;
+        if (!searchChunks || searchChunks.length === 0) {
+          console.log('⚠️ Aucun searchChunks dans l\'intent');
+          return context;
+        }
+        try {
+          const searchChunksTexts = searchChunks.map(chunk => chunk.text);
+          
+          // Pour les recherches de conseils, effectuer les recherches selon le searchType
+          switch (searchType) {
+            case 'activity':
+              console.log(`🔍 Recherche d'activités avec ${searchChunks.length} chunks`);
+              const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunksTexts);
+              const activities: ActivityItem[] = activitiesResults.results || [];
+              console.log(`✅ ${activities.length} activités trouvées`);
+              
+              // Ajouter les résultats dans les métadonnées
+              const activityIntentResults: IntentResults = { activities, practices: [], howerAngels: [] };
+              context.metadata = {
+                ...context.metadata,
+                ['intentResults']: activityIntentResults
+              };
+
+              // Recalculer globalIntentInfos pour avoir accès aux intentResults
+              const globalIntentInfosActivity = await this.computeGlobalIntentInfos(intent, context);
+              context.metadata = {
+                ...context.metadata,
+                ['globalIntentInfos']: globalIntentInfosActivity
+              };
+              return context;
+              
+            case 'practice':
+              console.log(`🔍 Recherche de pratiques avec ${searchChunks.length} chunks`);
+              const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunksTexts);
+              const practices: PracticeItem[] = practicesResults.results || [];
+              console.log(`✅ ${practices.length} pratiques trouvées`);
+              
+              // Ajouter les résultats dans les métadonnées
+              const practiceIntentResults: IntentResults = { activities: [], practices, howerAngels: [] };
+              context.metadata = {
+                ...context.metadata,
+                ['intentResults']: practiceIntentResults
+              };
+
+              // Recalculer globalIntentInfos pour avoir accès aux intentResults
+              const globalIntentInfosPractice = await this.computeGlobalIntentInfos(intent, context);
+              context.metadata = {
+                ...context.metadata,
+                ['globalIntentInfos']: globalIntentInfosPractice
+              };
+              return context;
+              
+            case 'hower_angel':
+              console.log(`🔍 Recherche de hower angels avec ${searchChunks.length} chunks`);
+              const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunksTexts);
+              if (!howerAngelsResult.success) {
+                console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
+                // Recalculer globalIntentInfos même en cas d'erreur
+                const globalIntentInfosError = await this.computeGlobalIntentInfos(intent, context);
+                context.metadata = {
+                  ...context.metadata,
+                  ['globalIntentInfos']: globalIntentInfosError
+                };
+                return context;
+              }
+              
+              const howerAngels: HowerAngelItem[] = howerAngelsResult.data
+                ? howerAngelsResult.data.map(item => ({
+                    ...item,
+                    profile: item.profile || '' // Garantir que profile est toujours présent
+                  }))
+                : [];
+              console.log(`✅ ${howerAngels.length} hower angels trouvés`);
+              
+              // Ajouter les résultats dans les métadonnées
+              const howerAngelIntentResults: IntentResults = { activities: [], practices: [], howerAngels };
+              context.metadata = {
+                ...context.metadata,
+                ['intentResults']: howerAngelIntentResults
+              };
+
+              // Recalculer globalIntentInfos pour avoir accès aux intentResults
+              const globalIntentInfosHowerAngel = await this.computeGlobalIntentInfos(intent, context);
+              context.metadata = {
+                ...context.metadata,
+                ['globalIntentInfos']: globalIntentInfosHowerAngel
+              };
+              return context;
+              
+            default:
+              console.warn(`⚠️ searchType non reconnu: ${searchType}`);
+              return context;
+          }
+        } catch (error) {
+          console.error('❌ Erreur lors du traitement de l\'intent:', error);
+          return context;
+        }
+      }
+    };
+  }
+
+  /**
+   * Construit les informations de contexte pour knowMoreContext (fragment, description, handle)
+   */
+  protected getKnowMoreContextInfo(_context: HowanaContext): { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> } {
+    return {
+      fragment: {
+        type: ["object", "null"],
+        description: "Quand l'intent est 'know_more', l'objectif de ce contexte est d'indiquer de quoi/qui est le sujet d'intérêt dont on veut en savoir plus",
+        properties: {
+          type: {
+            type: "string",
+            description: "Type de l'élément sur lequel on veut en savoir plus",
+            enum: ["hower_angel", "activity", "practice", "subject"]
+          },
+          designation: {
+            type: "string",
+            description: "Nom du hower angel, de la pratique, de l'activité ou du sujet d'intérêt mentionné"
+          },
+          identifiant: {
+            type: ["string", "null"],
+            description: "Identifiant associé (peut être null si non connu)"
+          }
+        },
+        required: ["type", "designation", "identifiant"],
+        additionalProperties: false
+      },
+      description: "know_more: Demande plus d'information par rapport à un précédent résultat de la conversation",
+      handle: async (intent, context, _userMessage, globalIntentInfos) => {
+        if (!globalIntentInfos) {
+          return context;
+        }
+        console.log('ℹ️ Intent "know_more" détecté - valorisation de intentResults avec les messages contextuels');
+        
+        // Si c'est une confirmation, reconstruire le contexte depuis confirmationContext
+        let type: 'hower_angel' | 'activity' | 'practice' | 'subject';
+        let designation: string;
+        
+        if (intent.intent === 'confirmation' && intent.confirmationContext) {
+          // Reconstruire le contexte depuis confirmationContext et globalIntentInfos
+          const confirmationType = intent.confirmationContext.type;
+          type = confirmationType;
+          
+          // Récupérer la désignation depuis l'élément confirmé dans globalIntentInfos
+          if (confirmationType === 'hower_angel' && globalIntentInfos.focusedHowerAngel) {
+            const howerAngel = globalIntentInfos.focusedHowerAngel;
+            designation = `${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`.trim() || 'ce hower angel';
+          } else if (confirmationType === 'activity' && globalIntentInfos.focusedActivity) {
+            designation = globalIntentInfos.focusedActivity.title;
+          } else if (confirmationType === 'practice' && globalIntentInfos.focusedPractice) {
+            designation = globalIntentInfos.focusedPractice.title;
+          } else {
+            console.warn('⚠️ Élément confirmé non trouvé dans globalIntentInfos');
+            return context;
+          }
+        } else {
+          // Cas normal : utiliser knowMoreContext
+          if (!intent.knowMoreContext) {
+            console.warn('⚠️ knowMoreContext manquant dans l\'intent know_more');
+            return context;
+          }
+          type = intent.knowMoreContext.type;
+          designation = intent.knowMoreContext.designation;
+        }
+        let intentResultsText = '';
+
+        // Construire le message contextuel selon le type et l'état de l'élément dans globalIntentInfos
+        if (type === 'hower_angel') {
+          if (globalIntentInfos.focusedHowerAngel) {
+            // Élément focused existe
+            const howerAngel = globalIntentInfos.focusedHowerAngel;
+            intentResultsText = `L'utilisateur souhaite en savoir plus sur le hower angel suivant : ${JSON.stringify({
+              id: howerAngel.id,
+              userId: howerAngel.userId,
+              firstName: howerAngel.firstName,
+              lastName: howerAngel.lastName,
+              profile: howerAngel.profile,
+              specialties: howerAngel.specialties,
+            }, null, 2)}`;
+          } else if (globalIntentInfos.pendingConfirmations.focusedHowerAngel) {
+            // Élément en attente de confirmation
+            const pendingHowerAngel = globalIntentInfos.pendingConfirmations.focusedHowerAngel;
+            const fullName = `${pendingHowerAngel.firstName || ''} ${pendingHowerAngel.lastName || ''}`.trim() || 'ce hower angel';
+            intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cet élément n'a pas encore été confirmé. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${fullName}"dont il veut en savoir plus.`;
+          } else {
+            // Élément non trouvé, demander des précisions
+            intentResultsText = `L'utilisateur mentionne "${designation}" mais cet élément n'a pas pu être identifié avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, spécialité, etc.).`;
+          }
+        } else if (type === 'activity') {
+          if (globalIntentInfos.focusedActivity) {
+            // Élément focused existe
+            const activity = globalIntentInfos.focusedActivity;
+            intentResultsText = `L'utilisateur souhaite en savoir plus sur l'activité suivante : ${JSON.stringify({
               id: activity.id,
               title: activity.title,
               shortDescription: activity.shortDescription,
               longDescription: activity.longDescription,
-              durationMinutes: activity.durationMinutes,
-              participants: activity.participants,
-              rating: activity.rating,
-              price: activity.price,
-              benefits: activity.benefits,
-              locationType: activity.locationType,
-              address: activity.address,
-              selectedKeywords: activity.selectedKeywords
-            })), null, 2)}`;
+            }, null, 2)}`;
+          } else if (globalIntentInfos.pendingConfirmations.focusedActivity) {
+            // Élément en attente de confirmation
+            const pendingActivity = globalIntentInfos.pendingConfirmations.focusedActivity;
+            intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette activité n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingActivity.title}" dont il veut en savoir plus.`;
           } else {
-            // Aucune activité ne correspond, utiliser le comportement par défaut
-            intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour la pratique suivante : ${JSON.stringify({
+            // Élément non trouvé, demander des précisions
+            intentResultsText = `L'utilisateur mentionne "${designation}" mais cette activité n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type d'activité, etc.).`;
+          }
+        } else if (type === 'practice') {
+          if (globalIntentInfos.focusedPractice) {
+            // Élément focused existe
+            const practice = globalIntentInfos.focusedPractice;
+            intentResultsText = `L'utilisateur souhaite en savoir plus sur la pratique suivante : ${JSON.stringify({
               id: practice.id,
               title: practice.title,
               shortDescription: practice.shortDescription,
               longDescription: practice.longDescription,
-            }, null, 2)}\n\n`;
-            
-            intentResultsText += `ID de la pratique pour rendez-vous: ${practice.id}`;
+            }, null, 2)}`;
+          } else if (globalIntentInfos.pendingConfirmations.focusedPractice) {
+            // Élément en attente de confirmation
+            const pendingPractice = globalIntentInfos.pendingConfirmations.focusedPractice;
+            intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette pratique n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingPractice.title}" dont il veut en savoir plus.`;
+          } else {
+            // Élément non trouvé, demander des précisions
+            intentResultsText = `L'utilisateur mentionne "${designation}" mais cette pratique n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type de pratique, etc.).`;
           }
-        } else if (globalIntentInfos.focusedPractice) {
-          // Pratique focused mais pas de hower angel
-          const practice = globalIntentInfos.focusedPractice;
-          
-          intentResultsText = `L'utilisateur souhaite prendre rendez-vous pour la pratique suivante : ${JSON.stringify({
-            id: practice.id,
-            title: practice.title,
-            shortDescription: practice.shortDescription,
-            longDescription: practice.longDescription,
-          }, null, 2)}\n\n`;
-          
-          intentResultsText += `ID de la pratique pour rendez-vous: ${practice.id}`;
-        } else if (globalIntentInfos.pendingConfirmations.focusedPractice) {
-          const pendingPractice = globalIntentInfos.pendingConfirmations.focusedPractice;
-          intentResultsText = `IMPORTANT: L'utilisateur mentionne "${designation}" mais cette pratique n'a pas encore été confirmée. Tu dois demander à l'utilisateur de confirmer qu'il s'agit bien de "${pendingPractice.title}" pour laquelle il veut prendre rendez-vous.`;
+        } else if (type === 'subject') {
+          if (globalIntentInfos.focusedFaqs && globalIntentInfos.focusedFaqs.length > 0) {
+            // FAQ trouvées
+            const faqs = globalIntentInfos.focusedFaqs;
+            intentResultsText = `L'utilisateur souhaite en savoir plus sur le sujet "${designation}". FAQ trouvées : ${JSON.stringify(faqs.map(faq => ({
+              id: faq.id,
+              question: faq.question,
+            })), null, 2)}`;
+          } else {
+            // Sujet non trouvé, demander des précisions
+            intentResultsText = `L'utilisateur mentionne le sujet "${designation}" mais aucune information pertinente n'a été trouvée. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement.`;
+          }
+        }
+
+        // Mettre à jour le contexte avec intentResults (string)
+        context.metadata = {
+          ...context.metadata,
+          ['intentResults']: intentResultsText
+        };
+
+        return context;
+      }
+    };
+  }
+
+  /**
+   * Construit les informations de contexte pour confirmationContext (fragment, description, handle)
+   */
+  protected getConfirmationContextInfo(_context: HowanaContext): { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> } {
+    return {
+      fragment: {
+        type: ["object", "null"],
+        description: "Quand l'intent est 'confirmation', ce contexte indique quel type d'élément est confirmé",
+        properties: {
+          type: {
+            type: "string",
+            description: "Type de l'élément confirmé",
+            enum: ["hower_angel", "activity", "practice"]
+          },
+          intent: {
+            type: "string",
+            description: "Intent original qui a abouti à la demande de confirmation. Cet intent sera utilisé pour continuer son traitement après la confirmation",
+            enum: ["know_more", "take_rdv"]
+          }
+        },
+        required: ["type", "intent"],
+        additionalProperties: false
+      },
+      description: "confirmation: Confirmation d'un élément mentionné précédemment",
+      handle: async (intent, context, userMessage, globalIntentInfos) => {
+        // Appeler directement le handler approprié selon l'intent original
+        if (intent.confirmationContext?.intent === 'know_more') {
+          return await this.getKnowMoreContextInfo(context).handle(intent, context, userMessage, globalIntentInfos);
+        } else if (intent.confirmationContext?.intent === 'take_rdv') {
+          return await this.getRdvContextInfo(context).handle(intent, context, userMessage, globalIntentInfos);
         } else {
-          intentResultsText = `L'utilisateur mentionne "${designation}" mais cette pratique n'a pas pu être identifiée avec certitude. Tu dois demander à l'utilisateur des précisions sur ce qu'il recherche exactement (nom complet, type de pratique, etc.).`;
+          console.warn('⚠️ Intent original manquant ou non géré dans confirmationContext');
+          return context;
         }
       }
-    }
-
-    // Mettre à jour le contexte avec intentResults
-    // Si intentResults est déjà un objet (IntentResults), ne pas l'écraser avec le texte
-    // mais mettre le texte dans intentResultsText pour le prompt
-    const existingIntentResults = context.metadata?.['intentResults'];
-    const isIntentResultsObject = existingIntentResults && typeof existingIntentResults === 'object' && !Array.isArray(existingIntentResults) && 'activities' in existingIntentResults;
-    
-    const updatedMetadata: any = {
-      ...context.metadata,
-      // Ne pas écraser l'objet IntentResults si on l'a déjà mis, mais mettre le texte dans intentResultsText
-      ...(isIntentResultsObject ? { ['intentResultsText']: intentResultsText } : { ['intentResults']: intentResultsText })
     };
-    
-    context.metadata = updatedMetadata;
-
-    return context;
   }
 
   /**
-   * Gère la recherche d'activités
+   * Construit les informations de contexte pour discoverContext (fragment, description, handle)
    */
-  private async handleSearchActivityIntent(
-    searchChunks: Array<{ type: string; text: string }>,
-    context: HowanaContext,
-    intent: RecommendationIntent
-  ): Promise<HowanaContext> {
-    const searchChunksTexts = searchChunks.map(chunk => chunk.text);
-    console.log(`🔍 Recherche d'activités avec ${searchChunks.length} chunks`);
-    
-    const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunksTexts);
-    const activities: ActivityItem[] = activitiesResults.results || [];
-    console.log(`✅ ${activities.length} activités trouvées`);
-    
-    // Ajouter les résultats dans les métadonnées
-    const activityIntentResults: IntentResults = { activities, practices: [], howerAngels: [] };
-    context.metadata = {
-      ...context.metadata,
-      ['intentResults']: activityIntentResults
-    };
+  protected getDiscoverContextInfo(_context: HowanaContext): { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> } {
+    return {
+      fragment: {
+        type: ["object", "null"],
+        description: "Quand l'intent est 'discover', ce contexte contient les chunks pour la découverte de nouveaux horizons",
+        properties: {
+          chunks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                type: {
+                  type: "string",
+                  description: `Type du chunk. Valeurs possibles:
+- "hower_angel_name_info": Recherche par nom complet d'un hower angel
+- "user_situation_chunk": Fragment de situation utilisateur (de son point de vue, par exemple: "Je me sens...", "J'ai besoin...")
+- "i_have_symptome_chunk": Fragment décrivant un symptôme que l'utilisateur a (par exemple: "J'ai des maux de tête", "Je ressens de la fatigue")
+- "with_benefit_chunk": Fragment décrivant un bénéfice recherché (par exemple: "pour me détendre", "pour réduire le stress")
+- "category_name_info": Nom d'une catégorie d'activité ou de pratique`,
+                  enum: ["hower_angel_name_info", "user_situation_chunk", "i_have_symptome_chunk", "with_benefit_chunk", "category_name_info"]
+                },
+                text: {
+                  type: "string",
+                  description: "Texte du chunk (par exemple: \"Marie Dupont\" pour un nom complet, ou \"Je me sens...\" pour un fragment de situation)"
+                }
+              },
+              required: ["type", "text"],
+              additionalProperties: false
+            },
+            description: "Chunks représentant la situation de l'utilisateur ou les éléments de découverte (par exemple: \"Je me sens...\", \"J'ai besoin...\", \"sphorologie\", \"activité douce\", ...). Chaque chunk doit avoir un type pour indiquer s'il s'agit d'un nom complet ou d'un fragment de situation utilisateur."
+          }
+        },
+        required: ["chunks"],
+        additionalProperties: false
+      },
+      description: "discover: Demande de découverte de nouveaux horizons",
+      handle: async (intent, context, _userMessage, _globalIntentInfos) => {
+        if (!intent.discoverContext) {
+          console.log('⚠️ Aucun discoverContext dans l\'intent');
+          return context;
+        }
+        const { chunks } = intent.discoverContext;
+        if (!chunks || chunks.length === 0) {
+          console.log('⚠️ Aucun chunks dans discoverContext');
+          return context;
+        }
+        try {
+          const chunksTexts = chunks.map(chunk => chunk.text);
+          console.log(`🔍 Découverte avec ${chunks.length} chunks`);
+          
+          // Rechercher à la fois des activités, pratiques et hower angels pour une découverte complète
+          const [activitiesResults, practicesResults, howerAngelsResult] = await Promise.all([
+            this.supabaseService.searchActivitiesBySituationChunks(chunksTexts),
+            this.supabaseService.searchPracticesBySituationChunks(chunksTexts),
+            this.supabaseService.searchHowerAngelsByUserSituation(chunksTexts)
+          ]);
+          
+          const activities: ActivityItem[] = activitiesResults.results || [];
+          const practices: PracticeItem[] = practicesResults.results || [];
+          const howerAngels: HowerAngelItem[] = howerAngelsResult.success && howerAngelsResult.data
+            ? howerAngelsResult.data.map(item => ({
+                ...item,
+                profile: item.profile || '' // Garantir que profile est toujours présent
+              }))
+            : [];
+          
+          if (!howerAngelsResult.success) {
+            console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
+          }
+          
+          console.log(`✅ ${activities.length} activités, ${practices.length} pratiques et ${howerAngels.length} hower angels trouvés pour la découverte`);
+          
+          // Ajouter les résultats dans les métadonnées
+          const discoverIntentResults: IntentResults = { activities, practices, howerAngels };
+          context.metadata = {
+            ...context.metadata,
+            ['intentResults']: discoverIntentResults
+          };
 
-    // Recalculer globalIntentInfos pour avoir accès aux intentResults
-    const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
-    context.metadata = {
-      ...context.metadata,
-      ['globalIntentInfos']: globalIntentInfos
-    };
+          // Recalculer globalIntentInfos pour avoir accès aux intentResults
+          const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+          context.metadata = {
+            ...context.metadata,
+            ['globalIntentInfos']: globalIntentInfos
+          };
 
-    return context;
+          return context;
+        } catch (error) {
+          console.error('❌ Erreur lors du traitement de l\'intent discover:', error);
+          return context;
+        }
+      }
+    };
   }
 
-  /**
-   * Gère la recherche de pratiques
-   */
-  private async handleSearchPracticeIntent(
-    searchChunks: Array<{ type: string; text: string }>,
-    context: HowanaContext,
-    intent: RecommendationIntent
-  ): Promise<HowanaContext> {
-    const searchChunksTexts = searchChunks.map(chunk => chunk.text);
-    console.log(`🔍 Recherche de pratiques avec ${searchChunks.length} chunks`);
-    
-    const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunksTexts);
-    const practices: PracticeItem[] = practicesResults.results || [];
-    console.log(`✅ ${practices.length} pratiques trouvées`);
-    
-    // Ajouter les résultats dans les métadonnées
-    const practiceIntentResults: IntentResults = { activities: [], practices, howerAngels: [] };
-    context.metadata = {
-      ...context.metadata,
-      ['intentResults']: practiceIntentResults
-    };
-
-    // Recalculer globalIntentInfos pour avoir accès aux intentResults
-    const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
-    context.metadata = {
-      ...context.metadata,
-      ['globalIntentInfos']: globalIntentInfos
-    };
-
-    return context;
-  }
-
-  /**
-   * Gère la recherche de hower angels
-   * @returns true si une erreur s'est produite
-   */
-  private async handleSearchHowerAngelIntent(
-    searchChunks: Array<{ type: string; text: string }>,
-    context: HowanaContext,
-    intent: RecommendationIntent
-  ): Promise<boolean> {
-    const searchChunksTexts = searchChunks.map(chunk => chunk.text);
-    console.log(`🔍 Recherche de hower angels avec ${searchChunks.length} chunks`);
-    
-    const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunksTexts);
-    if (!howerAngelsResult.success) {
-      console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
-      // Recalculer globalIntentInfos même en cas d'erreur
-      const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
-      context.metadata = {
-        ...context.metadata,
-        ['globalIntentInfos']: globalIntentInfos
-      };
-      return true; // Erreur gérée
-    }
-    
-    const howerAngels: HowerAngelItem[] = howerAngelsResult.data
-      ? howerAngelsResult.data.map(item => ({
-          ...item,
-          profile: item.profile || '' // Garantir que profile est toujours présent
-        }))
-      : [];
-    console.log(`✅ ${howerAngels.length} hower angels trouvés`);
-    
-    // Ajouter les résultats dans les métadonnées
-    const howerAngelIntentResults: IntentResults = { activities: [], practices: [], howerAngels };
-    context.metadata = {
-      ...context.metadata,
-      ['intentResults']: howerAngelIntentResults
-    };
-
-    // Recalculer globalIntentInfos pour avoir accès aux intentResults
-    const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
-    context.metadata = {
-      ...context.metadata,
-      ['globalIntentInfos']: globalIntentInfos
-    };
-    
-    return false; // Pas d'erreur
-  }
-
-  /**
-   * Gère l'intent "discover" - recherche découverte d'activités, pratiques et hower angels
-   */
-  private async handleDiscoverIntent(
-    chunks: Array<{ type: string; text: string }>,
-    context: HowanaContext,
-    intent: RecommendationIntent
-  ): Promise<HowanaContext> {
-    const chunksTexts = chunks.map(chunk => chunk.text);
-    console.log(`🔍 Découverte avec ${chunks.length} chunks`);
-    
-    // Rechercher à la fois des activités, pratiques et hower angels pour une découverte complète
-    const [activitiesResults, practicesResults, howerAngelsResult] = await Promise.all([
-      this.supabaseService.searchActivitiesBySituationChunks(chunksTexts),
-      this.supabaseService.searchPracticesBySituationChunks(chunksTexts),
-      this.supabaseService.searchHowerAngelsByUserSituation(chunksTexts)
-    ]);
-    
-    const activities: ActivityItem[] = activitiesResults.results || [];
-    const practices: PracticeItem[] = practicesResults.results || [];
-    const howerAngels: HowerAngelItem[] = howerAngelsResult.success && howerAngelsResult.data
-      ? howerAngelsResult.data.map(item => ({
-          ...item,
-          profile: item.profile || '' // Garantir que profile est toujours présent
-        }))
-      : [];
-    
-    if (!howerAngelsResult.success) {
-      console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
-    }
-    
-    console.log(`✅ ${activities.length} activités, ${practices.length} pratiques et ${howerAngels.length} hower angels trouvés pour la découverte`);
-    
-    // Ajouter les résultats dans les métadonnées
-    const discoverIntentResults: IntentResults = { activities, practices, howerAngels };
-    context.metadata = {
-      ...context.metadata,
-      ['intentResults']: discoverIntentResults
-    };
-
-    // Recalculer globalIntentInfos pour avoir accès aux intentResults
-    const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
-    context.metadata = {
-      ...context.metadata,
-      ['globalIntentInfos']: globalIntentInfos
-    };
-
-    return context;
-  }
 
   /**
    * Schéma de sortie pour le calcul d'intent spécifique aux recommandations
    */
-  protected getIntentSchema(_context: HowanaContext): ChatBotOutputSchema {
+  protected getIntentSchema(context: HowanaContext): ChatBotOutputSchema {
+    // Récupérer les IDs disponibles une seule fois
+    const { availablePracticeIds, availableActivityIds, availableHowerAngelIds } = this.getAvailableIds(context);
+
+    // Mapper chaque intent à sa fonction de construction d'infos (fragment, description, handle)
+    const intentInfoMap: Record<string, (...args: any[]) => { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> }> = {
+      take_rdv: () => this.getRdvContextInfo(context),
+      search_hower_angel: () => this.getSearchHowerAngelContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
+      search_activities: () => this.getSearchActivitiesContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
+      search_practice: () => this.getSearchPracticeContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
+      search_advices: () => this.getSearchAdvicesContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
+      discover: () => this.getDiscoverContextInfo(context),
+      know_more: () => this.getKnowMoreContextInfo(context),
+      confirmation: () => this.getConfirmationContextInfo(context)
+    };
+
+    // Construire tous les infos et récupérer les descriptions
+    const rdvResult = intentInfoMap['take_rdv']?.();
+    const searchHowerAngelResult = intentInfoMap['search_hower_angel']?.();
+    const searchActivitiesResult = intentInfoMap['search_activities']?.();
+    const searchPracticeResult = intentInfoMap['search_practice']?.();
+    const searchAdvicesResult = intentInfoMap['search_advices']?.();
+    const discoverResult = intentInfoMap['discover']?.();
+    const knowMoreResult = intentInfoMap['know_more']?.();
+    const confirmationResult = intentInfoMap['confirmation']?.();
+
+    // Construire la description de l'enum à partir des descriptions des fragments
+    const intentDescriptions = [
+      searchHowerAngelResult?.description,
+      searchActivitiesResult?.description,
+      searchPracticeResult?.description,
+      searchAdvicesResult?.description,
+      rdvResult?.description,
+      discoverResult?.description,
+      knowMoreResult?.description,
+      confirmationResult?.description
+    ].filter(Boolean).join('\n- ');
+
     return {
       format: { 
         type: "json_schema",
@@ -2124,157 +2620,14 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           properties: {
             intent: {
               type: "string",
-              description: `Intent principal de l'utilisateur. Valeurs possibles:
-- "search_hower_angel": Demande explicite d'information sur une personne ou bien sur une catégorie de personne
-- "search_activities": Recherche d'une activité particulière ou un type d'activité
-- "search_advices": Recherche de conseil explicite sur une problématique
-- "take_rdv": Demande explicite de prendre un rendez-vous avec une personne précise ou une activité (déduite du contexte)
-- "discover": Demande de découverte de nouveaux horizons
-- "know_more": Demande plus d'information par rapport à un précédent résultat de la conversation
-- "confirmation": Confirmation d'un élément mentionné précédemment`,
-              enum: ["search_hower_angel", "search_activities", "search_advices", "take_rdv", "discover", "know_more", "confirmation"]
+              description: `Intent principal de l'utilisateur. Valeurs possibles:\n- ${intentDescriptions}`,
+              enum: ["search_hower_angel", "search_activities", "search_practice", "search_advices", "take_rdv", "discover", "know_more", "confirmation"]
             },
-            rdvContext: {
-              type: ["object", "null"],
-              description: "Contexte de rendez-vous si l'intent est 'take_rdv'",
-              properties: {
-                type: {
-                  type: "string",
-                  description: "Type de rendez-vous",
-                  enum: ["hower_angel", "activity", "practice"]
-                },
-                id: {
-                  type: "string",
-                  description: "ID associé au type de rendez-vous (ID du hower_angel, de l'activité ou de la pratique)"
-                },
-                designation: {
-                  type: ["string", "null"],
-                  description: "Nom du hower angel, de la pratique ou de l'activité mentionné (peut être null si non connu)"
-                },
-                format: {
-                  type: ["string", "null"],
-                  description: "Format de recommandation préféré par l'utilisateur si expressément mentionné : 'remote' (à distance/en ligne), 'inPerson' (en personne/présentiel), ou 'any' (les deux formats acceptés). Si l'utilisateur n'a pas expressément décidé, utiliser null (sera traité comme 'inPerson' par défaut)",
-                  enum: ["remote", "inPerson", "any"]
-                }
-              },
-              required: ["type", "id", "format", "designation"],
-              additionalProperties: false
-            },
-            searchContext: {
-              type: ["object", "null"],
-              description: "Contexte de recherche pour les requêtes sémantiques",
-              properties: {
-                searchType: {
-                  type: "string",
-                  description: "Type de recherche à effectuer",
-                  enum: ["activity", "hower_angel", "practice"]
-                },
-                searchFormat: {
-                  type: "string",
-                  description: "Format de recherche : 'from_user_situation' pour une recherche basée sur la situation de l'utilisateur, 'from_name_query' pour une recherche par nom",
-                  enum: ["from_user_situation", "from_name_query"]
-                },
-                searchChunks: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      type: {
-                        type: "string",
-                        description: `Type du chunk. Valeurs possibles:
-- "hower_angel_name_info": Recherche par nom complet d'un hower angel
-- "user_situation_chunk": Fragment de situation utilisateur (de son point de vue, par exemple: "Je me sens...", "J'ai besoin...")
-- "i_have_symptome_chunk": Fragment décrivant un symptôme que l'utilisateur a (par exemple: "J'ai des maux de tête", "Je ressens de la fatigue")
-- "with_benefit_chunk": Fragment décrivant un bénéfice recherché (par exemple: "pour me détendre", "pour réduire le stress")
-- "category_name_info": Nom d'une catégorie d'activité ou de pratique`,
-                        enum: ["hower_angel_name_info", "user_situation_chunk", "i_have_symptome_chunk", "with_benefit_chunk", "category_name_info"]
-                      },
-                      text: {
-                        type: "string",
-                        description: "Texte du chunk (par exemple: \"Marie Dupont\" pour un nom complet, ou \"Je me sens...\" pour un fragment de situation)"
-                      }
-                    },
-                    required: ["type", "text"],
-                    additionalProperties: false
-                  },
-                  description: "Chunks représentant la situation de l'utilisateur (de son point de vue, par exemple: \"Je me sens...\", \"J'ai besoin...\") ou bien la recherche demandée (par exemple: \"sphorologie\", \"activité douce\", \"Marie Dupont\" pour rechercher un hower angel par nom, ...). Chaque chunk doit avoir un type pour indiquer s'il s'agit d'un nom complet ou d'un fragment de situation utilisateur."
-                },
-              },
-              required: ["searchChunks", "searchType", "searchFormat"],
-              additionalProperties: false
-            },
-            knowMoreContext: {
-              type: ["object", "null"],
-              description: "Quand l'intent est 'know_more', l'objectif de ce contexte est d'indiquer de quoi/qui est le sujet d'intérêt dont on veut en savoir plus",
-              properties: {
-                type: {
-                  type: "string",
-                  description: "Type de l'élément sur lequel on veut en savoir plus",
-                  enum: ["hower_angel", "activity", "practice", "subject"]
-                },
-                designation: {
-                  type: "string",
-                  description: "Nom du hower angel, de la pratique, de l'activité ou du sujet d'intérêt mentionné"
-                },
-                identifiant: {
-                  type: ["string", "null"],
-                  description: "Identifiant associé (peut être null si non connu)"
-                }
-              },
-              required: ["type", "designation", "identifiant"],
-              additionalProperties: false
-            },
-            confirmationContext: {
-              type: ["object", "null"],
-              description: "Quand l'intent est 'confirmation', ce contexte indique quel type d'élément est confirmé",
-              properties: {
-                type: {
-                  type: "string",
-                  description: "Type de l'élément confirmé",
-                  enum: ["hower_angel", "activity", "practice"]
-                },
-                intent: {
-                  type: "string",
-                  description: "Intent original qui a abouti à la demande de confirmation. Cet intent sera utilisé pour continuer son traitement après la confirmation",
-                  enum: ["know_more", "take_rdv"]
-                }
-              },
-              required: ["type", "intent"],
-              additionalProperties: false
-            },
-            discoverContext: {
-              type: ["object", "null"],
-              description: "Quand l'intent est 'discover', ce contexte contient les chunks pour la découverte de nouveaux horizons",
-              properties: {
-                chunks: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      type: {
-                        type: "string",
-                        description: `Type du chunk. Valeurs possibles:
-- "hower_angel_name_info": Recherche par nom complet d'un hower angel
-- "user_situation_chunk": Fragment de situation utilisateur (de son point de vue, par exemple: "Je me sens...", "J'ai besoin...")
-- "i_have_symptome_chunk": Fragment décrivant un symptôme que l'utilisateur a (par exemple: "J'ai des maux de tête", "Je ressens de la fatigue")
-- "with_benefit_chunk": Fragment décrivant un bénéfice recherché (par exemple: "pour me détendre", "pour réduire le stress")
-- "category_name_info": Nom d'une catégorie d'activité ou de pratique`,
-                        enum: ["hower_angel_name_info", "user_situation_chunk", "i_have_symptome_chunk", "with_benefit_chunk", "category_name_info"]
-                      },
-                      text: {
-                        type: "string",
-                        description: "Texte du chunk (par exemple: \"Marie Dupont\" pour un nom complet, ou \"Je me sens...\" pour un fragment de situation)"
-                      }
-                    },
-                    required: ["type", "text"],
-                    additionalProperties: false
-                  },
-                  description: "Chunks représentant la situation de l'utilisateur ou les éléments de découverte (par exemple: \"Je me sens...\", \"J'ai besoin...\", \"sphorologie\", \"activité douce\", ...). Chaque chunk doit avoir un type pour indiquer s'il s'agit d'un nom complet ou d'un fragment de situation utilisateur."
-                }
-              },
-              required: ["chunks"],
-              additionalProperties: false
-            }
+            rdvContext: rdvResult?.fragment,
+            searchContext: searchAdvicesResult?.fragment, // Utiliser search_advices pour avoir les champs target*
+            knowMoreContext: knowMoreResult?.fragment,
+            confirmationContext: confirmationResult?.fragment,
+            discoverContext: discoverResult?.fragment
           },
           required: ["intent", "rdvContext", "searchContext", "knowMoreContext", "confirmationContext", "discoverContext"],
           additionalProperties: false
