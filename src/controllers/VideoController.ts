@@ -104,6 +104,15 @@ export class VideoController {
         return;
       }
       
+      // Déterminer quels champs doivent être mis à jour
+      const fieldsToUpdate: string[] = [];
+      if (qrCodeVideoStatus === 'to_compute') {
+        fieldsToUpdate.push('qr_code_presentation_video_public_url');
+      }
+      if (qrCodeLessVideoStatus === 'to_compute') {
+        fieldsToUpdate.push('qr_code_less_presentation_video_public_url');
+      }
+
       // Si au moins un champ est en 'to_compute', continuer le traitement
       console.log('🔄 Champs en attente de calcul détectés:', {
         table,
@@ -139,7 +148,8 @@ export class VideoController {
         metadata: {
           table,
           recordId: record.id,
-          operation: type
+          operation: type,
+          fieldsToUpdate
         }
       };
 

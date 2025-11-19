@@ -1292,16 +1292,19 @@ export class VideoService {
       };
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      await this.updateFieldsWithErrorStatus(request.metadata, errorMessage);
+
       // Mettre à jour le job en cas d'erreur
       job.status = 'failed';
-      job.error = error instanceof Error ? error.message : 'Erreur inconnue';
+      job.error = errorMessage;
       job.updatedAt = new Date();
 
       console.error(`❌ Erreur lors du traitement vidéo avec son complet:`, error);
 
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Erreur inconnue',
+        error: errorMessage,
         jobId
       };
     }
@@ -1446,20 +1449,70 @@ export class VideoService {
       };
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      await this.updateFieldsWithErrorStatus(request.metadata, errorMessage);
+
       // Mettre à jour le job en cas d'erreur
       job.status = 'failed';
-      job.error = error instanceof Error ? error.message : 'Erreur inconnue';
+      job.error = errorMessage;
       job.updatedAt = new Date();
 
       console.error(`❌ Erreur lors du traitement vidéo:`, error);
 
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Erreur inconnue',
+        error: errorMessage,
         jobId
       };
     }
   }
 
+  private sanitizeErrorMessage(message: string): string {
+    const normalized = message.replace(/\s+/g, ' ').trim();
+    return normalized.slice(0, 150) || 'Erreur inconnue';
+  }
 
-} 
+  private extractFieldsToUpdate(metadata?: Record<string, any>): string[] {
+    if (metadata && Array.isArray(metadata.fieldsToUpdate) && metadata.fieldsToUpdate.length > 0) {
+      return metadata.fieldsToUpdate;
+    }
+    return [
+      'qr_code_presentation_video_public_url',
+      'qr_code_less_presentation_video_public_url'
+    ];
+  }
+
+  private async updateFieldsWithErrorStatus(
+    metadata: Record<string, any> | undefined,
+    rawMessage: string
+  ): Promise<void> {
+    try {
+      if (!metadata?.table || !metadata?.recordId) {
+        console.warn('⚠️ Impossible de mettre à jour les champs en erreur: métadonnées manquantes');
+        return;
+      }
+
+      const fields = this.extractFieldsToUpdate(metadata);
+      if (fields.length === 0) {
+        return;
+      }
+
+      const formattedMessage = `error:${this.sanitizeErrorMessage(rawMessage)}`;
+      const updates = fields.reduce<Record<string, string>>((acc, field) => {
+        acc[field] = formattedMessage;
+        return acc;
+      }, {});
+
+      const success = await this.supabaseService.updateRecord(metadata.table, metadata.recordId, updates);
+      if (!success) {
+        console.error('❌ Impossible de mettre à jour les champs en erreur', {
+          table: metadata.table,
+          recordId: metadata.recordId,
+          fields
+        });
+      }
+    } catch (updateError) {
+      console.error('❌ Erreur lors de la mise à jour des champs en erreur:', updateError);
+    }
+  }
+}
