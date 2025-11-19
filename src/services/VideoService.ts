@@ -1473,8 +1473,9 @@ export class VideoService {
   }
 
   private extractFieldsToUpdate(metadata?: Record<string, any>): string[] {
-    if (metadata && Array.isArray(metadata.fieldsToUpdate) && metadata.fieldsToUpdate.length > 0) {
-      return metadata.fieldsToUpdate;
+    const fields = metadata?.['fieldsToUpdate'];
+    if (Array.isArray(fields) && fields.length > 0) {
+      return fields;
     }
     return [
       'qr_code_presentation_video_public_url',
@@ -1487,7 +1488,10 @@ export class VideoService {
     rawMessage: string
   ): Promise<void> {
     try {
-      if (!metadata?.table || !metadata?.recordId) {
+      const table = metadata?.['table'];
+      const recordId = metadata?.['recordId'];
+
+      if (!table || !recordId) {
         console.warn('⚠️ Impossible de mettre à jour les champs en erreur: métadonnées manquantes');
         return;
       }
@@ -1503,11 +1507,11 @@ export class VideoService {
         return acc;
       }, {});
 
-      const success = await this.supabaseService.updateRecord(metadata.table, metadata.recordId, updates);
+      const success = await this.supabaseService.updateRecord(table, recordId, updates);
       if (!success) {
         console.error('❌ Impossible de mettre à jour les champs en erreur', {
-          table: metadata.table,
-          recordId: metadata.recordId,
+          table,
+          recordId,
           fields
         });
       }
