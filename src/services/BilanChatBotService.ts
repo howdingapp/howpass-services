@@ -1145,7 +1145,7 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
     
     // Vérifier si la réponse contient un nouveau questionnaire
     const responseData = aiResponse.response as any;
-    if (responseData && 'questionnaire' in responseData && Array.isArray(responseData.questionnaire)) {
+    if (responseData && typeof responseData === 'object' && !Array.isArray(responseData) && 'questionnaire' in responseData && Array.isArray(responseData.questionnaire)) {
       console.log(`📋 [BILAN] Nouveau questionnaire reçu depuis l'IA: ${responseData.questionnaire.length} questions`);
       
       // Convertir le questionnaire en format avec chunks
