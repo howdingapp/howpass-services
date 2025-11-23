@@ -15,8 +15,22 @@ import {
   HowerAngelSearchResult
 } from '../types/search';
 import { BaseChatBotService } from './BaseChatBotService';
+import * as crypto from 'crypto';
 
 export class BilanChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
+  
+  /**
+   * Calcule un hash MD5 d'un questionnaire pour détecter les doublons
+   * Le hash est basé uniquement sur les questions
+   */
+  protected calculateQuestionnaireHash(questionnaire: BilanQuestionnaireWithChunks): string {
+    // Créer une représentation simplifiée du questionnaire avec uniquement les questions
+    const questionsOnly = questionnaire.map(q => q.question);
+    
+    // Convertir en JSON et calculer le hash
+    const jsonString = JSON.stringify(questionsOnly);
+    return crypto.createHash('md5').update(jsonString).digest('hex');
+  }
   
   /**
    * Convertit un questionnaire sans chunks en questionnaire avec chunks (chunks vides)
@@ -1156,8 +1170,25 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
       const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;
       const existingQuestionnaires = bilanUniverContext?.questionnaires?.value || [];
       
-      // Ajouter le nouveau questionnaire à la liste
-      const updatedQuestionnaires = [...existingQuestionnaires, newQuestionnaire];
+      // Calculer le hash du nouveau questionnaire
+      const newQuestionnaireHash = this.calculateQuestionnaireHash(newQuestionnaire);
+      
+      // Vérifier si un questionnaire avec le même hash existe déjà
+      const isQuestionnaireAlreadyStored = existingQuestionnaires.some((q: BilanQuestionnaireWithChunks) => {
+        const existingHash = this.calculateQuestionnaireHash(q);
+        return existingHash === newQuestionnaireHash;
+      });
+      
+      // Ajouter le nouveau questionnaire à la liste seulement s'il n'existe pas déjà
+      const updatedQuestionnaires = isQuestionnaireAlreadyStored
+        ? existingQuestionnaires
+        : [...existingQuestionnaires, newQuestionnaire];
+      
+      if (isQuestionnaireAlreadyStored) {
+        console.log(`📋 [BILAN] Questionnaire déjà présent (hash: ${newQuestionnaireHash}), non ajouté`);
+      } else {
+        console.log(`📋 [BILAN] Nouveau questionnaire ajouté (hash: ${newQuestionnaireHash})`);
+      }
       
       // Mettre à jour le contexte avec le nouveau questionnaire
       context.metadata = {
@@ -1358,11 +1389,24 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
       console.log(`📋 [BILAN] Initialisation avec INITIAL_BILAN_QUESTIONS`);
     }
     
-    // Ajouter le questionnaire courant s'il n'est pas déjà dans la liste
+    // Calculer le hash du questionnaire courant
+    const currentQuestionnaireHash = this.calculateQuestionnaireHash(currentQuestionnaire);
+    
+    // Vérifier si un questionnaire avec le même hash existe déjà
+    const isQuestionnaireAlreadyStored = existingQuestionnaires.some((q: BilanQuestionnaireWithChunks) => {
+      const existingHash = this.calculateQuestionnaireHash(q);
+      return existingHash === currentQuestionnaireHash;
+    });
+    
+    // Ajouter le questionnaire courant seulement s'il n'existe pas déjà
     const questionnaires: BilanQuestionnaireWithChunks[] = [...existingQuestionnaires];
-
-    questionnaires.push(currentQuestionnaire);
-    console.log(`📋 [BILAN] Questionnaire courant ajouté à la liste (${questionnaires.length} questionnaire(s) au total)`);
+    
+    if (!isQuestionnaireAlreadyStored) {
+      questionnaires.push(currentQuestionnaire);
+      console.log(`📋 [BILAN] Questionnaire courant ajouté à la liste (hash: ${currentQuestionnaireHash}, ${questionnaires.length} questionnaire(s) au total)`);
+    } else {
+      console.log(`📋 [BILAN] Questionnaire courant déjà présent (hash: ${currentQuestionnaireHash}), non ajouté (${questionnaires.length} questionnaire(s) au total)`);
+    }
     
     // Récupérer toutes les réponses de tous les questionnaires depuis le contexte
     // Les réponses précédentes sont stockées dans questionResponses de l'univers précédent
