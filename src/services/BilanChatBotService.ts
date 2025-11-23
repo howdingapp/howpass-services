@@ -1158,13 +1158,12 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
     }
     
     // Vérifier si la réponse contient un nouveau questionnaire
-    const responseData = aiResponse.response as any;
-    console.log(`📋 [BILAN] responseData with new questionnaire: `, responseData.questionnaire ? true : false, JSON.stringify(aiResponse));
-    if (responseData && responseData.questionnaire) {
-      console.log(`📋 [BILAN] Nouveau questionnaire reçu depuis l'IA: ${responseData.questionnaire.length} questions`);
+
+    if (aiResponse && aiResponse.questionnaire) {
+      console.log(`📋 [BILAN] Nouveau questionnaire reçu depuis l'IA: ${aiResponse.questionnaire.length} questions`);
       
       // Convertir le questionnaire en format avec chunks
-      const newQuestionnaire = this.convertQuestionnaireToWithChunks(responseData.questionnaire);
+      const newQuestionnaire = this.convertQuestionnaireToWithChunks(aiResponse.questionnaire);
       
       // Récupérer les questionnaires existants depuis l'univers
       const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;

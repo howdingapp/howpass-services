@@ -2,6 +2,7 @@
  * Types pour les schémas de sortie des ChatBots
  */
 
+import { BilanQuestionnaireWithChunks } from './bilan';
 import { QuickReply } from './quick-replies';
 import { HowanaContext } from './repositories';
 
@@ -248,6 +249,7 @@ export interface IAMessageResponse {
  */
 export interface RecommendationMessageResponse extends IAMessageResponse {
   quickReplies: QuickReply[];
+  questionnaire?: BilanQuestionnaireWithChunks;
 }
 
 /**
