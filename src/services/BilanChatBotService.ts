@@ -314,13 +314,14 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     try {
       parsedMessage = JSON.parse(userMessage);
       if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
-        console.log('✅ [BILAN] Toutes les réponses reçues en une fois, génération directe du résumé');
+        console.log('✅ [BILAN] Toutes les réponses reçues en une fois');
         
         // Récupérer intent depuis le contexte
         const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
         const intent = currentIntentInfos?.intent as RecommendationIntent | undefined;
         
         // Calculer globalIntentInfos avec toutes les réponses
+        // Si on a déjà 2 questionnaires, computeGlobalIntentInfos calculera l'univers
         let globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
         
         context.metadata = {
@@ -328,8 +329,48 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           ['globalIntentInfos']: globalIntentInfos
         };
         
-        // Forcer directement la génération du résumé
-        return super.handleIntent(context, userMessage, onIaResponse, true);
+        // Vérifier le nouveau nombre de questionnaires après computeGlobalIntentInfos
+        const updatedBilanUniverContext = globalIntentInfos?.bilanUniverContext as BilanUniverContext | undefined;
+        const updatedQuestionnaires = updatedBilanUniverContext?.questionnaires?.value || [];
+        const updatedQuestionnairesCount = updatedQuestionnaires.length;
+        
+        // Si on a maintenant 2 questionnaires (INITIAL + 1 relance), forcer le calcul de l'univers et générer le résumé
+        if (updatedQuestionnairesCount >= 2) {
+          console.log(`✅ [BILAN] ${updatedQuestionnairesCount} questionnaires détectés, calcul de l'univers et génération du résumé`);
+          // Forcer directement la génération du résumé
+          return super.handleIntent(context, userMessage, onIaResponse, true);
+        } else {
+          console.log(`📋 [BILAN] ${updatedQuestionnairesCount} questionnaire(s), l'IA va générer un nouveau questionnaire`);
+          
+          // Récupérer les questionnaires et réponses pour les inclure dans l'instruction
+          const questionnaires = updatedBilanUniverContext?.questionnaires?.value || [];
+          const questionResponses = updatedBilanUniverContext?.questionResponses?.value || [];
+          
+          // Construire un message enrichi avec l'instruction pour générer le questionnaire
+          const questionnaireInstruction = `\n\n[INSTRUCTION POUR GÉNÉRATION DU QUESTIONNAIRE]
+
+À partir du questionnaire précédent et des réponses de l'utilisateur que je t'ai fournis, j'aimerais que tu génères un prochain questionnaire personnalisé.
+
+OBJECTIFS DU QUESTIONNAIRE :
+- Le questionnaire doit contenir entre 10 et 15 questions
+- L'analyse des réponses permettra de préciser les éléments pertinents du contexte (profil de vie, demande de précision sur une réponse, etc.)
+- Ce sera le dernier questionnaire, donc il faut vraiment être complet et couvrir tous les aspects nécessaires pour permettre une analyse complète du profil de l'utilisateur
+- Les questions doivent être pertinentes et adaptées aux réponses précédentes de l'utilisateur
+- Chaque question doit avoir des réponses rapides (quickReplies) avec des options pertinentes
+
+CONTEXTE DISPONIBLE :
+- Nombre de questionnaires précédents : ${questionnaires.length}
+- Nombre de réponses collectées : ${questionResponses.length}
+- Les réponses précédentes sont disponibles dans le message JSON que je t'ai fourni
+
+IMPORTANT : Génère un questionnaire structuré avec des questions claires et des réponses rapides appropriées pour chaque question. Le questionnaire doit être retourné dans le champ "questionnaire" de ta réponse JSON.`;
+
+          // Construire le message enrichi avec les réponses et l'instruction
+          const enrichedUserMessage = `${userMessage}${questionnaireInstruction}`;
+          
+          // Permettre à l'IA de générer un nouveau questionnaire
+          return super.handleIntent(context, enrichedUserMessage, onIaResponse, false);
+        }
       }
     } catch (parseError) {
       // Ce n'est pas un JSON, ce n'est pas le format attendu
@@ -1018,6 +1059,78 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
   }
 
   /**
+   * Schéma de sortie pour les messages
+   * Permet à l'IA de retourner un questionnaire optionnel après avoir reçu des réponses
+   * Si on a déjà 2 questionnaires, on ne génère plus de questionnaire, on appelle le parent
+   */
+  protected override getAddMessageOutputSchema(context: HowanaContext, forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
+    // Récupérer le nombre de questionnaires déjà reçus
+    const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;
+    const questionnaires = bilanUniverContext?.questionnaires?.value || [];
+    const questionnairesCount = questionnaires.length;
+    
+    // Si on a déjà 2 questionnaires (INITIAL + 1 relance), on ne génère plus de questionnaire, on appelle le parent
+    if (questionnairesCount >= 2) {
+      return super.getAddMessageOutputSchema(context, forceSummaryToolCall);
+    }
+    
+    // Sinon, on peut générer un nouveau questionnaire
+    return {
+      format: { 
+        type: "json_schema",
+        name: "BilanChatBotResponse",
+        schema: {
+          type: "object",
+          properties: {
+            response: {
+              type: "string",
+              description: "Réponse principale de l'assistant. Analyse les réponses reçues et génère un nouveau questionnaire personnalisé pour approfondir la compréhension du profil de l'utilisateur."
+            },
+            questionnaire: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  question: {
+                    type: "string",
+                    description: "Question à poser à l'utilisateur pour approfondir la compréhension de son profil"
+                  },
+                  quickReplies: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        text: {
+                          type: "string",
+                          description: "Texte de la réponse rapide"
+                        },
+                        icon: {
+                          type: "string",
+                          description: "Icône optionnelle pour la réponse rapide (ex: 'heart', 'zap', 'sleep', 'alert-triangle', 'smile', 'explore')",
+                          enum: ["heart", "zap", "sleep", "alert-triangle", "smile", "explore"]
+                        }
+                      },
+                      required: ["text"],
+                      additionalProperties: false
+                    },
+                    description: "Réponses rapides suggérées pour cette question"
+                  }
+                },
+                required: ["question", "quickReplies"],
+                additionalProperties: false
+              },
+              description: "Nouveau questionnaire personnalisé basé sur les réponses précédentes. Génère 5-8 questions pertinentes pour approfondir la compréhension du profil et des particularités de l'utilisateur."
+            }
+          },
+          required: ["response"],
+          additionalProperties: false
+        },
+        strict: true
+      }
+    };
+  }
+
+  /**
    * Redéfinit beforeAiResponseSend pour construire la réponse finale avec question et quick replies
    * Détecte également les questionnaires reçus depuis l'IA et les stocke dans l'univers
    */
@@ -1234,9 +1347,6 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       };
     }
     
-    // Calculer l'univers avec l'intent (qui contient les chunks) et toutes les questions-réponses
-    const universe = await this.computeUniverse(intent as BilanQuestionIntent, questionResponses, totalQuestions, answeredQuestions);
-    
     // Récupérer les questionnaires existants depuis l'univers précédent
     const previousBilanUniverContext = (_context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
     let existingQuestionnaires = previousBilanUniverContext?.questionnaires?.value || [];
@@ -1261,22 +1371,92 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       console.log(`📋 [BILAN] Questionnaire courant ajouté à la liste (${questionnaires.length} questionnaire(s) au total)`);
     }
     
-    // Créer globalIntentInfos avec les résultats de l'univers
-    return {
-      bilanUniverContext: {
-        families: universe.families,
-        practices: universe.practices,
-        activities: universe.activities,
-        howerAngels: universe.howerAngels,
-        questionResponses: universe.questionResponses,
-        chunks: universe.chunks,
-        questionnaires: {
-          info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
-          value: questionnaires
-        },
-        computedAt: new Date().toISOString()
-      }
-    };
+    // Récupérer toutes les réponses de tous les questionnaires depuis le contexte
+    // Les réponses précédentes sont stockées dans questionResponses de l'univers précédent
+    const previousQuestionResponses = previousBilanUniverContext?.questionResponses?.value || [];
+    
+    // Combiner toutes les réponses : réponses précédentes + réponses du questionnaire courant
+    const allQuestionResponses = [...previousQuestionResponses, ...questionResponses];
+    
+    console.log(`📋 [BILAN] Total: ${allQuestionResponses.length} réponses (${previousQuestionResponses.length} précédentes + ${questionResponses.length} courantes)`);
+    
+    // Ne calculer l'univers qu'après avoir reçu toutes les réponses (2 questionnaires)
+    if (questionnaires.length >= 2) {
+      console.log(`✅ [BILAN] ${questionnaires.length} questionnaires détectés, calcul de l'univers avec toutes les réponses`);
+      
+      // Récupérer les chunks précédents depuis l'univers précédent
+      const previousChunks = previousBilanUniverContext?.chunks?.value || [];
+      
+      // Combiner les chunks précédents avec les chunks de l'intent actuel
+      const currentChunks = (intent as BilanQuestionIntent)?.universContext?.chunks || [];
+      const allChunks = [...previousChunks, ...currentChunks];
+      
+      // Créer un intent combiné avec tous les chunks
+      const combinedIntent: BilanQuestionIntent = {
+        type: "bilan_question",
+        universContext: {
+          chunks: allChunks
+        }
+      };
+      
+      console.log(`✅ [BILAN] ${allChunks.length} chunks combinés (${previousChunks.length} précédents + ${currentChunks.length} courants)`);
+      
+      // Calculer l'univers avec toutes les réponses de tous les questionnaires
+      const universe = await this.computeUniverse(
+        combinedIntent, 
+        allQuestionResponses, 
+        questionnaires, // Passer tous les questionnaires
+        totalQuestions, 
+        answeredQuestions
+      );
+      
+      // Créer globalIntentInfos avec les résultats de l'univers
+      return {
+        bilanUniverContext: {
+          families: universe.families,
+          practices: universe.practices,
+          activities: universe.activities,
+          howerAngels: universe.howerAngels,
+          questionResponses: universe.questionResponses,
+          chunks: universe.chunks,
+          questionnaires: {
+            info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
+            value: questionnaires
+          },
+          computedAt: new Date().toISOString()
+        }
+      };
+    } else {
+      console.log(`📋 [BILAN] ${questionnaires.length} questionnaire(s), pas encore de calcul d'univers (attente du 2ème questionnaire)`);
+      
+      // Récupérer les chunks précédents et les combiner avec les chunks actuels
+      const previousChunks = previousBilanUniverContext?.chunks?.value || [];
+      const currentChunks = (intent as BilanQuestionIntent)?.universContext?.chunks || [];
+      const allChunks = [...previousChunks, ...currentChunks];
+      
+      // Stocker les réponses du questionnaire courant et les chunks sans calculer l'univers
+      return {
+        bilanUniverContext: {
+          families: { info: '', value: [] },
+          practices: { info: '', value: [] },
+          activities: { info: '', value: [] },
+          howerAngels: { info: '', value: [] },
+          questionResponses: {
+            info: 'Réponses collectées jusqu\'à présent. L\'univers sera calculé après le 2ème questionnaire.',
+            value: allQuestionResponses
+          },
+          chunks: {
+            info: 'Chunks collectés jusqu\'à présent. L\'univers sera calculé après le 2ème questionnaire.',
+            value: allChunks
+          },
+          questionnaires: {
+            info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
+            value: questionnaires
+          },
+          computedAt: new Date().toISOString()
+        }
+      };
+    }
 
   }
 
@@ -1284,13 +1464,15 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
    * Calcule l'univers du bilan en réalisant une recherche sémantique sur tous les chunks de l'intent
    * et en classant les familles par dominance par rapport aux pratiques et hower angels trouvés
    * @param intent L'intent contenant les chunks
-   * @param questionResponses Le tableau contenant toutes les questions et réponses de l'utilisateur
-   * @param totalQuestions Le nombre total de questions dans le formulaire
-   * @param answeredQuestions Le nombre de questions déjà répondues
+   * @param questionResponses Le tableau contenant toutes les questions et réponses de l'utilisateur (de tous les questionnaires)
+   * @param questionnaires Tous les questionnaires utilisés pour ce bilan
+   * @param totalQuestions Le nombre total de questions dans le dernier questionnaire
+   * @param answeredQuestions Le nombre de questions répondues dans le dernier questionnaire
    */
   protected async computeUniverse(
     intent: BilanQuestionIntent, 
     questionResponses?: Array<{ question: string; index: number; response: string }>,
+    questionnaires?: BilanQuestionnaireWithChunks[],
     totalQuestions?: number,
     answeredQuestions?: number
   ): Promise<{
@@ -1331,8 +1513,10 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     };
   }> {
     // Récupérer les chunks depuis l'intent (dans universContext)
+    // Les chunks sont déjà combinés de tous les questionnaires avant l'appel à computeUniverse
     const chunks = intent?.universContext?.chunks || [];
     
+    console.log(`📋 [BILAN] computeUniverse - ${chunks.length} chunks, ${questionResponses?.length || 0} réponses, ${questionnaires?.length || 0} questionnaires`);
     console.log("questionResponses ==> ", JSON.stringify(questionResponses));
 
     // Si pas de chunks, retourner un univers vide
