@@ -168,7 +168,7 @@ export interface BilanSummary {
  */
 export interface RecommendationIntent {
   format: 'remote' | 'inPerson' | 'any';
-  intent: 'search_hower_angel' | 'search_activities' | 'search_advices' | 'take_rdv' | 'discover' | 'know_more' | 'confirmation';
+  intent: 'search_hower_angel' | 'search_activities' | 'search_practice' | 'search_other_advice' | 'take_rdv' | 'discover' | 'know_more' | 'confirmation';
   rdvContext?: {
     type: 'hower_angel' | 'activity' | 'practice';
     id: string;
@@ -180,8 +180,8 @@ export interface RecommendationIntent {
       type: 'hower_angel_name_info' | 'user_situation_chunk' | 'i_have_symptome_chunk' | 'with_benefit_chunk' | 'category_name_info';
       text: string;
     }>;
-    searchType: 'activity' | 'hower_angel' | 'practice';
-    searchFormat: 'from_user_situation' | 'from_name_query';
+    searchType?: 'activity' | 'hower_angel' | 'practice';
+    searchFormat?: 'from_user_situation' | 'from_name_query';
   };
   knowMoreContext?: {
     type: 'hower_angel' | 'activity' | 'practice' | 'subject';

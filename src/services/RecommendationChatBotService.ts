@@ -18,6 +18,32 @@ import { BaseChatBotService } from './BaseChatBotService';
 export class RecommendationChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
   
   /**
+   * Constantes centralisées pour les noms d'intents
+   */
+  protected static readonly INTENT_NAMES = {
+    SEARCH_HOWER_ANGEL: 'search_hower_angel',
+    SEARCH_ACTIVITIES: 'search_activities',
+    SEARCH_PRACTICE: 'search_practice',
+    SEARCH_SYMPTOM: 'search_symptom',
+    SEARCH_OTHER_ADVICE: 'search_other_advice',
+    TAKE_RDV: 'take_rdv',
+    DISCOVER: 'discover',
+    KNOW_MORE: 'know_more',
+    CONFIRMATION: 'confirmation'
+  } as const;
+
+  /**
+   * Constantes centralisées pour les types de chunks
+   */
+  protected static readonly CHUNK_TYPES = {
+    HOWER_ANGEL_NAME_INFO: 'hower_angel_name_info',
+    USER_SITUATION_CHUNK: 'user_situation_chunk',
+    I_HAVE_SYMPTOME_CHUNK: 'i_have_symptome_chunk',
+    WITH_BENEFIT_CHUNK: 'with_benefit_chunk',
+    CATEGORY_NAME_INFO: 'category_name_info'
+  } as const;
+
+  /**
    * Règles par défaut pour les recommandations (format tableau comme iaRules)
    */
   protected getDefaultRules(): string[] {
@@ -435,7 +461,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     const intent = currentIntentInfos?.intent as RecommendationIntent | undefined;
 
     // Adapter le schéma selon l'intent
-    if (intent?.intent === 'take_rdv') {
+    if (intent?.intent === RecommendationChatBotService.INTENT_NAMES.TAKE_RDV) {
       // Schéma générique pour tous les cas de take_rdv
       return {
         format: { 
@@ -1452,14 +1478,14 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
     // Mapper chaque intent à sa fonction de gestion (même map que dans getIntentSchema)
     const intentHandlerMap: Record<string, (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext>> = {
-      take_rdv: this.getRdvContextInfo(context).handle,
-      search_hower_angel: this.getSearchHowerAngelContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
-      search_activities: this.getSearchActivitiesContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
-      search_practice: this.getSearchPracticeContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
-      search_advices: this.getSearchAdvicesContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
-      discover: this.getDiscoverContextInfo(context).handle,
-      know_more: this.getKnowMoreContextInfo(context).handle,
-      confirmation: this.getConfirmationContextInfo(context).handle
+      [RecommendationChatBotService.INTENT_NAMES.TAKE_RDV]: this.getRdvContextInfo(context).handle,
+      [RecommendationChatBotService.INTENT_NAMES.SEARCH_HOWER_ANGEL]: this.getSearchHowerAngelContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
+      [RecommendationChatBotService.INTENT_NAMES.SEARCH_ACTIVITIES]: this.getSearchActivitiesContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
+      [RecommendationChatBotService.INTENT_NAMES.SEARCH_PRACTICE]: this.getSearchPracticeContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
+      [RecommendationChatBotService.INTENT_NAMES.SEARCH_OTHER_ADVICE]: this.getSearchOtherAdviceContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds).handle,
+      [RecommendationChatBotService.INTENT_NAMES.DISCOVER]: this.getDiscoverContextInfo(context).handle,
+      [RecommendationChatBotService.INTENT_NAMES.KNOW_MORE]: this.getKnowMoreContextInfo(context).handle,
+      [RecommendationChatBotService.INTENT_NAMES.CONFIRMATION]: this.getConfirmationContextInfo(context).handle
     };
 
     // Appeler le handler approprié selon le type d'intent
@@ -1557,7 +1583,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         let type: 'hower_angel' | 'activity' | 'practice';
         let designation: string;
         
-        if (intent.intent === 'confirmation' && intent.confirmationContext) {
+        if (intent.intent === RecommendationChatBotService.INTENT_NAMES.CONFIRMATION && intent.confirmationContext) {
           // Reconstruire le contexte depuis confirmationContext et globalIntentInfos
           const confirmationType = intent.confirmationContext.type;
           type = confirmationType;
@@ -1834,6 +1860,12 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    * Construit le fragment de schéma pour searchContext (base commune)
    */
   protected getBaseSearchContextFragment(): any {
+    const chunkInfo = this.getChunkInfo();
+    const chunkDescriptions = Object.values(chunkInfo)
+      .map(chunk => `- "${chunk.type}": ${chunk.description}`)
+      .join('\n');
+    const chunkEnum = Object.values(chunkInfo).map(chunk => chunk.type);
+
     return {
       searchType: {
         type: "string",
@@ -1852,13 +1884,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           properties: {
             type: {
               type: "string",
-              description: `Type du chunk. Valeurs possibles:
-- "hower_angel_name_info": Recherche par nom complet d'un hower angel
-- "user_situation_chunk": Fragment de situation utilisateur (de son point de vue, par exemple: "Je me sens...", "J'ai besoin...")
-- "i_have_symptome_chunk": Fragment décrivant un symptôme que l'utilisateur a (par exemple: "J'ai des maux de tête", "Je ressens de la fatigue")
-- "with_benefit_chunk": Fragment décrivant un bénéfice recherché (par exemple: "pour me détendre", "pour réduire le stress")
-- "category_name_info": Nom d'une catégorie d'activité ou de pratique`,
-              enum: ["hower_angel_name_info", "user_situation_chunk", "i_have_symptome_chunk", "with_benefit_chunk", "category_name_info"]
+              description: `Type du chunk. Valeurs possibles:\n${chunkDescriptions}`,
+              enum: chunkEnum
             },
             text: {
               type: "string",
@@ -1872,6 +1899,35 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       }
     };
   }
+
+  /**
+     * Retourne les informations sur les types de chunks (type et description)
+     */
+  protected getChunkInfo(): Record<string, { type: string; description: string }> {
+    return {
+      [RecommendationChatBotService.CHUNK_TYPES.HOWER_ANGEL_NAME_INFO]: {
+        type: RecommendationChatBotService.CHUNK_TYPES.HOWER_ANGEL_NAME_INFO,
+        description: "Recherche par nom complet d'un hower angel"
+      },
+      [RecommendationChatBotService.CHUNK_TYPES.USER_SITUATION_CHUNK]: {
+        type: RecommendationChatBotService.CHUNK_TYPES.USER_SITUATION_CHUNK,
+        description: "Fragment de situation utilisateur (de son point de vue, par exemple: \"Je me sens...\", \"J'ai besoin...\")"
+      },
+      [RecommendationChatBotService.CHUNK_TYPES.I_HAVE_SYMPTOME_CHUNK]: {
+        type: RecommendationChatBotService.CHUNK_TYPES.I_HAVE_SYMPTOME_CHUNK,
+        description: "Fragment décrivant un symptôme que l'utilisateur a (par exemple: \"J'ai des maux de tête\", \"Je ressens de la fatigue\")"
+      },
+      [RecommendationChatBotService.CHUNK_TYPES.WITH_BENEFIT_CHUNK]: {
+        type: RecommendationChatBotService.CHUNK_TYPES.WITH_BENEFIT_CHUNK,
+        description: "Fragment décrivant un bénéfice recherché (par exemple: \"pour me détendre\", \"pour réduire le stress\")"
+      },
+      [RecommendationChatBotService.CHUNK_TYPES.CATEGORY_NAME_INFO]: {
+        type: RecommendationChatBotService.CHUNK_TYPES.CATEGORY_NAME_INFO,
+        description: "Nom d'une catégorie d'activité ou de pratique"
+      }
+    };
+  }
+
 
   /**
    * Construit les informations de contexte pour searchContext - search_hower_angel (fragment, description, handle)
@@ -1891,7 +1947,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         required: ["searchChunks", "searchType", "searchFormat"],
         additionalProperties: false
       },
-      description: "search_hower_angel: Demande explicite d'information sur une personne ou bien sur une catégorie de personne",
+      description: `search_hower_angel: Demande explicite d'information sur une personne ou bien sur une catégorie de personne. Réservé à la recherche d'un hower angel qui n'a pas été précédemment cité dans l'échange. Si le hower angel a déjà été mentionné dans la conversation, utiliser ${RecommendationChatBotService.INTENT_NAMES.KNOW_MORE} à la place.`,
       handle: async (intent, context, _userMessage, _globalIntentInfos) => {
         if (!intent.searchContext) {
           console.log('⚠️ Aucun searchContext dans l\'intent');
@@ -1965,7 +2021,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         required: ["searchChunks", "searchType", "searchFormat"],
         additionalProperties: false
       },
-      description: "search_activities: Recherche d'une activité particulière ou un type d'activité",
+      description: `search_activities: Recherche d'une activité particulière ou un type d'activité. Réservé à la recherche d'une activité qui n'a pas été précédemment citée dans l'échange. Si l'activité a déjà été mentionnée dans la conversation, utiliser ${RecommendationChatBotService.INTENT_NAMES.KNOW_MORE} à la place.`,
       handle: async (intent, context, _userMessage, _globalIntentInfos) => {
         if (!intent.searchContext) {
           console.log('⚠️ Aucun searchContext dans l\'intent');
@@ -2090,7 +2146,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         required: ["searchChunks", "searchType", "searchFormat"],
         additionalProperties: false
       },
-      description: "search_practice: Recherche d'une pratique particulière ou un type de pratique",
+      description: `search_practice: Recherche d'une pratique particulière ou un type de pratique. Réservé à la recherche d'une pratique qui n'a pas été précédemment citée dans l'échange. Si la pratique a déjà été mentionnée dans la conversation, utiliser ${RecommendationChatBotService.INTENT_NAMES.KNOW_MORE} à la place.`,
       handle: async (intent, context, _userMessage, _globalIntentInfos) => {
         if (!intent.searchContext) {
           console.log('⚠️ Aucun searchContext dans l\'intent');
@@ -2134,51 +2190,24 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
   }
 
   /**
-   * Construit les informations de contexte pour searchContext - search_advices (fragment, description, handle)
+   * Construit les informations de contexte pour searchContext - search_symptom (fragment, description, handle)
    */
-  protected getSearchAdvicesContextInfo(
-    availablePracticeIds: string[],
-    availableActivityIds: string[],
-    availableHowerAngelIds: string[]
+  protected getSearchSymptomContextInfo(
+    _availablePracticeIds: string[],
+    _availableActivityIds: string[],
+    _availableHowerAngelIds: string[]
   ): { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> } {
     const properties = this.getBaseSearchContextFragment();
-
-    // Ajouter targetPractice si des IDs sont disponibles
-    if (availablePracticeIds.length > 0) {
-      properties.targetPractice = {
-        type: ["string", "null"],
-        description: "ID de la pratique ciblée pour le conseil (doit être une pratique existante dans le contexte)",
-        enum: [null, ...availablePracticeIds]
-      };
-    }
-
-    // Ajouter targetActivity si des IDs sont disponibles
-    if (availableActivityIds.length > 0) {
-      properties.targetActivity = {
-        type: ["string", "null"],
-        description: "ID de l'activité ciblée pour le conseil (doit être une activité existante dans le contexte)",
-        enum: [null, ...availableActivityIds]
-      };
-    }
-
-    // Ajouter targetHowerAngel si des IDs sont disponibles
-    if (availableHowerAngelIds.length > 0) {
-      properties.targetHowerAngel = {
-        type: ["string", "null"],
-        description: "ID du hower angel ciblé pour le conseil (doit être un hower angel existant dans le contexte)",
-        enum: [null, ...availableHowerAngelIds]
-      };
-    }
-
+    
     return {
       fragment: {
         type: ["object", "null"],
-        description: "Contexte de recherche pour les requêtes sémantiques (recherche de conseils)",
+        description: "Contexte de recherche pour les requêtes concernant des symptômes",
         properties,
         required: ["searchChunks", "searchType", "searchFormat"],
         additionalProperties: false
       },
-      description: "search_advices: Recherche de conseil explicite sur une problématique",
+      description: `search_symptom: Recherche concernant un symptôme que l'utilisateur ressent. Réservé à la recherche d'un symptôme qui n'a pas été précédemment cité dans l'échange. Si le symptôme a déjà été mentionné dans la conversation, utiliser ${RecommendationChatBotService.INTENT_NAMES.KNOW_MORE} à la place.`,
       handle: async (intent, context, _userMessage, _globalIntentInfos) => {
         if (!intent.searchContext) {
           console.log('⚠️ Aucun searchContext dans l\'intent');
@@ -2192,13 +2221,13 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         try {
           const searchChunksTexts = searchChunks.map(chunk => chunk.text);
           
-          // Pour les recherches de conseils, effectuer les recherches selon le searchType
+          // Pour les recherches de symptômes, effectuer les recherches d'abord
           switch (searchType) {
             case 'activity':
-              console.log(`🔍 Recherche d'activités avec ${searchChunks.length} chunks`);
+              console.log(`🔍 Recherche d'activités pour symptôme avec ${searchChunks.length} chunks`);
               const activitiesResults = await this.supabaseService.searchActivitiesBySituationChunks(searchChunksTexts);
               const activities: ActivityItem[] = activitiesResults.results || [];
-              console.log(`✅ ${activities.length} activités trouvées`);
+              console.log(`✅ ${activities.length} activités trouvées pour le symptôme`);
               
               // Ajouter les résultats dans les métadonnées
               const activityIntentResults: IntentResults = { activities, practices: [], howerAngels: [] };
@@ -2216,10 +2245,10 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               return context;
               
             case 'practice':
-              console.log(`🔍 Recherche de pratiques avec ${searchChunks.length} chunks`);
+              console.log(`🔍 Recherche de pratiques pour symptôme avec ${searchChunks.length} chunks`);
               const practicesResults = await this.supabaseService.searchPracticesBySituationChunks(searchChunksTexts);
               const practices: PracticeItem[] = practicesResults.results || [];
-              console.log(`✅ ${practices.length} pratiques trouvées`);
+              console.log(`✅ ${practices.length} pratiques trouvées pour le symptôme`);
               
               // Ajouter les résultats dans les métadonnées
               const practiceIntentResults: IntentResults = { activities: [], practices, howerAngels: [] };
@@ -2237,7 +2266,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               return context;
               
             case 'hower_angel':
-              console.log(`🔍 Recherche de hower angels avec ${searchChunks.length} chunks`);
+              console.log(`🔍 Recherche de hower angels pour symptôme avec ${searchChunks.length} chunks`);
               const howerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(searchChunksTexts);
               if (!howerAngelsResult.success) {
                 console.error('❌ Erreur lors de la recherche de hower angels:', howerAngelsResult.error);
@@ -2256,7 +2285,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
                     profile: item.profile || '' // Garantir que profile est toujours présent
                   }))
                 : [];
-              console.log(`✅ ${howerAngels.length} hower angels trouvés`);
+              console.log(`✅ ${howerAngels.length} hower angels trouvés pour le symptôme`);
               
               // Ajouter les résultats dans les métadonnées
               const howerAngelIntentResults: IntentResults = { activities: [], practices: [], howerAngels };
@@ -2278,9 +2307,104 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               return context;
           }
         } catch (error) {
-          console.error('❌ Erreur lors du traitement de l\'intent:', error);
+          console.error('❌ Erreur lors du traitement de l\'intent search_symptom:', error);
           return context;
         }
+      }
+    };
+  }
+
+  /**
+   * Construit les informations de contexte pour searchContext - search_other_advice (fragment, description, handle)
+   */
+  protected getSearchOtherAdviceContextInfo(
+    _availablePracticeIds: string[],
+    _availableActivityIds: string[],
+    _availableHowerAngelIds: string[]
+  ): { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> } {
+    return {
+      fragment: {
+        type: ["object", "null"],
+        description: `Contexte de recherche pour les requêtes de conseils généraux (ne concernant pas un symptôme [utiliser ${RecommendationChatBotService.INTENT_NAMES.SEARCH_SYMPTOM}], un hower angel [utiliser ${RecommendationChatBotService.INTENT_NAMES.SEARCH_HOWER_ANGEL}], une pratique [utiliser ${RecommendationChatBotService.INTENT_NAMES.SEARCH_PRACTICE}], ou une activité [utiliser ${RecommendationChatBotService.INTENT_NAMES.SEARCH_ACTIVITIES}])`,
+        properties: {
+          searchChunks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                type: {
+                  type: "string",
+                  description: (() => {
+                    const chunkInfo = this.getChunkInfo();
+                    const userSituationChunk = chunkInfo[RecommendationChatBotService.CHUNK_TYPES.USER_SITUATION_CHUNK];
+                    return `Type du chunk. Pour les conseils généraux, seul '${RecommendationChatBotService.CHUNK_TYPES.USER_SITUATION_CHUNK}' est utilisé pour représenter la situation ou la question de l'utilisateur${userSituationChunk ? ` (${userSituationChunk.description})` : ''}`;
+                  })(),
+                  enum: [RecommendationChatBotService.CHUNK_TYPES.USER_SITUATION_CHUNK]
+                },
+                text: {
+                  type: "string",
+                  description: "Texte du chunk représentant la demande de conseil général"
+                }
+              },
+              required: ["type", "text"],
+              additionalProperties: false
+            },
+            description: "Chunks représentant la demande de conseil général de l'utilisateur"
+          }
+        },
+        required: ["searchChunks"],
+        additionalProperties: false
+      },
+      description: `search_other_advice: Demande de conseil qui ne concerne pas un symptôme, un hower angel, une pratique, ou une activité. Si la demande concerne un symptôme, utiliser ${RecommendationChatBotService.INTENT_NAMES.SEARCH_SYMPTOM}. Si la demande concerne un hower angel, utiliser ${RecommendationChatBotService.INTENT_NAMES.SEARCH_HOWER_ANGEL}. Si la demande concerne une pratique, utiliser ${RecommendationChatBotService.INTENT_NAMES.SEARCH_PRACTICE}. Si la demande concerne une activité, utiliser ${RecommendationChatBotService.INTENT_NAMES.SEARCH_ACTIVITIES}.`,
+      handle: async (intent, context, _userMessage, _globalIntentInfos) => {
+        if (!intent.searchContext) {
+          console.log('⚠️ Aucun searchContext dans l\'intent');
+          return context;
+        }
+        const { searchChunks } = intent.searchContext;
+        if (!searchChunks || searchChunks.length === 0) {
+          console.log('⚠️ Aucun searchChunks dans l\'intent');
+          return context;
+        }
+        try {
+          // Combiner tous les chunks en un seul terme de recherche pour la FAQ
+          const searchTerm = searchChunks.map(chunk => chunk.text).join(' ');
+          console.log(`🔍 Recherche de conseils généraux (FAQ) avec le terme: "${searchTerm}"`);
+          
+          // Effectuer une recherche FAQ
+          const faqResult = await this.searchFAQ(searchTerm);
+          
+          if (faqResult && faqResult.faq && faqResult.faq.length > 0) {
+            console.log(`✅ ${faqResult.faq.length} FAQ trouvées`);
+            
+            // Ajouter les résultats FAQ dans les métadonnées via globalIntentInfos
+            const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+            if (globalIntentInfos) {
+              globalIntentInfos.focusedFaqs = faqResult.faq;
+            }
+            context.metadata = {
+              ...context.metadata,
+              ['globalIntentInfos']: globalIntentInfos
+            };
+          } else {
+            console.log('ℹ️ Aucune FAQ trouvée pour cette demande de conseil');
+            // Recalculer globalIntentInfos même si aucune FAQ n'est trouvée
+            const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+            context.metadata = {
+              ...context.metadata,
+              ['globalIntentInfos']: globalIntentInfos
+            };
+          }
+        } catch (error) {
+          console.error('❌ Erreur lors du traitement de l\'intent search_other_advice:', error);
+          // Recalculer globalIntentInfos même en cas d'erreur
+          const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context);
+          context.metadata = {
+            ...context.metadata,
+            ['globalIntentInfos']: globalIntentInfos
+          };
+        }
+        return context;
       }
     };
   }
@@ -2322,7 +2446,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
         let type: 'hower_angel' | 'activity' | 'practice' | 'subject';
         let designation: string;
         
-        if (intent.intent === 'confirmation' && intent.confirmationContext) {
+        if (intent.intent === RecommendationChatBotService.INTENT_NAMES.CONFIRMATION && intent.confirmationContext) {
           // Reconstruire le contexte depuis confirmationContext et globalIntentInfos
           const confirmationType = intent.confirmationContext.type;
           type = confirmationType;
@@ -2450,7 +2574,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
           intent: {
             type: "string",
             description: "Intent original qui a abouti à la demande de confirmation. Cet intent sera utilisé pour continuer son traitement après la confirmation",
-            enum: ["know_more", "take_rdv"]
+            enum: [RecommendationChatBotService.INTENT_NAMES.KNOW_MORE, RecommendationChatBotService.INTENT_NAMES.TAKE_RDV]
           }
         },
         required: ["type", "intent"],
@@ -2459,9 +2583,9 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       description: "confirmation: Confirmation d'un élément mentionné précédemment",
       handle: async (intent, context, userMessage, globalIntentInfos) => {
         // Appeler directement le handler approprié selon l'intent original
-        if (intent.confirmationContext?.intent === 'know_more') {
+        if (intent.confirmationContext?.intent === RecommendationChatBotService.INTENT_NAMES.KNOW_MORE) {
           return await this.getKnowMoreContextInfo(context).handle(intent, context, userMessage, globalIntentInfos);
-        } else if (intent.confirmationContext?.intent === 'take_rdv') {
+        } else if (intent.confirmationContext?.intent === RecommendationChatBotService.INTENT_NAMES.TAKE_RDV) {
           return await this.getRdvContextInfo(context).handle(intent, context, userMessage, globalIntentInfos);
         } else {
           console.warn('⚠️ Intent original manquant ou non géré dans confirmationContext');
@@ -2487,13 +2611,17 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
               properties: {
                 type: {
                   type: "string",
-                  description: `Type du chunk. Valeurs possibles:
-- "hower_angel_name_info": Recherche par nom complet d'un hower angel
-- "user_situation_chunk": Fragment de situation utilisateur (de son point de vue, par exemple: "Je me sens...", "J'ai besoin...")
-- "i_have_symptome_chunk": Fragment décrivant un symptôme que l'utilisateur a (par exemple: "J'ai des maux de tête", "Je ressens de la fatigue")
-- "with_benefit_chunk": Fragment décrivant un bénéfice recherché (par exemple: "pour me détendre", "pour réduire le stress")
-- "category_name_info": Nom d'une catégorie d'activité ou de pratique`,
-                  enum: ["hower_angel_name_info", "user_situation_chunk", "i_have_symptome_chunk", "with_benefit_chunk", "category_name_info"]
+                  description: (() => {
+                    const chunkInfo = this.getChunkInfo();
+                    const chunkDescriptions = Object.values(chunkInfo)
+                      .map(chunk => `- "${chunk.type}": ${chunk.description}`)
+                      .join('\n');
+                    return `Type du chunk. Valeurs possibles:\n${chunkDescriptions}`;
+                  })(),
+                  enum: (() => {
+                    const chunkInfo = this.getChunkInfo();
+                    return Object.values(chunkInfo).map(chunk => chunk.type);
+                  })()
                 },
                 text: {
                   type: "string",
@@ -2579,37 +2707,47 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
 
     // Mapper chaque intent à sa fonction de construction d'infos (fragment, description, handle)
     const intentInfoMap: Record<string, (...args: any[]) => { fragment: any; description: string; handle: (intent: RecommendationIntent, context: HowanaContext, userMessage: string, globalIntentInfos: GlobalRecommendationIntentInfos | undefined) => Promise<HowanaContext> }> = {
-      take_rdv: () => this.getRdvContextInfo(context),
-      search_hower_angel: () => this.getSearchHowerAngelContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
-      search_activities: () => this.getSearchActivitiesContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
-      search_practice: () => this.getSearchPracticeContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
-      search_advices: () => this.getSearchAdvicesContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
-      discover: () => this.getDiscoverContextInfo(context),
-      know_more: () => this.getKnowMoreContextInfo(context),
-      confirmation: () => this.getConfirmationContextInfo(context)
+      [RecommendationChatBotService.INTENT_NAMES.TAKE_RDV]: () => this.getRdvContextInfo(context),
+      [RecommendationChatBotService.INTENT_NAMES.SEARCH_HOWER_ANGEL]: () => this.getSearchHowerAngelContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
+      [RecommendationChatBotService.INTENT_NAMES.SEARCH_ACTIVITIES]: () => this.getSearchActivitiesContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
+      [RecommendationChatBotService.INTENT_NAMES.SEARCH_PRACTICE]: () => this.getSearchPracticeContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
+      [RecommendationChatBotService.INTENT_NAMES.SEARCH_OTHER_ADVICE]: () => this.getSearchOtherAdviceContextInfo(availablePracticeIds, availableActivityIds, availableHowerAngelIds),
+      [RecommendationChatBotService.INTENT_NAMES.DISCOVER]: () => this.getDiscoverContextInfo(context),
+      [RecommendationChatBotService.INTENT_NAMES.KNOW_MORE]: () => this.getKnowMoreContextInfo(context),
+      [RecommendationChatBotService.INTENT_NAMES.CONFIRMATION]: () => this.getConfirmationContextInfo(context)
     };
 
     // Construire tous les infos et récupérer les descriptions
-    const rdvResult = intentInfoMap['take_rdv']?.();
-    const searchHowerAngelResult = intentInfoMap['search_hower_angel']?.();
-    const searchActivitiesResult = intentInfoMap['search_activities']?.();
-    const searchPracticeResult = intentInfoMap['search_practice']?.();
-    const searchAdvicesResult = intentInfoMap['search_advices']?.();
-    const discoverResult = intentInfoMap['discover']?.();
-    const knowMoreResult = intentInfoMap['know_more']?.();
-    const confirmationResult = intentInfoMap['confirmation']?.();
+    const rdvResult = intentInfoMap[RecommendationChatBotService.INTENT_NAMES.TAKE_RDV]?.();
+    const searchHowerAngelResult = intentInfoMap[RecommendationChatBotService.INTENT_NAMES.SEARCH_HOWER_ANGEL]?.();
+    const searchActivitiesResult = intentInfoMap[RecommendationChatBotService.INTENT_NAMES.SEARCH_ACTIVITIES]?.();
+    const searchPracticeResult = intentInfoMap[RecommendationChatBotService.INTENT_NAMES.SEARCH_PRACTICE]?.();
+    const searchOtherAdviceResult = intentInfoMap[RecommendationChatBotService.INTENT_NAMES.SEARCH_OTHER_ADVICE]?.();
+    const discoverResult = intentInfoMap[RecommendationChatBotService.INTENT_NAMES.DISCOVER]?.();
+    const knowMoreResult = intentInfoMap[RecommendationChatBotService.INTENT_NAMES.KNOW_MORE]?.();
+    const confirmationResult = intentInfoMap[RecommendationChatBotService.INTENT_NAMES.CONFIRMATION]?.();
 
     // Construire la description de l'enum à partir des descriptions des fragments
     const intentDescriptions = [
       searchHowerAngelResult?.description,
       searchActivitiesResult?.description,
       searchPracticeResult?.description,
-      searchAdvicesResult?.description,
+      searchOtherAdviceResult?.description,
       rdvResult?.description,
       discoverResult?.description,
       knowMoreResult?.description,
       confirmationResult?.description
     ].filter(Boolean).join('\n- ');
+
+    // Construire une union pour searchContext (peut être soit le fragment complet avec searchType/searchFormat, soit le fragment simplifié pour search_other_advice)
+    const searchContextUnion = {
+      oneOf: [
+        searchHowerAngelResult?.fragment,
+        searchActivitiesResult?.fragment,
+        searchPracticeResult?.fragment,
+        searchOtherAdviceResult?.fragment
+      ].filter(Boolean)
+    };
 
     return {
       format: { 
@@ -2621,10 +2759,19 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
             intent: {
               type: "string",
               description: `Intent principal de l'utilisateur. Valeurs possibles:\n- ${intentDescriptions}`,
-              enum: ["search_hower_angel", "search_activities", "search_practice", "search_advices", "take_rdv", "discover", "know_more", "confirmation"]
+              enum: [
+                RecommendationChatBotService.INTENT_NAMES.SEARCH_HOWER_ANGEL,
+                RecommendationChatBotService.INTENT_NAMES.SEARCH_ACTIVITIES,
+                RecommendationChatBotService.INTENT_NAMES.SEARCH_PRACTICE,
+                RecommendationChatBotService.INTENT_NAMES.SEARCH_OTHER_ADVICE,
+                RecommendationChatBotService.INTENT_NAMES.TAKE_RDV,
+                RecommendationChatBotService.INTENT_NAMES.DISCOVER,
+                RecommendationChatBotService.INTENT_NAMES.KNOW_MORE,
+                RecommendationChatBotService.INTENT_NAMES.CONFIRMATION
+              ]
             },
             rdvContext: rdvResult?.fragment,
-            searchContext: searchAdvicesResult?.fragment, // Utiliser search_advices pour avoir les champs target*
+            searchContext: searchContextUnion,
             knowMoreContext: knowMoreResult?.fragment,
             confirmationContext: confirmationResult?.fragment,
             discoverContext: discoverResult?.fragment
@@ -2824,7 +2971,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     };
     
     // Gérer confirmationContext (pour confirmation) - doit être traité en premier
-    if (intent?.intent === 'confirmation' && intent?.confirmationContext) {
+    if (intent?.intent === RecommendationChatBotService.INTENT_NAMES.CONFIRMATION && intent?.confirmationContext) {
       const confirmationType = intent.confirmationContext.type;
       
       // Transférer l'élément depuis pendingConfirmations vers le focused correspondant
@@ -2860,12 +3007,12 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
       let contextIdentifiant: string | null | undefined = null;
       let contextDesignation: string | undefined = undefined;
       
-      if (intent?.intent === 'know_more' && intent?.knowMoreContext) {
+      if (intent?.intent === RecommendationChatBotService.INTENT_NAMES.KNOW_MORE && intent?.knowMoreContext) {
         // Pour know_more, utiliser knowMoreContext
         contextType = intent.knowMoreContext.type;
         contextIdentifiant = intent.knowMoreContext.identifiant;
         contextDesignation = intent.knowMoreContext.designation;
-      } else if (intent?.intent === 'take_rdv') {
+      } else if (intent?.intent === RecommendationChatBotService.INTENT_NAMES.TAKE_RDV) {
         // Pour take_rdv, mapper uniquement depuis rdvContext (pas de fallback vers knowMoreContext)
         contextType = intent.rdvContext?.type || null;
         contextIdentifiant = intent.rdvContext?.id || null;
