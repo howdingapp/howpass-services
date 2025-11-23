@@ -76,7 +76,7 @@ jobs:
           --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }}
           --set-env-vars=MAX_BILAN=${{ vars.MAX_BILAN }}
           --set-env-vars=MAX_BILAN_FREE=${{ vars.MAX_BILAN_FREE }}
-          --set-env-vars=DEV_EMAIL=${{ vars.DEV_EMAIL }}
+          --set-env-vars=DEV_EMAIL="${{ vars.DEV_EMAIL }}"
           --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
           --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }}
           --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }}
@@ -141,7 +141,7 @@ jobs:
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
             --set-env-vars=MAX_BILAN=${{ vars.MAX_BILAN }} \
             --set-env-vars=MAX_BILAN_FREE=${{ vars.MAX_BILAN_FREE }} \
-            --set-env-vars=DEV_EMAIL=${{ vars.DEV_EMAIL }}
+            --set-env-vars=DEV_EMAIL="${{ vars.DEV_EMAIL }}"
         else
           echo "🆕 Création d'un nouveau job..."
           gcloud run jobs create video-processing-job \
@@ -172,7 +172,7 @@ jobs:
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
             --set-env-vars=MAX_BILAN=${{ vars.MAX_BILAN }} \
             --set-env-vars=MAX_BILAN_FREE=${{ vars.MAX_BILAN_FREE }} \
-            --set-env-vars=DEV_EMAIL=${{ vars.DEV_EMAIL }}
+            --set-env-vars=DEV_EMAIL="${{ vars.DEV_EMAIL }}"
         fi
         
         echo "✅ Cloud Run Job configuré avec succès (traitement vidéo uniquement)"
@@ -209,7 +209,7 @@ jobs:
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
             --set-env-vars=MAX_BILAN=${{ vars.MAX_BILAN }} \
             --set-env-vars=MAX_BILAN_FREE=${{ vars.MAX_BILAN_FREE }} \
-            --set-env-vars=DEV_EMAIL=${{ vars.DEV_EMAIL }} \
+            --set-env-vars=DEV_EMAIL="${{ vars.DEV_EMAIL }}" \
             --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
             --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }} \
             --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }} \
@@ -242,7 +242,7 @@ jobs:
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
             --set-env-vars=MAX_BILAN=${{ vars.MAX_BILAN }} \
             --set-env-vars=MAX_BILAN_FREE=${{ vars.MAX_BILAN_FREE }} \
-            --set-env-vars=DEV_EMAIL=${{ vars.DEV_EMAIL }} \
+            --set-env-vars=DEV_EMAIL="${{ vars.DEV_EMAIL }}" \
             --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
             --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }} \
             --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }} \
@@ -283,7 +283,7 @@ jobs:
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
             --set-env-vars=MAX_BILAN=${{ vars.MAX_BILAN }} \
             --set-env-vars=MAX_BILAN_FREE=${{ vars.MAX_BILAN_FREE }} \
-            --set-env-vars=DEV_EMAIL=${{ vars.DEV_EMAIL }} \
+            --set-env-vars=DEV_EMAIL="${{ vars.DEV_EMAIL }}" \
             --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
             --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }} \
             --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }} \
@@ -316,7 +316,7 @@ jobs:
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
             --set-env-vars=MAX_BILAN=${{ vars.MAX_BILAN }} \
             --set-env-vars=MAX_BILAN_FREE=${{ vars.MAX_BILAN_FREE }} \
-            --set-env-vars=DEV_EMAIL=${{ vars.DEV_EMAIL }} \
+            --set-env-vars=DEV_EMAIL="${{ vars.DEV_EMAIL }}" \
             --set-env-vars=RESEND_API_KEY=${{ secrets.RESEND_API_KEY }} \
             --set-env-vars=RESEND_FROM_EMAIL=${{ vars.RESEND_FROM_EMAIL }} \
             --set-env-vars=SUPPORT_EMAIL=${{ vars.SUPPORT_EMAIL }} \
