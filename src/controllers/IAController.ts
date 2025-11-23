@@ -315,7 +315,43 @@ export class IAController {
           result = await this.processGenerateSummary(req, taskData, context);
           break;
         case 'generate_first_response':
-          result = await this.processGenerateFirstResponse(req, taskData, context);
+          // Pour les bilans, utiliser processGenerateResponse au lieu de processGenerateFirstResponse
+          if (context.type === 'bilan') {
+            // Vérifier si on a des réponses initiales dans le contexte
+            const initialQuestionnaireAnswers = context.metadata?.['initialQuestionnaireAnswers'] as Array<{
+              questionIndex: number;
+              answerIndex: number | null;
+              answerText: string;
+            }> | undefined;
+
+            if (initialQuestionnaireAnswers && initialQuestionnaireAnswers.length > 0) {
+              // Construire le message formaté comme bilan_answers
+              const bilanAnswersMessage = JSON.stringify({
+                type: 'bilan_answers',
+                answers: initialQuestionnaireAnswers.map(answer => ({
+                  questionIndex: answer.questionIndex,
+                  answerIndex: answer.answerIndex,
+                  answerText: answer.answerText
+                }))
+              });
+
+              // Créer un taskData modifié avec le message formaté
+              const modifiedTaskData: IATaskRequest = {
+                ...taskData,
+                userMessage: bilanAnswersMessage
+              };
+
+              console.log('📋 [BILAN] Utilisation de processGenerateResponse avec les réponses initiales');
+              result = await this.processGenerateResponse(req, modifiedTaskData, context);
+            } else {
+              // Pas de réponses initiales, utiliser le comportement par défaut
+              console.log('📋 [BILAN] Aucune réponse initiale, utilisation de processGenerateFirstResponse');
+              result = await this.processGenerateFirstResponse(req, taskData, context);
+            }
+          } else {
+            // Pour les autres types, utiliser le comportement par défaut
+            result = await this.processGenerateFirstResponse(req, taskData, context);
+          }
           break;
         case 'generate_unfinished_exchange':
           result = await this.processGenerateUnfinishedExchange(req, taskData, context);
