@@ -5,8 +5,9 @@ import {
   BilanChunk,
   BilanQuestionIntent,
   BilanUniverContext,
-  BilanGlobalIntentInfos,
-  BilanFamily
+  BilanFamily,
+  BilanQuestionnaireWithChunks,
+  INITIAL_BILAN_QUESTIONS
 } from '../types/bilan';
 import {
   PracticeSearchResult,
@@ -15,97 +16,46 @@ import {
 } from '../types/search';
 import { BaseChatBotService } from './BaseChatBotService';
 
-/**
- * Questions de bilan prédéfinies avec leurs réponses suggérées
- * Chaque question inclut la question elle-même et des quick replies avec icônes emoji
- * Chaque quickReply a ses propres chunks précalculés
- */
-const BILAN_QUESTIONS: Array<{
-  question: string;
-  quickReplies: Array<{ text: string; icon?: string; chunks: BilanChunk[] }>;
-}> = [
-  {
-    question: "🌿 Comment te sens-tu en ce moment ?",
-    quickReplies: [
-      { text: "😴 Fatigué(e) physiquement", icon: "sleep", chunks: [{ type: "symptome_chunk", text: "fatigue physique" }] },
-      { text: "😰 Stressé(e) ou tendu(e)", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "stress tension" }] },
-      { text: "🤯 Trop dans le mental / éparpillé(e)", icon: "zap", chunks: [{ type: "user_situation_chunk", text: "mental éparpillé" }] },
-      { text: "💧 Émotif(ve) ou hypersensible", icon: "heart", chunks: [{ type: "symptome_chunk", text: "émotivité hypersensibilité" }] },
-      { text: "🌀 Démotivé(e) ou en perte de sens", icon: "smile", chunks: [{ type: "user_situation_chunk", text: "démotivation perte de sens" }] },
-      { text: "🌞 Bien, envie d'évoluer encore", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "envie d'évoluer" }] }
-    ]
-  },
-  {
-    question: "🌸 Ce que tu aimerais le plus améliorer",
-    quickReplies: [
-      { text: "🌿 Mon énergie", icon: "zap", chunks: [{ type: "with_benefit_chunk", text: "améliorer énergie" }] },
-      { text: "🛏️ Mon sommeil", icon: "sleep", chunks: [{ type: "with_benefit_chunk", text: "améliorer sommeil" }] },
-      { text: "🌸 Mon calme intérieur", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "retrouver calme intérieur" }] },
-      { text: "💆‍♀️ Ma relation à mon corps", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "améliorer relation au corps" }] },
-      { text: "💫 Ma confiance / mon estime", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "renforcer confiance estime" }] },
-      { text: "💖 Mes émotions", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "gérer émotions" }] },
-      { text: "⚖️ Mon équilibre global", icon: "smile", chunks: [{ type: "with_benefit_chunk", text: "retrouver équilibre global" }] },
-      { text: "🔮 Mon alignement de vie", icon: "explore", chunks: [{ type: "with_benefit_chunk", text: "alignement de vie" }] }
-    ]
-  },
-  {
-    question: "🌞 Ton rythme de vie",
-    quickReplies: [
-      { text: "⏰ Je cours tout le temps / je suis souvent surmené(e)", icon: "zap", chunks: [{ type: "user_situation_chunk", text: "surmenage rythme effréné" }] },
-      { text: "🌀 J'ai du mal à trouver du temps pour moi", icon: "alert-triangle", chunks: [{ type: "user_situation_chunk", text: "manque de temps pour soi" }] },
-      { text: "🌿 J'arrive à maintenir un bon équilibre", icon: "smile", chunks: [{ type: "user_situation_chunk", text: "bon équilibre de vie" }] },
-      { text: "🕊️ Ma vie est plutôt calme et posée", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "vie calme posée" }] }
-    ]
-  },
-  {
-    question: "💆‍♀️ Ton rapport à ton corps",
-    quickReplies: [
-      { text: "🔸 Raide ou tendu(e)", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "raideur tension corporelle" }] },
-      { text: "💤 Fatigué(e), sans énergie", icon: "sleep", chunks: [{ type: "symptome_chunk", text: "fatigue manque d'énergie" }] },
-      { text: "🌸 En déséquilibre (hormones, digestion, sommeil)", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "déséquilibre hormones digestion sommeil" }] },
-      { text: "🌺 Bien dans l'ensemble, envie d'entretien", icon: "smile", chunks: [{ type: "with_benefit_chunk", text: "entretien du corps" }] },
-      { text: "🌫️ Déconnecté(e), besoin de me reconnecter à lui", icon: "explore", chunks: [{ type: "user_situation_chunk", text: "déconnexion du corps" }] },
-      { text: "🔥 Avec des douleurs", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "douleurs" }] }
-    ]
-  },
-  {
-    question: "💖 Tes émotions",
-    quickReplies: [
-      { text: "🌧️ Je me sens souvent submergé(e)", icon: "alert-triangle", chunks: [{ type: "user_situation_chunk", text: "submergé par les émotions" }] },
-      { text: "🌊 Je garde tout pour moi", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "garder tout pour soi" }] },
-      { text: "💔 Je me sens vide ou triste", icon: "heart", chunks: [{ type: "symptome_chunk", text: "vide tristesse" }] },
-      { text: "💫 Je ressens beaucoup, parfois trop", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "ressentir beaucoup d'émotions" }] },
-      { text: "🌈 Je me sens stable et prêt(e) à m'élever", icon: "smile", chunks: [{ type: "with_benefit_chunk", text: "stabilité émotionnelle" }] },
-      { text: "😬 j'ai tendance à éviter les conflits", icon: "alert-triangle", chunks: [{ type: "user_situation_chunk", text: "éviter les conflits" }] }
-    ]
-  },
-  {
-    question: "🌿 Ton besoin du moment",
-    quickReplies: [
-      { text: "⚡ Recharger mes batteries", icon: "zap", chunks: [{ type: "with_benefit_chunk", text: "recharger batteries" }] },
-      { text: "🌸 Lâcher prise", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "lâcher prise" }] },
-      { text: "🌼 Me reconnecter à moi-même", icon: "explore", chunks: [{ type: "with_benefit_chunk", text: "se reconnecter à soi-même" }] },
-      { text: "🔮 Retrouver du sens", icon: "explore", chunks: [{ type: "with_benefit_chunk", text: "retrouver du sens" }] },
-      { text: "💛 Me faire du bien simplement", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "se faire du bien" }] }
-    ]
-  },
-  {
-    question: "🐾 As-tu un compagnon à quatre pattes ?",
-    quickReplies: [
-      { text: "🐶 Oui, j'aimerais aussi prendre soin de mon animal", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "compagnon animal" }] },
-      { text: "🚫 Non, pas pour l'instant", icon: "smile", chunks: [] }
-    ]
-  },
-  //{
-  //  question: "📍 Où souhaites-tu découvrir tes praticiens ?",
-  //  quickReplies: [
-  //    { text: "📍 Utiliser ma géolocalisation", icon: "explore" },
-  //   { text: "✏️ Saisir ma ville / code postal", icon: "explore" }
-  //  ]
-  //}
-];
-
 export class BilanChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
+  
+  /**
+   * Convertit un questionnaire sans chunks en questionnaire avec chunks (chunks vides)
+   * Utilisé pour convertir les questionnaires reçus depuis l'IA
+   */
+  protected convertQuestionnaireToWithChunks(questionnaire: Array<{
+    question: string;
+    quickReplies: Array<{ text: string; icon?: string }>;
+  }>): BilanQuestionnaireWithChunks {
+    return questionnaire.map(q => ({
+      question: q.question,
+      quickReplies: q.quickReplies.map(qr => ({
+        text: qr.text,
+        ...(qr.icon && { icon: qr.icon }),
+        chunks: [] // Chunks vides pour les questionnaires reçus depuis l'IA
+      }))
+    }));
+  }
+
+  /**
+   * Obtient le questionnaire courant depuis l'univers ou utilise INITIAL_BILAN_QUESTIONS par défaut
+   * Si questionnaires[] existe dans l'univers, utilise le dernier (questionnaires[length-1])
+   * Sinon, utilise INITIAL_BILAN_QUESTIONS
+   */
+  protected getCurrentQuestionnaire(context: HowanaContext): BilanQuestionnaireWithChunks {
+    const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;
+    const questionnaires = bilanUniverContext?.questionnaires?.value;
+    
+    if (questionnaires && questionnaires.length > 0) {
+      // Utiliser le dernier questionnaire de la liste
+      const lastQuestionnaire = questionnaires[questionnaires.length - 1];
+      if (lastQuestionnaire) {
+        return lastQuestionnaire;
+      }
+    }
+    
+    // Par défaut, utiliser INITIAL_BILAN_QUESTIONS
+    return INITIAL_BILAN_QUESTIONS;
+  }
     
   /**
    * Règles par défaut pour les bilans (format tableau)
@@ -190,13 +140,137 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
 
   public override async computeIntent(context: HowanaContext, userMessage: string): Promise<{ intent: any; intentCost: number | null; globalIntentInfos: any }> {
     
-    const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
-    const existingGlobalIntentInfos = context.metadata?.['globalIntentInfos'] as BilanGlobalIntentInfos | undefined;
-
-    // Si remainBilanQuestion est défini et supérieur à 1, retourner un intent personnalisé
-    if (remainBilanQuestion !== undefined && remainBilanQuestion > 1) {
-      console.log(`⏭️ [BILAN] Calcul d'intent ignoré car il reste ${remainBilanQuestion} question(s) de bilan`);
-      // Récupérer le globalIntentInfos existant
+    // Récupérer le globalIntentInfos existant pour le conserver
+    const existingGlobalIntentInfos = context.metadata?.['globalIntentInfos'] as any;
+    
+    // Vérifier si le message contient toutes les réponses en une fois (format JSON stringifié)
+    let parsedMessage: any = null;
+    try {
+      parsedMessage = JSON.parse(userMessage);
+      if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
+        console.log(`📋 [BILAN] Détection du format bilan_answers avec ${parsedMessage.answers.length} réponses`);
+        
+        // Traiter toutes les réponses en une fois
+        const allAnswers = parsedMessage.answers as Array<{ questionIndex: number; answerIndex: number | null; answerText: string }>;
+        
+        // Récupérer le questionnaire courant
+        const currentQuestionnaire = this.getCurrentQuestionnaire(context);
+        
+        // Construire les questionResponses à partir de toutes les réponses
+        const questionResponses: Array<{ question: string; index: number; response: string }> = [];
+        
+        for (const answer of allAnswers) {
+          const questionIndex = answer.questionIndex;
+          const answerIndex = answer.answerIndex;
+          const answerText = answer.answerText;
+          
+          // Récupérer la question correspondante depuis le questionnaire courant
+          const questionData = questionIndex >= 0 && questionIndex < currentQuestionnaire.length
+            ? currentQuestionnaire[questionIndex]
+            : null;
+          
+          const question = questionData?.question || `Question ${questionIndex + 1}`;
+          
+          // Si answerIndex est null, c'est une réponse custom (index = -1)
+          const responseIndex = answerIndex !== null ? answerIndex : -1;
+          
+          questionResponses.push({
+            question,
+            index: responseIndex,
+            response: answerText
+          });
+        }
+        
+        // Séparer les réponses standard (index >= 0) de celles qui sont custom (index == -1)
+        const standardResponses: Array<{ question: string; index: number; response: string; questionIndex: number }> = [];
+        const customResponses: Array<{ question: string; response: string }> = [];
+        
+        for (let i = 0; i < questionResponses.length; i++) {
+          const qr = questionResponses[i];
+          if (!qr || !qr.response) continue;
+          
+          if (qr.index === -1) {
+            // Réponse custom : pas d'index valide
+            customResponses.push({
+              question: qr.question,
+              response: qr.response
+            });
+          } else {
+            // Réponse standard : index valide, ajouter questionIndex (position dans questionResponses)
+            standardResponses.push({
+              ...qr,
+              questionIndex: i
+            });
+          }
+        }
+        
+        // Cumuler tous les chunks des quickReplies correspondant aux réponses standard
+        const quickReplyChunks: BilanChunk[] = [];
+        
+        for (const qr of standardResponses) {
+          if (!qr || qr.index < 0) continue;
+          
+          // Utiliser questionIndex pour trouver la question dans le questionnaire courant
+          // questionIndex correspond à la position dans questionResponses, pas dans le questionnaire
+          // On doit utiliser la questionIndex originale depuis l'answer
+          const originalAnswer = allAnswers[qr.questionIndex];
+          if (!originalAnswer) continue;
+          
+          const questionData = originalAnswer.questionIndex >= 0 && originalAnswer.questionIndex < currentQuestionnaire.length
+            ? currentQuestionnaire[originalAnswer.questionIndex]
+            : null;
+          
+          if (!questionData) continue;
+          
+          const quickReply = questionData.quickReplies[qr.index];
+          if (quickReply && quickReply.chunks) {
+            quickReplyChunks.push(...quickReply.chunks);
+          }
+        }
+        
+        console.log(`✅ [BILAN] ${quickReplyChunks.length} chunks cumulés depuis les quickReplies`);
+        console.log(`📝 [BILAN] ${customResponses.length} réponse(s) custom détectée(s)`);
+        
+        // Si on a des réponses custom, appeler super.computeIntent sur ces réponses
+        let customChunks: BilanChunk[] = [];
+        let intentCost: number | null = null;
+        
+        if (customResponses.length > 0) {
+          console.log(`🔄 [BILAN] Appel de super.computeIntent pour les réponses custom`);
+          
+          // Appeler super.computeIntent avec le message combiné
+          const customIntentResult = await super.computeIntent(context, JSON.stringify(customResponses));
+          
+          if (customIntentResult.intent && customIntentResult.intent.universContext?.chunks) {
+            customChunks = customIntentResult.intent.universContext.chunks;
+            intentCost = customIntentResult.intentCost;
+            console.log(`✅ [BILAN] ${customChunks.length} chunks calculés depuis les réponses custom`);
+          } else {
+            console.warn(`⚠️ [BILAN] Aucun chunk trouvé dans l'intent calculé pour les réponses custom`);
+          }
+        }
+        
+        // Combiner tous les chunks (quickReplies + custom)
+        const allChunks: BilanChunk[] = [...quickReplyChunks, ...customChunks];
+        
+        console.log(`✅ [BILAN] Total: ${allChunks.length} chunks (${quickReplyChunks.length} quickReplies + ${customChunks.length} custom)`);
+        
+        // Retourner un intent avec les chunks cumulés
+        return {
+          intent: {
+            type: "bilan_questionnaire",
+            universContext: {
+              chunks: allChunks
+            }
+          },
+          intentCost: intentCost,
+          globalIntentInfos: existingGlobalIntentInfos // Conserver l'existant, sera mis à jour dans computeGlobalIntentInfos
+        };
+      }
+    } catch (parseError) {
+      // Ce n'est pas un JSON, ce n'est pas le format attendu
+      console.error(`❌ [BILAN] Message non-JSON et non-format bilan_answers:`, parseError);
+      // Retourner un intent vide
       return {
         intent: { 
           type: "bilan_questionnaire",
@@ -205,136 +279,27 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           }
         },
         intentCost: null,
-        globalIntentInfos: existingGlobalIntentInfos || null
+        globalIntentInfos: existingGlobalIntentInfos
       };
     }
     
-    // Dernière occurrence : cumuler les chunks des quickReplies et calculer les chunks pour les réponses custom
-    console.log(`📋 [BILAN] Dernière question, cumul des chunks des quickReplies et calcul pour réponses custom`);
-    
-    // Récupérer toutes les questions-réponses existantes
-    const existingQuestionResponses = existingGlobalIntentInfos?.bilanUniverContext?.questionResponses?.value || [];
-    
-    // Calculer l'index de la question précédente (celle à laquelle l'utilisateur répond)
-    const previousQuestionIndex = remainBilanQuestion !== undefined && remainBilanQuestion >= 0
-      ? BILAN_QUESTIONS.length - remainBilanQuestion - 1
-      : -1;
-    
-    // Récupérer la dernière question
-    const previousQuestion = previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length
-      ? BILAN_QUESTIONS[previousQuestionIndex]?.question
-      : undefined;
-    
-    // Parser la réponse : si c'est un entier, c'est un index, sinon c'est du texte custom (index = -1)
-    let responseIndex = -1;
-    let responseText = userMessage;
-    const parsedIndex = parseInt(userMessage, 10);
-    if (!isNaN(parsedIndex) && parsedIndex >= 0) {
-      responseIndex = parsedIndex;
-      // Convertir l'index en texte correspondant pour l'univers
-      if (previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length) {
-        const questionData = BILAN_QUESTIONS[previousQuestionIndex];
-        if (questionData && responseIndex < questionData.quickReplies.length) {
-          const quickReply = questionData.quickReplies[responseIndex];
-          if (quickReply) {
-            responseText = quickReply.text;
-          }
-        }
-      }
-    }
-    
-    // Ajouter la nouvelle question-réponse avec l'index et le texte converti
-    const questionResponses: Array<{ question: string; index: number; response: string }> = [
-      ...existingQuestionResponses,
-      { question: previousQuestion!, index: responseIndex, response: responseText }
-    ];
-    
-    // Séparer les réponses standard (index >= 0) de celles qui sont custom (index == -1)
-    // Ajouter questionIndex (position dans questionResponses) pour les réponses standard
-    const standardResponses: Array<{ question: string; index: number; response: string; questionIndex: number }> = [];
-    const customResponses: Array<{ question: string; response: string }> = [];
-    
-    for (let i = 0; i < questionResponses.length; i++) {
-      const qr = questionResponses[i];
-      if (!qr || !qr.response) continue;
-      
-      if (qr.index === -1) {
-        // Réponse custom : pas d'index valide
-        const normalizedQr: { question: string; response: string } = {
-          question: qr.question,
-          response: qr.response
-        };
-        customResponses.push(normalizedQr);
-      } else {
-        // Réponse standard : index valide, ajouter questionIndex (position dans questionResponses)
-        standardResponses.push({
-          ...qr,
-          questionIndex: i
-        });
-      }
-    }
-    
-    // Cumuler tous les chunks des quickReplies correspondant aux réponses standard
-    const quickReplyChunks: BilanChunk[] = [];
-    
-    for (let i = 0; i < standardResponses.length; i++) {
-      const qr = standardResponses[i];
-      if (!qr || qr.index < 0) continue;
-      
-      const questionData = BILAN_QUESTIONS[qr.questionIndex];
-      if (!questionData) continue;
-      
-      const quickReply = questionData.quickReplies[qr.index];
-      if (quickReply && quickReply.chunks) {
-        quickReplyChunks.push(...quickReply.chunks);
-      }
-    }
-    
-    console.log(`✅ [BILAN] ${quickReplyChunks.length} chunks cumulés depuis les quickReplies`);
-    console.log(`📝 [BILAN] ${customResponses.length} réponse(s) custom détectée(s)`);
-    
-    // Si on a des réponses custom, appeler super.computeIntent sur ces réponses
-    let customChunks: BilanChunk[] = [];
-    let intentCost: number | null = null;
-    
-    if (customResponses.length > 0) {
-
-      console.log(`🔄 [BILAN] Appel de super.computeIntent pour les réponses custom`);
-      
-      // Appeler super.computeIntent avec le message combiné
-      const customIntentResult = await super.computeIntent(context, JSON.stringify(customResponses));
-      
-      if (customIntentResult.intent && customIntentResult.intent.universContext?.chunks) {
-        customChunks = customIntentResult.intent.universContext.chunks;
-        intentCost = customIntentResult.intentCost;
-        console.log(`✅ [BILAN] ${customChunks.length} chunks calculés depuis les réponses custom`);
-      } else {
-        console.warn(`⚠️ [BILAN] Aucun chunk trouvé dans l'intent calculé pour les réponses custom`);
-      }
-    }
-    
-    // Combiner tous les chunks (quickReplies + custom)
-    const allChunks: BilanChunk[] = [...quickReplyChunks, ...customChunks];
-    
-    console.log(`✅ [BILAN] Total: ${allChunks.length} chunks (${quickReplyChunks.length} quickReplies + ${customChunks.length} custom)`);
-    
-    // Retourner un intent avec les chunks cumulés
+    // Si on arrive ici, le format n'est pas celui attendu
+    console.error(`❌ [BILAN] Format de message non reconnu`);
     return {
-      intent: {
+      intent: { 
         type: "bilan_questionnaire",
         universContext: {
-          chunks: allChunks
+          chunks: []
         }
       },
-      intentCost: intentCost,
+      intentCost: null,
       globalIntentInfos: existingGlobalIntentInfos
     };
   }
 
   /**
-   * Redéfinit handleIntent pour décrémenter le nombre de questions restantes
-   * Si c'est la dernière réponse (remainBilanQuestion devient 0), passe forceSummary=true pour que BaseChatBotService génère le résumé
-   * Sinon, génère manuellement la réponse et l'envoie via onIaResponse
+   * Redéfinit handleIntent pour gérer les réponses en batch (toutes en une fois)
+   * Toutes les réponses sont reçues en une fois (format bilan_answers), on force directement le résumé
    */
   protected override async handleIntent(
     context: HowanaContext,
@@ -344,43 +309,38 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     _autoResponse?: string // Paramètre optionnel pour compatibilité avec la signature parente
   ): Promise<HowanaContext> {
 
-    // Récupérer intent depuis le contexte
-    const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
-    const intent = currentIntentInfos?.intent as RecommendationIntent | undefined;
-
-    // Récupérer le nombre de questions restantes
-    const remainBilanQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
-    
-    // Décrémenter si supérieur à 0
-    let newRemainQuestion = remainBilanQuestion;
-    if (remainBilanQuestion !== undefined && remainBilanQuestion > 0) {
-      newRemainQuestion = remainBilanQuestion - 1;
-      context.metadata = {
-        ...context.metadata,
-        ['remainBilanQuestion']: newRemainQuestion
-      };
-      console.log(`📉 [BILAN] Décrémentation de remainBilanQuestion: ${remainBilanQuestion} -> ${newRemainQuestion}`);
-    }
-    
-    // Toujours calculer globalIntentInfos avant les handlers (avec userMessage pour les services qui en ont besoin)
-    let globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
-    
-    context.metadata = {
-      ...context.metadata,
-      ['globalIntentInfos']: globalIntentInfos
-    };
-
-
-    // Si c'est la dernière réponse (newRemainQuestion === 0), forcer la génération du résumé
-    if (newRemainQuestion === 0) {
-      console.log('✅ [BILAN] Dernière réponse détectée, génération du résumé au lieu de la réponse');
-      // Appeler la méthode parente uniquement pour le forceSummary
-      return super.handleIntent(context, userMessage, onIaResponse, true);
+    // Vérifier si le message contient toutes les réponses en une fois (format JSON stringifié)
+    let parsedMessage: any = null;
+    try {
+      parsedMessage = JSON.parse(userMessage);
+      if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
+        console.log('✅ [BILAN] Toutes les réponses reçues en une fois, génération directe du résumé');
+        
+        // Récupérer intent depuis le contexte
+        const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
+        const intent = currentIntentInfos?.intent as RecommendationIntent | undefined;
+        
+        // Calculer globalIntentInfos avec toutes les réponses
+        let globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
+        
+        context.metadata = {
+          ...context.metadata,
+          ['globalIntentInfos']: globalIntentInfos
+        };
+        
+        // Forcer directement la génération du résumé
+        return super.handleIntent(context, userMessage, onIaResponse, true);
+      }
+    } catch (parseError) {
+      // Ce n'est pas un JSON, ce n'est pas le format attendu
+      console.error(`❌ [BILAN] Message non-JSON et non-format bilan_answers:`, parseError);
+      // Retourner le contexte tel quel
+      return context;
     }
 
-    // Utiliser autoResponse pour passer le texte de la réponse à handleIntent
-    // handleIntent créera la structure aiResponse et continuera les calculs subséquents
-    return super.handleIntent(context, userMessage, onIaResponse, false, '');
+    // Si on arrive ici, le format n'est pas celui attendu
+    console.error(`❌ [BILAN] Format de message non reconnu`);
+    return context;
   }
 
   /**
@@ -1006,66 +966,23 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     return prompt;
   }
 
-
-  /**
-   * Schéma de sortie pour les messages en mode questions de bilan
-   * Inclut la question suivante et un commentaire sur l'état de l'univers actuel
-   */
-  protected override getAddMessageOutputSchema(context: HowanaContext, forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
-    const remainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
-    
-    // Si on est en mode questions de bilan, utiliser un schéma spécial
-    if (remainQuestion !== undefined && remainQuestion > 0) {
-      // Description demandant une réponse courte et conversationnelle qui fait suite à la dernière réponse
-      const description = `Message conversationnel court (≤ 30 mots) qui fait suite à la dernière réponse de l'utilisateur à la question posée.
-
-La réponse doit être dans l'écoute, bienveillante et empathique. Montre que tu as compris et accueille ce que l'utilisateur vient de partager. Reste dans l'écoute active, sans conseiller de pratique ou d'activité pour le moment.
-
-IMPORTANT : 
-- Le message doit rester court (≤ 30 mots) et conversationnel
-- Fais suite naturellement à la réponse de l'utilisateur
-- Reste dans l'écoute, montre de l'empathie et de la compréhension
-- N'inclus PAS de question dans ce message
-- Ne propose PAS de pratique ou d'activité, reste dans l'écoute
-- N'inclus PAS de quickReplies dans ce message`;
-      
-      return {
-        format: { 
-          type: "json_schema",
-          name: "BilanQuestionResponse",
-          schema: {
-            type: "object",
-            properties: {
-              response: {
-                type: "string",
-                description
-              }
-            },
-            required: ["response"],
-            additionalProperties: false
-          },
-          strict: true
-        }
-      };
-    }
-    
-    // Sinon, utiliser le comportement du parent
-    return super.getAddMessageOutputSchema(context, forceSummaryToolCall);
-  }
-
   /**
    * Construit la réponse finale en combinant le texte IA, la question et les quick replies
    * Dans le cas des questions de bilan, aiResponse.response est toujours du texte (string)
    */
   private buildFinalResponse(
     aiResponse: RecommendationMessageResponse,
-    questionIndex: number
+    questionIndex: number,
+    context: HowanaContext
   ): RecommendationMessageResponse {
 
     console.log('💬 [BILAN] buildFinalResponse - questionIndex:', questionIndex);
 
-    const currentQuestion = questionIndex >= 0 && questionIndex < BILAN_QUESTIONS.length 
-      ? BILAN_QUESTIONS[questionIndex] 
+    // Récupérer le questionnaire courant
+    const currentQuestionnaire = this.getCurrentQuestionnaire(context);
+    
+    const currentQuestion = questionIndex >= 0 && questionIndex < currentQuestionnaire.length 
+      ? currentQuestionnaire[questionIndex] 
       : null;
 
     if (!currentQuestion) {
@@ -1101,29 +1018,8 @@ IMPORTANT :
   }
 
   /**
-   * Redéfinit onGenerateFirstAiResponse pour initialiser remainBilanQuestion et ajouter la première question
-   */
-  protected override async onGenerateFirstAiResponse(
-    firstResponse: RecommendationMessageResponse,
-    context: HowanaContext
-  ): Promise<RecommendationMessageResponse> {
-
-    context.metadata = {
-      ...context.metadata,
-      ['remainBilanQuestion']: BILAN_QUESTIONS.length
-    };
-    
-    console.log(`📊 [BILAN] onGenerateFirstAiResponse - Initialisation de remainBilanQuestion à ${BILAN_QUESTIONS.length}`);
-    
-    // Mettre à jour le contexte dans la réponse
-    firstResponse.updatedContext = context;
-    
-    // Construire la réponse finale avec la première question (index 0) et les quick replies
-    return this.buildFinalResponse(firstResponse, 0);
-  }
-
-  /**
    * Redéfinit beforeAiResponseSend pour construire la réponse finale avec question et quick replies
+   * Détecte également les questionnaires reçus depuis l'IA et les stocke dans l'univers
    */
   protected override async beforeAiResponseSend(
     aiResponse: RecommendationMessageResponse, 
@@ -1134,30 +1030,52 @@ IMPORTANT :
       return aiResponse;
     }
     
-    // Récupérer la valeur actuelle de remainBilanQuestion
-    const currentRemainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
-    
-    console.log('💬 [BILAN] beforeAiResponseSend:', currentRemainQuestion);
-    
-    // Si on est en mode questions de bilan (y compris la première réponse)
-    if (currentRemainQuestion !== undefined && currentRemainQuestion > 0) {
-      // Calculer l'index de la question actuelle
-      // Si currentRemainQuestion === BILAN_QUESTIONS.length, alors index = 0 (première question)
-      const currentQuestionIndex = BILAN_QUESTIONS.length - currentRemainQuestion;
-      console.log('💬 [BILAN] beforeAiResponseSend - index:', currentQuestionIndex);
-      // Construire la réponse finale avec la question et les quick replies
-      return this.buildFinalResponse(aiResponse, currentQuestionIndex);
+    // Vérifier si la réponse contient un nouveau questionnaire
+    const responseData = aiResponse.response as any;
+    if (responseData && 'questionnaire' in responseData && Array.isArray(responseData.questionnaire)) {
+      console.log(`📋 [BILAN] Nouveau questionnaire reçu depuis l'IA: ${responseData.questionnaire.length} questions`);
+      
+      // Convertir le questionnaire en format avec chunks
+      const newQuestionnaire = this.convertQuestionnaireToWithChunks(responseData.questionnaire);
+      
+      // Récupérer les questionnaires existants depuis l'univers
+      const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;
+      const existingQuestionnaires = bilanUniverContext?.questionnaires?.value || [];
+      
+      // Ajouter le nouveau questionnaire à la liste
+      const updatedQuestionnaires = [...existingQuestionnaires, newQuestionnaire];
+      
+      // Mettre à jour le contexte avec le nouveau questionnaire
+      context.metadata = {
+        ...context.metadata,
+        ['globalIntentInfos']: {
+          ...context.metadata?.['globalIntentInfos'],
+          bilanUniverContext: {
+            ...bilanUniverContext,
+            questionnaires: {
+              info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
+              value: updatedQuestionnaires
+            }
+          }
+        }
+      };
+      
+      // Mettre à jour le contexte dans la réponse
+      aiResponse.updatedContext = context;
+      
+      console.log(`✅ [BILAN] Questionnaire ajouté à l'univers (${updatedQuestionnaires.length} questionnaire(s) au total)`);
     }
-
-    // Sinon, retourner la réponse telle quelle
-    return aiResponse;
+    
+    // Pour la première réponse uniquement, construire la réponse avec la première question
+    // (index 0) et les quick replies
+    console.log('💬 [BILAN] beforeAiResponseSend - Première réponse, ajout de la première question');
+    return this.buildFinalResponse(aiResponse, 0, context);
   }
 
 
   /**
    * Schéma de sortie pour le calcul d'intent spécifique aux bilans
-   * Si on est encore dans les réponses aux questions (remainBilanQuestion > 0),
-   * retourne un schéma de chunks typés, sinon retourne le schéma du parent
+   * Retourne un schéma de chunks typés pour extraire les informations des réponses
    */
   protected override getIntentSchema(_context: HowanaContext): ChatBotOutputSchema {
 
@@ -1215,80 +1133,133 @@ IMPORTANT :
   /**
    * Redéfinit computeGlobalIntentInfos pour calculer l'univers et créer globalIntentInfos
    * Appelle computeUniverse et crée globalIntentInfos avec les résultats de recherche
+   * Gère à la fois le format batch (toutes les réponses en une fois) et le format individuel
    * @param intent L'intent calculé
    * @param context Le contexte de la conversation
-   * @param userMessage Le message de l'utilisateur (réponse à la question précédente)
+   * @param userMessage Le message de l'utilisateur (réponse à la question précédente ou toutes les réponses)
    */
   protected override async computeGlobalIntentInfos(
     intent: any, 
-    context: HowanaContext, 
+    _context: HowanaContext, 
     userMessage?: string
   ): Promise<any> {
   
-    // Récupérer le bilanUniverContext précédent depuis les métadonnées
-    const previousBilanUniverContext = (context.metadata?.['globalIntentInfos'] as BilanGlobalIntentInfos | undefined)?.bilanUniverContext;
-  
-    // Récupérer remainQuestion directement depuis le contexte
-    const remainQuestion = context.metadata?.['remainBilanQuestion'] as number | undefined;
+    // Récupérer le questionnaire courant
+    const currentQuestionnaire = this.getCurrentQuestionnaire(_context);
     
-    // Calculer l'index de la question précédente (celle à laquelle l'utilisateur répond)
-    // Si remainQuestion est le nombre de questions restantes, la question précédente est à l'index:
-    // BILAN_QUESTIONS.length - remainQuestion - 1
-    // (car la question actuelle est à l'index BILAN_QUESTIONS.length - remainQuestion)
-    const previousQuestionIndex = remainQuestion !== undefined && remainQuestion >= 0
-      ? BILAN_QUESTIONS.length - remainQuestion - 1
-      : -1;
+    // Vérifier si le message contient toutes les réponses en une fois (format JSON stringifié)
+    let parsedMessage: any = null;
+    let questionResponses: Array<{ question: string; index: number; response: string }> = [];
+    let totalQuestions = currentQuestionnaire.length;
+    let answeredQuestions = totalQuestions;
     
-    console.log('💬 [BILAN] computeGlobalIntentInfos - previousQuestionIndex:', previousQuestionIndex);
-
-    // Récupérer la question précédente directement depuis BILAN_QUESTIONS
-    const previousQuestion = previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length
-      ? BILAN_QUESTIONS[previousQuestionIndex]?.question
-      : undefined;
-    
-    // Créer l'objet { question, index, response } pour la question actuelle
-    // Parser la réponse : si c'est un entier, c'est un index, sinon c'est du texte custom (index = -1)
-    let responseIndex = -1;
-    if (userMessage) {
-      const parsedIndex = parseInt(userMessage, 10);
-      if (!isNaN(parsedIndex) && parsedIndex >= 0) {
-        responseIndex = parsedIndex;
-      }
-    }
-    
-    // Convertir l'index en texte correspondant pour l'univers si c'est un index valide
-    let responseText = userMessage || '';
-    if (responseIndex >= 0 && previousQuestionIndex >= 0 && previousQuestionIndex < BILAN_QUESTIONS.length) {
-      const questionData = BILAN_QUESTIONS[previousQuestionIndex];
-      if (questionData && responseIndex < questionData.quickReplies.length) {
-        const quickReply = questionData.quickReplies[responseIndex];
-        if (quickReply) {
-          responseText = quickReply.text;
+    try {
+      parsedMessage = JSON.parse(userMessage || '');
+      if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
+        console.log(`📋 [BILAN] computeGlobalIntentInfos - Traitement de ${parsedMessage.answers.length} réponses en batch`);
+        
+        // Construire les questionResponses à partir de toutes les réponses
+        for (const answer of parsedMessage.answers) {
+          const questionIndex = answer.questionIndex;
+          const answerIndex = answer.answerIndex;
+          const answerText = answer.answerText;
+          
+          // Récupérer la question correspondante depuis le questionnaire courant
+          const questionData = questionIndex >= 0 && questionIndex < currentQuestionnaire.length
+            ? currentQuestionnaire[questionIndex]
+            : null;
+          
+          const question = questionData?.question || `Question ${questionIndex + 1}`;
+          
+          // Si answerIndex est null, c'est une réponse custom (index = -1)
+          const responseIndex = answerIndex !== null ? answerIndex : -1;
+          
+          questionResponses.push({
+            question,
+            index: responseIndex,
+            response: answerText
+          });
         }
+        
+        answeredQuestions = questionResponses.length;
+        console.log(`✅ [BILAN] computeGlobalIntentInfos - ${answeredQuestions} réponses traitées en batch`);
       }
+    } catch (parseError) {
+      // Ce n'est pas un JSON, ce n'est pas le format attendu
+      console.error(`❌ [BILAN] computeGlobalIntentInfos - Message non-JSON et non-format bilan_answers:`, parseError);
+      // Récupérer les questionnaires existants pour les conserver
+      const previousBilanUniverContext = (_context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
+      const existingQuestionnaires = previousBilanUniverContext?.questionnaires?.value || [];
+      
+      // Retourner un globalIntentInfos vide mais en conservant les questionnaires existants
+      return {
+        bilanUniverContext: {
+          families: { info: '', value: [] },
+          practices: { info: '', value: [] },
+          activities: { info: '', value: [] },
+          howerAngels: { info: '', value: [] },
+          questionResponses: { info: '', value: [] },
+          chunks: { info: '', value: [] },
+          questionnaires: {
+            info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
+            value: existingQuestionnaires
+          },
+          computedAt: new Date().toISOString()
+        }
+      };
     }
     
-    const currentQuestionResponse: { question: string; index: number; response: string } | undefined = userMessage ? {
-      question: previousQuestion!,
-      index: responseIndex,
-      response: responseText
-    } : undefined;
-    
-    // Accumuler les questions-réponses précédentes avec la nouvelle
-    const questionResponses: Array<{ question: string; index: number; response: string }> = 
-      previousBilanUniverContext?.questionResponses?.value || [];
-    
-    console.log('💬 [BILAN] computeGlobalIntentInfos - previousBilanUniverContext.questionResponses.length:', questionResponses.length);
-
-    // Ajouter la nouvelle question-réponse si elle existe
-    if (currentQuestionResponse) {
-      questionResponses.push(currentQuestionResponse);
+    // Si on n'a pas traité en batch, retourner un globalIntentInfos vide
+    if (questionResponses.length === 0) {
+      console.error(`❌ [BILAN] computeGlobalIntentInfos - Aucune réponse traitée`);
+      
+      // Récupérer les questionnaires existants pour les conserver
+      const previousBilanUniverContext = (_context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
+      const existingQuestionnaires = previousBilanUniverContext?.questionnaires?.value || [];
+      
+      return {
+        bilanUniverContext: {
+          families: { info: '', value: [] },
+          practices: { info: '', value: [] },
+          activities: { info: '', value: [] },
+          howerAngels: { info: '', value: [] },
+          questionResponses: { info: '', value: [] },
+          chunks: { info: '', value: [] },
+          questionnaires: {
+            info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
+            value: existingQuestionnaires
+          },
+          computedAt: new Date().toISOString()
+        }
+      };
     }
     
     // Calculer l'univers avec l'intent (qui contient les chunks) et toutes les questions-réponses
-    const totalQuestions = BILAN_QUESTIONS.length;
-    const answeredQuestions = totalQuestions - (remainQuestion || 0);
     const universe = await this.computeUniverse(intent as BilanQuestionIntent, questionResponses, totalQuestions, answeredQuestions);
+    
+    // Récupérer les questionnaires existants depuis l'univers précédent
+    const previousBilanUniverContext = (_context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
+    let existingQuestionnaires = previousBilanUniverContext?.questionnaires?.value || [];
+    
+    // Si aucun questionnaire n'existe, initialiser avec INITIAL_BILAN_QUESTIONS
+    if (existingQuestionnaires.length === 0) {
+      existingQuestionnaires = [INITIAL_BILAN_QUESTIONS];
+      console.log(`📋 [BILAN] Initialisation avec INITIAL_BILAN_QUESTIONS`);
+    }
+    
+    // Ajouter le questionnaire courant s'il n'est pas déjà dans la liste
+    const questionnaires: BilanQuestionnaireWithChunks[] = [...existingQuestionnaires];
+    const isQuestionnaireAlreadyStored = questionnaires.some(q => 
+      q.length === currentQuestionnaire.length && 
+      q.every((question, index) => 
+        question.question === currentQuestionnaire[index]?.question
+      )
+    );
+    
+    if (!isQuestionnaireAlreadyStored) {
+      questionnaires.push(currentQuestionnaire);
+      console.log(`📋 [BILAN] Questionnaire courant ajouté à la liste (${questionnaires.length} questionnaire(s) au total)`);
+    }
     
     // Créer globalIntentInfos avec les résultats de l'univers
     return {
@@ -1299,6 +1270,10 @@ IMPORTANT :
         howerAngels: universe.howerAngels,
         questionResponses: universe.questionResponses,
         chunks: universe.chunks,
+        questionnaires: {
+          info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
+          value: questionnaires
+        },
         computedAt: new Date().toISOString()
       }
     };
