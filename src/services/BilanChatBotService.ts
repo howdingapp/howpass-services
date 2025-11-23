@@ -1110,7 +1110,7 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
                           enum: ["heart", "zap", "sleep", "alert-triangle", "smile", "explore"]
                         }
                       },
-                      required: ["text"],
+                      required: ["text", "icon"],
                       additionalProperties: false
                     },
                     description: "Réponses rapides suggérées pour cette question"
