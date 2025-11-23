@@ -1159,7 +1159,7 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
     
     // Vérifier si la réponse contient un nouveau questionnaire
     const responseData = aiResponse.response as any;
-    console.log(`📋 [BILAN] responseData with new questionnaire: `, responseData.questionnaire ? true : false, JSON.stringify(responseData.questionnaire));
+    console.log(`📋 [BILAN] responseData with new questionnaire: `, responseData.questionnaire ? true : false, JSON.stringify(aiResponse));
     if (responseData && responseData.questionnaire) {
       console.log(`📋 [BILAN] Nouveau questionnaire reçu depuis l'IA: ${responseData.questionnaire.length} questions`);
       
