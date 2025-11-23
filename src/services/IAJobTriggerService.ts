@@ -190,6 +190,8 @@ export class IAJobTriggerService {
         return 'high';
       case 'generate_summary':
         return 'low';
+      case 'generate_unfinished_exchange':
+        return 'low';
       default:
         return 'medium';
     }

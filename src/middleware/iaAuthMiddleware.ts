@@ -162,7 +162,7 @@ export async function validateIAToken(req: IAAuthenticatedRequest, res: Response
     }
 
     // Validation du type de tâche
-    const validTypes = ['generate_response', 'generate_summary', 'generate_first_response'];
+    const validTypes = ['generate_response', 'generate_summary', 'generate_first_response', 'generate_unfinished_exchange'];
     if (!validTypes.includes(req.body.type)) {
       console.warn('⚠️ Type de tâche IA invalide:', req.body.type);
       res.status(400).json({
