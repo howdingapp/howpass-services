@@ -1145,7 +1145,8 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
     
     // Vérifier si la réponse contient un nouveau questionnaire
     const responseData = aiResponse.response as any;
-    if (responseData && typeof responseData === 'object' && !Array.isArray(responseData) && 'questionnaire' in responseData && Array.isArray(responseData.questionnaire)) {
+    console.log(`📋 [BILAN] responseData with new questionnaire: `, responseData.questionnaire ? true : false);
+    if (responseData && responseData.questionnaire) {
       console.log(`📋 [BILAN] Nouveau questionnaire reçu depuis l'IA: ${responseData.questionnaire.length} questions`);
       
       // Convertir le questionnaire en format avec chunks
@@ -1359,17 +1360,9 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
     
     // Ajouter le questionnaire courant s'il n'est pas déjà dans la liste
     const questionnaires: BilanQuestionnaireWithChunks[] = [...existingQuestionnaires];
-    const isQuestionnaireAlreadyStored = questionnaires.some(q => 
-      q.length === currentQuestionnaire.length && 
-      q.every((question, index) => 
-        question.question === currentQuestionnaire[index]?.question
-      )
-    );
-    
-    if (!isQuestionnaireAlreadyStored) {
-      questionnaires.push(currentQuestionnaire);
-      console.log(`📋 [BILAN] Questionnaire courant ajouté à la liste (${questionnaires.length} questionnaire(s) au total)`);
-    }
+
+    questionnaires.push(currentQuestionnaire);
+    console.log(`📋 [BILAN] Questionnaire courant ajouté à la liste (${questionnaires.length} questionnaire(s) au total)`);
     
     // Récupérer toutes les réponses de tous les questionnaires depuis le contexte
     // Les réponses précédentes sont stockées dans questionResponses de l'univers précédent
