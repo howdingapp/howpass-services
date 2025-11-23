@@ -1119,10 +1119,10 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
                 required: ["question", "quickReplies"],
                 additionalProperties: false
               },
-              description: "Nouveau questionnaire personnalisé basé sur les réponses précédentes. Génère 5-8 questions pertinentes pour approfondir la compréhension du profil et des particularités de l'utilisateur."
+              description: "Nouveau questionnaire personnalisé basé sur les réponses précédentes. Génère des questions pertinentes pour approfondir la compréhension du profil et des particularités de l'utilisateur."
             }
           },
-          required: ["response"],
+          required: ["response", "questionnaire"],
           additionalProperties: false
         },
         strict: true
