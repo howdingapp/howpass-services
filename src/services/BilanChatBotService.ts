@@ -348,6 +348,9 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         const updatedQuestionnaires = updatedBilanUniverContext?.questionnaires?.value || [];
         const updatedQuestionnairesCount = updatedQuestionnaires.length;
         
+        return super.handleIntent(context, userMessage, onIaResponse, true);
+
+        /*
         // Si on a maintenant 2 questionnaires (INITIAL + 1 relance), forcer le calcul de l'univers et générer le résumé
         if (updatedQuestionnairesCount >= 2) {
           console.log(`✅ [BILAN] ${updatedQuestionnairesCount} questionnaires détectés, calcul de l'univers et génération du résumé`);
@@ -396,6 +399,7 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
     // Si on arrive ici, le format n'est pas celui attendu
     console.error(`❌ [BILAN] Format de message non reconnu`);
     return context;
+    */
   }
 
   /**
