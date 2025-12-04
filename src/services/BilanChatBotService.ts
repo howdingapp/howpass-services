@@ -343,51 +343,8 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           ['globalIntentInfos']: globalIntentInfos
         };
         
-        // Vérifier le nouveau nombre de questionnaires après computeGlobalIntentInfos
-        const updatedBilanUniverContext = globalIntentInfos?.bilanUniverContext as BilanUniverContext | undefined;
-        const updatedQuestionnaires = updatedBilanUniverContext?.questionnaires?.value || [];
-        const updatedQuestionnairesCount = updatedQuestionnaires.length;
-        
         return super.handleIntent(context, userMessage, onIaResponse, true);
 
-        /*
-        // Si on a maintenant 2 questionnaires (INITIAL + 1 relance), forcer le calcul de l'univers et générer le résumé
-        if (updatedQuestionnairesCount >= 2) {
-          console.log(`✅ [BILAN] ${updatedQuestionnairesCount} questionnaires détectés, calcul de l'univers et génération du résumé`);
-          // Forcer directement la génération du résumé
-          return super.handleIntent(context, userMessage, onIaResponse, true);
-        } else {
-          console.log(`📋 [BILAN] ${updatedQuestionnairesCount} questionnaire(s), l'IA va générer un nouveau questionnaire`);
-          
-          // Récupérer les questionnaires et réponses pour les inclure dans l'instruction
-          const questionnaires = updatedBilanUniverContext?.questionnaires?.value || [];
-          const questionResponses = updatedBilanUniverContext?.questionResponses?.value || [];
-          
-          // Construire un message enrichi avec l'instruction pour générer le questionnaire
-          const questionnaireInstruction = `\n\n[INSTRUCTION POUR GÉNÉRATION DU QUESTIONNAIRE]
-
-À partir du questionnaire précédent et des réponses de l'utilisateur que je t'ai fournis, j'aimerais que tu génères un prochain questionnaire personnalisé.
-
-OBJECTIFS DU QUESTIONNAIRE :
-- Le questionnaire doit contenir entre 10 et 15 questions
-- L'analyse des réponses permettra de préciser les éléments pertinents du contexte (profil de vie, demande de précision sur une réponse, etc.)
-- Ce sera le dernier questionnaire, donc il faut vraiment être complet et couvrir tous les aspects nécessaires pour permettre une analyse complète du profil de l'utilisateur
-- Les questions doivent être pertinentes et adaptées aux réponses précédentes de l'utilisateur
-- Chaque question doit avoir des réponses rapides (quickReplies) avec des options pertinentes
-
-CONTEXTE DISPONIBLE :
-- Nombre de questionnaires précédents : ${questionnaires.length}
-- Nombre de réponses collectées : ${questionResponses.length}
-- Les réponses précédentes sont disponibles dans le message JSON que je t'ai fourni
-
-IMPORTANT : Génère un questionnaire structuré avec des questions claires et des réponses rapides appropriées pour chaque question. Le questionnaire doit être retourné dans le champ "questionnaire" de ta réponse JSON.`;
-
-          // Construire le message enrichi avec les réponses et l'instruction
-          const enrichedUserMessage = `${userMessage}${questionnaireInstruction}`;
-          
-          // Permettre à l'IA de générer un nouveau questionnaire
-          return super.handleIntent(context, enrichedUserMessage, onIaResponse, false);
-        }
       }
     } catch (parseError) {
       // Ce n'est pas un JSON, ce n'est pas le format attendu
@@ -399,7 +356,6 @@ IMPORTANT : Génère un questionnaire structuré avec des questions claires et d
     // Si on arrive ici, le format n'est pas celui attendu
     console.error(`❌ [BILAN] Format de message non reconnu`);
     return context;
-    */
   }
 
   /**
