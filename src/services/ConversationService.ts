@@ -31,8 +31,18 @@ export class ConversationService {
         lastName: '',
         age: 0,
         experience: ''
-      }
+      },
+      metadata: {}
     } as HowanaContext;
+
+    // Si des réponses au questionnaire sont fournies, les stocker dans le contexte
+    if (request.questionnaireAnswers && request.questionnaireAnswers.length > 0) {
+      console.log(`📋 Stockage de ${request.questionnaireAnswers.length} réponses au questionnaire dans le contexte`);
+      context.metadata = {
+        ...context.metadata,
+        questionnaireAnswers: request.questionnaireAnswers
+      };
+    }
 
     console.log('🔍 Conversation context:', context);
 

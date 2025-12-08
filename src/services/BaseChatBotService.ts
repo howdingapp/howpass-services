@@ -871,15 +871,41 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
   
   /**
    * Valide une réponse IA générée
+   * Implémentation de base qui retourne isValid: true sans modification
+   * Peut être surchargée dans les sous-classes pour une validation spécifique
    * @param response La réponse IA à valider
    * @param context Le contexte de la conversation
    * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (T optionnel)
    */
-  protected abstract validateResponse(response: T, context: HowanaContext): Promise<{
+  protected async validateResponse(_response: T, _context: HowanaContext): Promise<{
     isValid: boolean;
     reason?: string;
     finalObject?: T;
-  }>;
+  }> {
+    // Implémentation de base : retourne simplement que la réponse est valide
+    return {
+      isValid: true
+    };
+  }
+  
+  /**
+   * Valide une première réponse IA générée
+   * Implémentation de base qui retourne isValid: true sans modification
+   * Peut être surchargée dans les sous-classes pour une validation spécifique
+   * @param response La première réponse IA à valider
+   * @param context Le contexte de la conversation
+   * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (T optionnel)
+   */
+  public async validateFirstResponse(_response: T, _context: HowanaContext): Promise<{
+    isValid: boolean;
+    reason?: string;
+    finalObject?: T;
+  }> {
+    // Implémentation de base : retourne simplement que la réponse est valide
+    return {
+      isValid: true
+    };
+  }
   
   /**
    * Schéma de sortie pour startConversation (null si pas de schéma spécifique)

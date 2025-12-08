@@ -129,6 +129,13 @@ export interface StartConversationRequest {
   userId: string;
   type: 'bilan' | 'activity' | 'recommandation';
   aiResponseId?: string;
+  questionnaireAnswers?: Array<{
+    questionIndex: number;
+    answerIndex: number | null;
+    answerText: string;
+    moreResponse?: string; // Réponse supplémentaire si l'utilisateur a fourni des précisions
+    moreResponseType?: 'text' | 'address' | 'gps'; // Type de la réponse supplémentaire
+  }>; // Réponses au questionnaire pour le bilan
 }
 
 export interface StartConversationResponse {

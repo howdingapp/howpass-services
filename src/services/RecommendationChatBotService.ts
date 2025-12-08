@@ -3250,7 +3250,7 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
    * @param context Le contexte de la conversation
    * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (T optionnel)
    */
-  protected async validateResponse(
+  protected override async validateResponse(
     response: RecommendationMessageResponse, 
     context: HowanaContext
   ): Promise<{
@@ -3447,6 +3447,25 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     return {
       isValid: true
     };
+  }
+
+  /**
+   * Valide une première réponse IA générée pour les recommandations
+   * Utilise la même logique que validateResponse
+   * @param response La première réponse IA à valider
+   * @param context Le contexte de la conversation
+   * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (RecommendationMessageResponse optionnel)
+   */
+  public override async validateFirstResponse(
+    response: RecommendationMessageResponse, 
+    context: HowanaContext
+  ): Promise<{
+    isValid: boolean;
+    reason?: string;
+    finalObject?: RecommendationMessageResponse;
+  }> {
+    // Pour la première réponse, on utilise la même validation que validateResponse
+    return this.validateResponse(response, context);
   }
 
 }

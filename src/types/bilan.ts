@@ -196,6 +196,8 @@ export interface BilanQuestionQuickReplyWithChunks {
   text: string;
   icon?: string;
   chunks: BilanChunk[];
+  askMore?: boolean; // Si true, proposer de demander des précisions après ce choix
+  answerType?: 'text' | 'address' | 'takeGeoloc' | 'askPrecision'; // Type de réponse attendu
 }
 
 /**

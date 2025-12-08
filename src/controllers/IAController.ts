@@ -621,18 +621,47 @@ export class IAController {
     const firstResponseResult = await chatBotService.generateFirstResponse(context);
     
     // Mettre à jour le contexte avec les nouvelles informations
-    const updatedContext = { ...context };
+    let updatedContext = { ...context };
     updatedContext.previousCallId = firstResponseResult.messageId;
     updatedContext.previousResponse = firstResponseResult.response;
+    
+    // Utiliser le contexte mis à jour depuis la réponse si disponible
+    if (firstResponseResult.updatedContext) {
+      updatedContext = firstResponseResult.updatedContext;
+    }
 
-    // Créer l'objet de réponse IA
-    const iaResponse = {
+    // Créer l'objet de réponse IA initial
+    let iaResponse: any = {
       ...firstResponseResult,
       messageId: firstResponseResult.messageId || `msg_${Date.now()}`,
       type: 'first_response',
       recommendations: context.recommendations || { activities: [], practices: [] },
       hasRecommendations: context.hasRecommendations || false
     };
+
+    // Valider et corriger la première réponse
+    // La validation est normalement faite dans chaque service via validateFirstResponse
+    console.log('🔍 Validation de la première réponse');
+    const validation = await chatBotService.validateFirstResponse(iaResponse, updatedContext);
+    
+    if (validation.isValid) {
+      // Si un finalObject est fourni, l'utiliser (réponse corrigée)
+      if (validation.finalObject) {
+        console.log('✅ Validation réussie avec finalObject fourni (réponse corrigée)');
+        iaResponse = validation.finalObject;
+      } else {
+        console.log('✅ Validation réussie');
+      }
+    } else {
+      // Si la validation échoue mais qu'un finalObject est fourni, l'utiliser quand même
+      if (validation.finalObject) {
+        console.log('⚠️ Validation échouée mais finalObject fourni, utilisation de la réponse corrigée');
+        iaResponse = validation.finalObject;
+      } else {
+        console.warn('⚠️ Validation échouée:', validation.reason);
+        // On continue quand même avec la réponse originale pour ne pas bloquer le processus
+      }
+    }
 
     console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
 

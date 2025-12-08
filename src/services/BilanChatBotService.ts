@@ -20,6 +20,134 @@ import * as crypto from 'crypto';
 export class BilanChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
   
   /**
+   * Redéfinit generateFirstResponse pour gérer les réponses du questionnaire
+   * Si questionnaireAnswers est présent, on génère directement le summary
+   */
+  public override async generateFirstResponse(context: HowanaContext): Promise<RecommendationMessageResponse> {
+    // Vérifier si des réponses au questionnaire sont présentes dans le contexte
+    const questionnaireAnswers = context.metadata?.['questionnaireAnswers'] as Array<{
+      questionIndex: number;
+      answerIndex: number | null;
+      answerText: string;
+      moreResponse?: string;
+      moreResponseType?: 'text' | 'address' | 'gps';
+    }> | undefined;
+
+    if (questionnaireAnswers && questionnaireAnswers.length > 0) {
+      console.log(`📋 [BILAN] generateFirstResponse - ${questionnaireAnswers.length} réponses au questionnaire détectées, génération directe du summary`);
+
+      // Convertir les réponses en format bilan_answers
+      const bilanAnswers = questionnaireAnswers.map(answer => ({
+        questionIndex: answer.questionIndex,
+        answerIndex: answer.answerIndex,
+        answerText: answer.answerText,
+        ...(answer.moreResponse && {
+          moreResponse: answer.moreResponse,
+          moreResponseType: answer.moreResponseType || 'text'
+        })
+      }));
+      
+      // Construire le message au format bilan_answers
+      const userMessage = JSON.stringify({
+        type: 'bilan_answers',
+        answers: bilanAnswers
+      });
+      
+      // Calculer l'intent avec les réponses (cela calculera les chunks)
+      const intentResult = await this.computeIntent(context, userMessage);
+      const intent = intentResult.intent as BilanQuestionIntent;
+      
+      // Mettre à jour le contexte avec l'intent
+      context.metadata = {
+        ...context.metadata,
+        ['currentIntentInfos']: {
+          intent: intent,
+          intentCost: intentResult.intentCost
+        }
+      };
+      
+      // Calculer globalIntentInfos (cela calculera l'univers)
+      const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
+      
+      // Mettre à jour le contexte avec globalIntentInfos
+      context.metadata = {
+        ...context.metadata,
+        ['globalIntentInfos']: globalIntentInfos
+      };
+      
+      // Si des réponses custom sont présentes, appeler handleIntent pour calculer les chunks
+      const hasCustomResponses = bilanAnswers.some(answer => 
+        answer.answerIndex === null || answer.moreResponse
+      );
+      
+      if (hasCustomResponses) {
+        console.log('🔄 [BILAN] Réponses custom détectées, appel de handleIntent');
+        // handleIntent sera appelé automatiquement lors de la génération de la réponse
+        // On passe un callback vide car on génère directement le summary
+        await this.handleIntent(context, userMessage, async () => {}, true);
+      }
+      
+      // Générer directement le summary en utilisant le schéma de summary
+      const summarySchema = this.getSummaryOutputSchema(context);
+      const systemPrompt = await this.buildSystemPrompt(context);
+      
+      // Construire un prompt pour générer le summary
+      const summaryPrompt = "Génère le résumé du bilan de bien-être basé sur les réponses au questionnaire fournies.";
+      
+      console.log('🔍 [BILAN] Génération du summary avec le schéma de sortie');
+      
+      const result = await this.openai.responses.create({
+        model: this.AI_MODEL,
+        input: [
+          {
+            role: "user",
+            content: [{ type: "input_text", text: summaryPrompt }],
+          },
+          {
+            type: "message",
+            role: "system",
+            content: [{ 
+              type: "input_text", 
+              text: systemPrompt
+            }],
+            status: "completed",
+          },
+        ],
+        text: summarySchema
+      });
+      
+      // Récupérer le messageId
+      const messageId = result.id;
+      const messageOutput = result.output.find(output => output.type === "message");
+      const responseText = (messageOutput?.content?.[0] && 'text' in messageOutput.content[0]) 
+        ? messageOutput.content[0].text 
+        : '';
+      
+      // Parser la réponse JSON
+      let parsedResponse: any;
+      try {
+        parsedResponse = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ [BILAN] Erreur lors du parsing de la réponse summary:', parseError);
+        parsedResponse = { response: responseText };
+      }
+      
+      // Mettre à jour le contexte avec le messageId
+      context.previousCallId = messageId;
+      
+      return {
+        response: responseText,
+        messageId: messageId,
+        updatedContext: context,
+        extractedData: parsedResponse
+      } as RecommendationMessageResponse;
+    }
+    
+    // Comportement par défaut : appeler la méthode parent
+    return super.generateFirstResponse(context);
+  }
+  
+  /**
    * Calcule un hash MD5 d'un questionnaire pour détecter les doublons
    * Le hash est basé uniquement sur les questions
    */
@@ -1244,12 +1372,12 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
    */
   protected override async computeGlobalIntentInfos(
     intent: any, 
-    _context: HowanaContext, 
+    context: HowanaContext, 
     userMessage?: string
   ): Promise<any> {
   
     // Récupérer le questionnaire courant
-    const currentQuestionnaire = this.getCurrentQuestionnaire(_context);
+    const currentQuestionnaire = this.getCurrentQuestionnaire(context);
     
     // Vérifier si le message contient toutes les réponses en une fois (format JSON stringifié)
     let parsedMessage: any = null;
@@ -1266,7 +1394,12 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         for (const answer of parsedMessage.answers) {
           const questionIndex = answer.questionIndex;
           const answerIndex = answer.answerIndex;
-          const answerText = answer.answerText;
+          let answerText = answer.answerText;
+          
+          // Si moreResponse est présent, l'ajouter à la réponse
+          if (answer.moreResponse) {
+            answerText = `${answerText}${answer.moreResponse ? ' ' + answer.moreResponse : ''}`;
+          }
           
           // Récupérer la question correspondante depuis le questionnaire courant
           const questionData = questionIndex >= 0 && questionIndex < currentQuestionnaire.length
@@ -1292,7 +1425,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       // Ce n'est pas un JSON, ce n'est pas le format attendu
       console.error(`❌ [BILAN] computeGlobalIntentInfos - Message non-JSON et non-format bilan_answers:`, parseError);
       // Récupérer les questionnaires existants pour les conserver
-      const previousBilanUniverContext = (_context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
+      const previousBilanUniverContext = (context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
       const existingQuestionnaires = previousBilanUniverContext?.questionnaires?.value || [];
       
       // Retourner un globalIntentInfos vide mais en conservant les questionnaires existants
@@ -1318,7 +1451,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       console.error(`❌ [BILAN] computeGlobalIntentInfos - Aucune réponse traitée`);
       
       // Récupérer les questionnaires existants pour les conserver
-      const previousBilanUniverContext = (_context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
+      const previousBilanUniverContext = (context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
       const existingQuestionnaires = previousBilanUniverContext?.questionnaires?.value || [];
       
       return {
@@ -1339,7 +1472,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     }
     
     // Récupérer les questionnaires existants depuis l'univers précédent
-    const previousBilanUniverContext = (_context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
+    const previousBilanUniverContext = (context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
     let existingQuestionnaires = previousBilanUniverContext?.questionnaires?.value || [];
     
     // Si aucun questionnaire n'existe, initialiser avec INITIAL_BILAN_QUESTIONS
@@ -1403,7 +1536,8 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         allQuestionResponses, 
         questionnaires, // Passer tous les questionnaires
         totalQuestions, 
-        answeredQuestions
+        answeredQuestions,
+        context // Passer le contexte pour accéder aux questionnaireAnswers
       );
       
       // Créer globalIntentInfos avec les résultats de l'univers
@@ -1470,7 +1604,8 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     questionResponses?: Array<{ question: string; index: number; response: string }>,
     questionnaires?: BilanQuestionnaireWithChunks[],
     totalQuestions?: number,
-    answeredQuestions?: number
+    answeredQuestions?: number,
+    context?: HowanaContext
   ): Promise<{
     families: {
       info: string;
@@ -1607,8 +1742,52 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     
     console.log(`🔍 [BILAN] Calcul de l'univers avec ${allChunksTexts.length} chunks de texte`);
     
+    // Extraire l'adresse ou la position GPS depuis les réponses du questionnaire
+    let address: string | undefined;
+    let gpsPosition: { latitude: number; longitude: number } | undefined;
+    
+    // Parcourir les réponses pour trouver l'adresse ou la position GPS
+    // Note: Pour l'instant, l'adresse/GPS n'est pas utilisée directement dans les recherches
+    // mais est stockée pour utilisation future
+    if (questionResponses && context) {
+      // Chercher dans le contexte les réponses du questionnaire original
+      const questionnaireAnswers = context.metadata?.['questionnaireAnswers'] as Array<{
+          questionIndex: number;
+          answerIndex: number | null;
+          answerText: string;
+          moreResponse?: string;
+          moreResponseType?: 'text' | 'address' | 'gps';
+        }> | undefined;
+        
+        if (questionnaireAnswers) {
+          for (const answer of questionnaireAnswers) {
+            if (answer.moreResponseType === 'address' && answer.moreResponse) {
+              address = answer.moreResponse;
+            } else if (answer.moreResponseType === 'gps' && answer.moreResponse) {
+              try {
+                const gpsData = JSON.parse(answer.moreResponse);
+                if (gpsData.latitude && gpsData.longitude) {
+                  gpsPosition = { latitude: gpsData.latitude, longitude: gpsData.longitude };
+                }
+              } catch (e) {
+                console.warn('⚠️ [BILAN] Erreur lors du parsing de la position GPS:', e);
+              }
+            }
+          }
+        }
+    }
+    
+    if (address) {
+      console.log(`📍 [BILAN] Adresse trouvée pour la recherche: ${address}`);
+    }
+    if (gpsPosition) {
+      console.log(`📍 [BILAN] Position GPS trouvée pour la recherche: ${gpsPosition.latitude}, ${gpsPosition.longitude}`);
+    }
+    
     // Réaliser les recherches sémantiques en parallèle avec withMatchInfos pour récupérer les chunks qui ont permis le matching
     // Les fonctions de recherche font maintenant le regroupement et le tri en interne
+    // Note: Pour l'instant, les fonctions de recherche ne prennent pas en compte l'adresse/GPS directement
+    // L'adresse/GPS sera utilisée ultérieurement pour filtrer les résultats si nécessaire
     const [practicesResults, activitiesResults, howerAngelsResult] = await Promise.all([
       this.supabaseService.searchPracticesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
       this.supabaseService.searchActivitiesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
@@ -1918,7 +2097,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
    * @param context Le contexte de la conversation
    * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (T optionnel)
    */
-  protected async validateResponse(
+  protected override async validateResponse(
     response: RecommendationMessageResponse, 
     context: HowanaContext
   ): Promise<{
@@ -2115,6 +2294,26 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     return {
       isValid: true
     };
+  }
+
+  /**
+   * Valide une première réponse IA générée pour le bilan
+   * Utilise la même logique que validateResponse mais adaptée pour la première réponse
+   * @param response La première réponse IA à valider
+   * @param context Le contexte de la conversation
+   * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (RecommendationMessageResponse optionnel)
+   */
+  public override async validateFirstResponse(
+    response: RecommendationMessageResponse, 
+    context: HowanaContext
+  ): Promise<{
+    isValid: boolean;
+    reason?: string;
+    finalObject?: RecommendationMessageResponse;
+  }> {
+    // Pour la première réponse, on utilise la même validation que validateResponse
+    // car la logique de validation est identique
+    return this.validateResponse(response, context);
   }
 
 }
