@@ -214,6 +214,30 @@ export interface BilanQuestionWithChunks {
 export type BilanQuestionnaireWithChunks = Array<BilanQuestionWithChunks>;
 
 /**
+ * Type pour une réponse à une question de questionnaire
+ */
+export interface BilanQuestionAnswer {
+  questionIndex: number;
+  answerIndex: number | null;
+  answerText: string;
+  moreResponse?: string; // Réponse supplémentaire si l'utilisateur a fourni des précisions
+  moreResponseType?: 'text' | 'address' | 'gps'; // Type de la réponse supplémentaire
+}
+
+/**
+ * Type pour les réponses d'un questionnaire complet
+ */
+export type BilanQuestionnaireAnswers = Array<BilanQuestionAnswer>;
+
+/**
+ * Type pour les réponses d'un questionnaire avec mode global
+ */
+export interface BilanQuestionnaireUserAnswers {
+  mode: 'init' | 'specific';
+  answers: BilanQuestionnaireAnswers;
+}
+
+/**
  * Questions de bilan prédéfinies avec leurs réponses suggérées
  * Chaque question inclut la question elle-même et des quick replies avec icônes emoji et chunks
  * Chaque quickReply a ses propres chunks précalculés
@@ -299,3 +323,20 @@ export const INITIAL_BILAN_QUESTIONS: BilanQuestionnaireWithChunks = [
 export interface BilanGlobalIntentInfos {
   bilanUniverContext: BilanUniverContextComplete;
 }
+
+/**
+ * Messages d'erreur pour l'échec du calcul du bilan
+ * 10 variations différentes du message "Je n'ai pas réussi à calculer ton bilan"
+ */
+export const BILAN_ERROR_MESSAGES: string[] = [
+  "Je n'ai pas réussi à calculer ton bilan",
+  "Désolé, je n'ai pas pu calculer ton bilan cette fois-ci",
+  "Oups, je n'ai pas réussi à finaliser le calcul de ton bilan",
+  "Je rencontre une difficulté pour calculer ton bilan en ce moment",
+  "Le calcul de ton bilan n'a pas abouti cette fois",
+  "Je n'ai pas pu terminer le calcul de ton bilan",
+  "Une erreur s'est produite lors du calcul de ton bilan",
+  "Je n'ai pas réussi à générer ton bilan pour le moment",
+  "Le calcul de ton bilan a échoué, désolé",
+  "Je n'ai pas pu compléter le calcul de ton bilan cette fois"
+];

@@ -517,6 +517,45 @@ export class SupabaseService {
   /**
    * Récupérer toutes les réponses IA d'un utilisateur
    */
+  /**
+   * Récupérer une réponse IA par son ID
+   */
+  async getAIResponseById(aiResponseId: string): Promise<{
+    success: boolean;
+    data?: AIResponse;
+    error?: string;
+  }> {
+    try {
+      console.log('🔍 Récupération de la réponse IA par ID:', aiResponseId);
+
+      const { data, error } = await this.supabase
+        .from('ai_responses')
+        .select('*')
+        .eq('id', aiResponseId)
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération de la réponse IA:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      console.log(`✅ Réponse IA récupérée avec succès: ${data?.id}`);
+      return {
+        success: true,
+        data: data as AIResponse
+      };
+    } catch (error) {
+      console.error('❌ Erreur inattendue lors de la récupération de la réponse IA:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
   async getAIResponsesByUser(userId: string): Promise<{
     success: boolean;
     data?: AIResponse[];

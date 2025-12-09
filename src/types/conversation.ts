@@ -135,7 +135,7 @@ export interface StartConversationRequest {
     answerText: string;
     moreResponse?: string; // Réponse supplémentaire si l'utilisateur a fourni des précisions
     moreResponseType?: 'text' | 'address' | 'gps'; // Type de la réponse supplémentaire
-  }>; // Réponses au questionnaire pour le bilan
+  }>; // Réponses au questionnaire pour le bilan (déprécié, utiliser userInputText dans ai_responses)
 }
 
 export interface StartConversationResponse {

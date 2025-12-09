@@ -7,6 +7,23 @@ import { QuickReply } from './quick-replies';
 import { HowanaContext } from './repositories';
 
 /**
+ * Messages d'erreur génériques pour l'échec de la génération de réponse
+ * 10 variations différentes du message d'erreur
+ */
+export const GENERIC_ERROR_MESSAGES: string[] = [
+  "Désolé, je rencontre une difficulté technique. Peux-tu réessayer dans quelques instants ?",
+  "Oups, une erreur s'est produite. Peux-tu réessayer ?",
+  "Je rencontre un problème pour le moment. Peux-tu réessayer plus tard ?",
+  "Une erreur technique s'est produite. Peux-tu réessayer ?",
+  "Désolé, je n'ai pas pu traiter ta demande cette fois-ci. Peux-tu réessayer ?",
+  "Je rencontre une difficulté en ce moment. Peux-tu réessayer dans quelques instants ?",
+  "Une erreur s'est produite lors du traitement. Peux-tu réessayer ?",
+  "Je n'ai pas pu traiter ta demande pour le moment. Peux-tu réessayer ?",
+  "Désolé, une erreur technique est survenue. Peux-tu réessayer ?",
+  "Je rencontre un problème technique. Peux-tu réessayer dans quelques instants ?"
+];
+
+/**
  * Interface de base pour toutes les réponses de ChatBot
  */
 export interface BaseChatBotResponse {

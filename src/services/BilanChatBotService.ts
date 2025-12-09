@@ -7,7 +7,9 @@ import {
   BilanUniverContext,
   BilanFamily,
   BilanQuestionnaireWithChunks,
-  INITIAL_BILAN_QUESTIONS
+  BilanQuestionnaireUserAnswers,
+  INITIAL_BILAN_QUESTIONS,
+  BILAN_ERROR_MESSAGES
 } from '../types/bilan';
 import {
   PracticeSearchResult,
@@ -20,22 +22,43 @@ import * as crypto from 'crypto';
 export class BilanChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
   
   /**
-   * Redéfinit generateFirstResponse pour gérer les réponses du questionnaire
-   * Si questionnaireAnswers est présent, on génère directement le summary
+   * Calcule l'intent pour la première réponse en utilisant computeIntent avec les réponses du questionnaire
    */
-  public override async generateFirstResponse(context: HowanaContext): Promise<RecommendationMessageResponse> {
-    // Vérifier si des réponses au questionnaire sont présentes dans le contexte
-    const questionnaireAnswers = context.metadata?.['questionnaireAnswers'] as Array<{
-      questionIndex: number;
-      answerIndex: number | null;
-      answerText: string;
-      moreResponse?: string;
-      moreResponseType?: 'text' | 'address' | 'gps';
-    }> | undefined;
+  public override async computeFirstResponseIntent(context: HowanaContext, userInputText?: string | null): Promise<{
+    intent: any;
+    intentCost: number | null;
+    globalIntentInfos: any;
+  }> {
+    // Parser directement userInputText pour récupérer les réponses au questionnaire
+    let questionnaireData: BilanQuestionnaireUserAnswers | undefined;
 
+    // Parser userInputText comme questionnaireAnswers
+    if (userInputText) {
+      try {
+        const parsed = JSON.parse(userInputText) as BilanQuestionnaireUserAnswers;
+        if (parsed && typeof parsed === 'object' && parsed.mode && parsed.answers && Array.isArray(parsed.answers)) {
+          questionnaireData = parsed;
+          
+          // Mettre les données parsées dans context.metadata
+          context.metadata = {
+            ...context.metadata,
+            questionnaireAnswers: questionnaireData
+          };
+        }
+      } catch (parseError) {
+        // Si ce n'est pas du JSON valide, on continue sans questionnaireAnswers
+        console.log('⚠️ [BILAN] userInputText n\'est pas du JSON valide pour questionnaireAnswers');
+      }
+    }
+
+    // Extraire les réponses et le mode
+    const questionnaireAnswers = questionnaireData?.answers;
+    const mode = questionnaireData?.mode || 'init';
+
+    // Si on a des réponses au questionnaire, calculer l'intent avec computeIntent
     if (questionnaireAnswers && questionnaireAnswers.length > 0) {
-      console.log(`📋 [BILAN] generateFirstResponse - ${questionnaireAnswers.length} réponses au questionnaire détectées, génération directe du summary`);
-
+      console.log(`📋 [BILAN] computeFirstResponseIntent - ${questionnaireAnswers.length} réponses au questionnaire détectées (mode: ${mode})`);
+      
       // Convertir les réponses en format bilan_answers
       const bilanAnswers = questionnaireAnswers.map(answer => ({
         questionIndex: answer.questionIndex,
@@ -47,9 +70,10 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         })
       }));
       
-      // Construire le message au format bilan_answers
+      // Construire le message au format bilan_answers avec le mode
       const userMessage = JSON.stringify({
         type: 'bilan_answers',
+        mode: mode,
         answers: bilanAnswers
       });
       
@@ -57,94 +81,107 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       const intentResult = await this.computeIntent(context, userMessage);
       const intent = intentResult.intent as BilanQuestionIntent;
       
-      // Mettre à jour le contexte avec l'intent
-      context.metadata = {
-        ...context.metadata,
-        ['currentIntentInfos']: {
-          intent: intent,
-          intentCost: intentResult.intentCost
-        }
-      };
-      
       // Calculer globalIntentInfos (cela calculera l'univers)
       const globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
       
-      // Mettre à jour le contexte avec globalIntentInfos
-      context.metadata = {
-        ...context.metadata,
-        ['globalIntentInfos']: globalIntentInfos
-      };
-      
-      // Si des réponses custom sont présentes, appeler handleIntent pour calculer les chunks
-      const hasCustomResponses = bilanAnswers.some(answer => 
-        answer.answerIndex === null || answer.moreResponse
-      );
-      
-      if (hasCustomResponses) {
-        console.log('🔄 [BILAN] Réponses custom détectées, appel de handleIntent');
-        // handleIntent sera appelé automatiquement lors de la génération de la réponse
-        // On passe un callback vide car on génère directement le summary
-        await this.handleIntent(context, userMessage, async () => {}, true);
-      }
-      
-      // Générer directement le summary en utilisant le schéma de summary
-      const summarySchema = this.getSummaryOutputSchema(context);
-      const systemPrompt = await this.buildSystemPrompt(context);
-      
-      // Construire un prompt pour générer le summary
-      const summaryPrompt = "Génère le résumé du bilan de bien-être basé sur les réponses au questionnaire fournies.";
-      
-      console.log('🔍 [BILAN] Génération du summary avec le schéma de sortie');
-      
-      const result = await this.openai.responses.create({
-        model: this.AI_MODEL,
-        input: [
-          {
-            role: "user",
-            content: [{ type: "input_text", text: summaryPrompt }],
-          },
-          {
-            type: "message",
-            role: "system",
-            content: [{ 
-              type: "input_text", 
-              text: systemPrompt
-            }],
-            status: "completed",
-          },
-        ],
-        text: summarySchema
-      });
-      
-      // Récupérer le messageId
-      const messageId = result.id;
-      const messageOutput = result.output.find(output => output.type === "message");
-      const responseText = (messageOutput?.content?.[0] && 'text' in messageOutput.content[0]) 
-        ? messageOutput.content[0].text 
-        : '';
-      
-      // Parser la réponse JSON
-      let parsedResponse: any;
-      try {
-        parsedResponse = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('❌ [BILAN] Erreur lors du parsing de la réponse summary:', parseError);
-        parsedResponse = { response: responseText };
-      }
-      
-      // Mettre à jour le contexte avec le messageId
-      context.previousCallId = messageId;
-      
       return {
-        response: responseText,
-        messageId: messageId,
-        updatedContext: context,
-        extractedData: parsedResponse
-      } as RecommendationMessageResponse;
+        intent: intent,
+        intentCost: intentResult.intentCost,
+        globalIntentInfos: globalIntentInfos
+      };
     }
+
+    // Si pas de réponses au questionnaire, retourner null (pas d'intent calculé)
+    return { intent: null, intentCost: null, globalIntentInfos: null };
+  }
+
+  /**
+   * Redéfinit generateFirstResponse pour gérer les réponses du questionnaire
+   * Si questionnaireAnswers est présent, on génère directement le summary
+   * Note: L'intent et globalIntentInfos sont déjà calculés par computeFirstResponseIntent
+   */
+  public override async generateFirstResponse(context: HowanaContext, userInputText?: string | null): Promise<RecommendationMessageResponse> {
     
-    // Comportement par défaut : appeler la méthode parent
-    return super.generateFirstResponse(context);
+    // Vérifier si l'intent a été calculé (via computeFirstResponseIntent)
+    const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
+    const intent = currentIntentInfos?.intent as BilanQuestionIntent | undefined;
+    
+    // Si on a un intent de type bilan_question, cela signifie qu'on a des réponses au questionnaire
+    if (intent && intent.type === 'bilan_question') {
+      console.log(`📋 [BILAN] generateFirstResponse - Intent détecté, génération directe du summary`);
+      
+      // Récupérer les réponses depuis le contexte (déjà parsées par computeFirstResponseIntent)
+      const questionnaireData = context.metadata?.['questionnaireAnswers'] as BilanQuestionnaireUserAnswers | undefined;
+      
+      // Extraire les réponses et le mode
+      const questionnaireAnswers = questionnaireData?.answers;
+      const mode = questionnaireData?.mode || 'init';
+
+      if (questionnaireAnswers && questionnaireAnswers.length > 0) {
+        // Convertir les réponses en format bilan_answers
+        const bilanAnswers = questionnaireAnswers.map(answer => ({
+          questionIndex: answer.questionIndex,
+          answerIndex: answer.answerIndex,
+          answerText: answer.answerText,
+          ...(answer.moreResponse && {
+            moreResponse: answer.moreResponse,
+            moreResponseType: answer.moreResponseType || 'text'
+          })
+        }));
+        
+        // Construire le message au format bilan_answers avec le mode
+        const userMessage = JSON.stringify({
+          type: 'bilan_answers',
+          mode: mode,
+          answers: bilanAnswers
+        });
+        
+        // Si des réponses custom sont présentes, appeler handleIntent pour calculer les chunks
+        const hasCustomResponses = bilanAnswers.some(answer => 
+          answer.answerIndex === null || answer.moreResponse
+        );
+        
+        if (hasCustomResponses) {
+          console.log('🔄 [BILAN] Réponses custom détectées, appel de handleIntent');
+          await this.handleIntent(context, userMessage, async () => {}, true);
+        }
+      
+        // Générer le summary en utilisant la méthode de la classe parente
+        console.log('🔍 [BILAN] Génération du summary via generateConversationSummary');
+        const summaryResult = await this.generateConversationSummary(context);
+        
+        // Adapter le format de retour pour correspondre à RecommendationMessageResponse
+        const summaryText = typeof summaryResult.summary === 'string' 
+          ? summaryResult.summary 
+          : JSON.stringify(summaryResult.summary);
+        
+        return {
+          response: summaryText,
+          messageId: summaryResult.updatedContext.previousCallId || `summary-${Date.now()}`,
+          updatedContext: summaryResult.updatedContext,
+          extractedData: summaryResult.extractedData,
+          cost_input: summaryResult.cost_input,
+          cost_cached_input: summaryResult.cost_cached_input,
+          cost_output: summaryResult.cost_output,
+          haveNext: false,
+          quickReplies: [] // Pas de quick replies pour un summary
+        } as RecommendationMessageResponse;
+      }
+    }
+        
+    console.error('❌ [BILAN] Erreur lors de la génération de la première réponse');
+
+    // Si on arrive ici, c'est qu'il y a eu une erreur
+    // On renvoie un message d'erreur avec une variation aléatoire
+    const randomErrorIndex = Math.floor(Math.random() * BILAN_ERROR_MESSAGES.length);
+    const errorMessage = BILAN_ERROR_MESSAGES[randomErrorIndex];
+    
+    return {
+      response: errorMessage,
+      messageId: `error-${Date.now()}`,
+      updatedContext: context,
+      quickReplies: []
+    } as RecommendationMessageResponse;
   }
   
   /**
@@ -290,7 +327,14 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     try {
       parsedMessage = JSON.parse(userMessage);
       if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
-        console.log(`📋 [BILAN] Détection du format bilan_answers avec ${parsedMessage.answers.length} réponses`);
+        const mode = parsedMessage.mode || 'init';
+        console.log(`📋 [BILAN] Détection du format bilan_answers avec ${parsedMessage.answers.length} réponses (mode: ${mode})`);
+        
+        // Stocker le mode dans le contexte pour utilisation ultérieure
+        context.metadata = {
+          ...context.metadata,
+          ['questionnaireMode']: mode
+        };
         
         // Traiter toutes les réponses en une fois
         const allAnswers = parsedMessage.answers as Array<{ questionIndex: number; answerIndex: number | null; answerText: string }>;
@@ -456,7 +500,14 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     try {
       parsedMessage = JSON.parse(userMessage);
       if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
-        console.log('✅ [BILAN] Toutes les réponses reçues en une fois');
+        const mode = parsedMessage.mode || 'init';
+        console.log(`✅ [BILAN] Toutes les réponses reçues en une fois (mode: ${mode})`);
+        
+        // Stocker le mode dans le contexte pour utilisation ultérieure
+        context.metadata = {
+          ...context.metadata,
+          ['questionnaireMode']: mode
+        };
         
         // Récupérer intent depuis le contexte
         const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
@@ -1388,7 +1439,15 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     try {
       parsedMessage = JSON.parse(userMessage || '');
       if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
-        console.log(`📋 [BILAN] computeGlobalIntentInfos - Traitement de ${parsedMessage.answers.length} réponses en batch`);
+        const mode = parsedMessage.mode || 'init';
+        console.log(`📋 [BILAN] computeGlobalIntentInfos - Traitement de ${parsedMessage.answers.length} réponses en batch (mode: ${mode})`);
+        
+        // Stocker le mode dans le contexte pour utilisation ultérieure
+        if (context.metadata) {
+          context.metadata['questionnaireMode'] = mode;
+        } else {
+          context.metadata = { ['questionnaireMode']: mode };
+        }
         
         // Construire les questionResponses à partir de toutes les réponses
         for (const answer of parsedMessage.answers) {
@@ -1751,13 +1810,8 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     // mais est stockée pour utilisation future
     if (questionResponses && context) {
       // Chercher dans le contexte les réponses du questionnaire original
-      const questionnaireAnswers = context.metadata?.['questionnaireAnswers'] as Array<{
-          questionIndex: number;
-          answerIndex: number | null;
-          answerText: string;
-          moreResponse?: string;
-          moreResponseType?: 'text' | 'address' | 'gps';
-        }> | undefined;
+      const questionnaireData = context.metadata?.['questionnaireAnswers'] as BilanQuestionnaireUserAnswers | undefined;
+      const questionnaireAnswers = questionnaireData?.answers;
         
         if (questionnaireAnswers) {
           for (const answer of questionnaireAnswers) {

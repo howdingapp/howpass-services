@@ -2,7 +2,7 @@ import { ConversationService } from './ConversationService';
 import { SupabaseService } from './SupabaseService';
 import { StartConversationRequest, OpenAIToolsDescription } from '../types/conversation';
 import { HowanaContext } from '../types/repositories';
-import { ChatBotOutputSchema, IAMessageResponse, ExtractedRecommandations } from '../types/chatbot-output';
+import { ChatBotOutputSchema, IAMessageResponse, ExtractedRecommandations, GENERIC_ERROR_MESSAGES } from '../types/chatbot-output';
 import type { Response, ResponseUsage } from 'openai/resources/responses/responses';
 import OpenAI from 'openai';
 
@@ -158,9 +158,12 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
   /**
    * Générer une première réponse IA basée sur le contexte de la conversation
    * Appelle _generateFirstResponse puis onGenerateFirstAiResponse pour permettre aux sous-classes d'intervenir
+   * @param context - Le contexte de la conversation
+   * @param _userInputText - Message utilisateur initial (optionnel, utilisé par les sous-classes comme BilanChatBotService)
    */
-  public async generateFirstResponse(context: HowanaContext): Promise<T> {
+  public async generateFirstResponse(context: HowanaContext, _userInputText?: string | null): Promise<T> {
     // Générer la première réponse IA
+    // Note: _userInputText est passé mais utilisé uniquement dans les sous-classes qui override cette méthode
     const firstResponse = await this._generateFirstResponse(context);
     
     // Appeler onGenerateFirstAiResponse pour permettre aux sous-classes d'intervenir
@@ -216,12 +219,20 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
       }
       
       // Extraire le texte de la réponse
-       let resultText = "Bonjour ! Je suis Howana, votre assistant personnel spécialisé dans le bien-être. Comment puis-je vous aider aujourd'hui ?";
+       let resultText: string | null = null;
        if (messageOutput?.content?.[0]) {
          const content = messageOutput.content[0];
          if ('text' in content) {
            resultText = content.text;
          }
+       }
+       
+       // Si pas de texte, générer un message d'erreur
+       if (!resultText) {
+         console.error('❌ Aucun texte trouvé dans la réponse OpenAI');
+         const randomErrorIndex = Math.floor(Math.random() * GENERIC_ERROR_MESSAGES.length);
+         const errorMessage = GENERIC_ERROR_MESSAGES[randomErrorIndex];
+         throw new Error(errorMessage);
        }
 
        // Si un schéma de sortie est défini, parser le JSON
@@ -264,9 +275,11 @@ export abstract class BaseChatBotService<T extends IAMessageResponse = IAMessage
        } as unknown as T;  
          } catch (error) {
        console.error('❌ Erreur lors de la génération de la première réponse:', error);
+       const randomErrorIndex = Math.floor(Math.random() * GENERIC_ERROR_MESSAGES.length);
+       const errorMessage = GENERIC_ERROR_MESSAGES[randomErrorIndex];
        return { 
-         response: "Bonjour ! Je suis Howana, votre assistant personnel. Comment puis-je vous aider aujourd'hui ?",
-         messageId: "error",
+         response: errorMessage,
+         messageId: `error-${Date.now()}`,
          updatedContext: context,
          cost_input: null,
          cost_cached_input: null,
@@ -858,6 +871,23 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
     
     // Combiner les règles et le contexte
     return rules.join('\n\n') + '\n\n' + systemContext;
+  }
+
+  /**
+   * Calcule l'intent pour la première réponse
+   * Par défaut, ne fait rien (retourne null)
+   * Peut être surchargée dans les sous-classes pour calculer l'intent spécifique
+   * @param context Le contexte de la conversation
+   * @param userInputText Le message utilisateur initial (optionnel)
+   * @returns Un objet contenant intent, intentCost et globalIntentInfos
+   */
+  public async computeFirstResponseIntent(_context: HowanaContext, _userInputText?: string | null): Promise<{
+    intent: any;
+    intentCost: number | null;
+    globalIntentInfos: any;
+  }> {
+    // Par défaut, ne fait rien
+    return { intent: null, intentCost: null, globalIntentInfos: null };
   }
 
   /**

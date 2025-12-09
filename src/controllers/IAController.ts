@@ -618,7 +618,48 @@ export class IAController {
     // Obtenir le service de chatbot approprié
     const chatBotService = this.getChatBotService(context);
     
-    const firstResponseResult = await chatBotService.generateFirstResponse(context);
+    // Récupérer user_input_text depuis ai_responses si disponible
+    let userInputText: string | null = null;
+    if (taskData.aiResponseId) {
+      try {
+        const aiResponseResult = await this.supabaseService.getAIResponseById(taskData.aiResponseId);
+        if (aiResponseResult.success && aiResponseResult.data?.user_input_text) {
+          userInputText = aiResponseResult.data.user_input_text;
+        }
+      } catch (error) {
+        console.warn('⚠️ Erreur lors de la récupération de user_input_text:', error);
+      }
+    }
+    
+    // Calculer l'intent pour la première réponse
+    console.log('🎯 Calcul de l\'intent pour la première réponse...');
+    const intentResult = await chatBotService.computeFirstResponseIntent(context, userInputText);
+    const intent = intentResult.intent;
+    const intentCost = intentResult.intentCost;
+    const globalIntentInfos = intentResult.globalIntentInfos;
+    
+    // Mettre à jour le contexte avec l'intent
+    let contextWithIntent = { ...context };
+    if (intent || globalIntentInfos) {
+      const currentIntentInfos = {
+        intent: intent || null,
+        intentCost: intentCost || null,
+        intentContextText: null
+      };
+      
+      contextWithIntent.metadata = {
+        ...contextWithIntent.metadata,
+        ['currentIntentInfos']: currentIntentInfos,
+        ...(globalIntentInfos && { ['globalIntentInfos']: globalIntentInfos }),
+        ['intentResults']: null
+      };
+      
+      if (intent) {
+        console.log('✅ Intent calculé avec succès pour la première réponse');
+      }
+    }
+    
+    const firstResponseResult = await chatBotService.generateFirstResponse(contextWithIntent, userInputText);
     
     // Mettre à jour le contexte avec les nouvelles informations
     let updatedContext = { ...context };
