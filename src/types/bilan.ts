@@ -192,11 +192,18 @@ export interface BilanUniverContextComplete {
 /**
  * Type pour une quick reply dans un questionnaire (avec chunks)
  */
+/**
+ * Type pour une question/réponse supplémentaire demandée via askPrecision
+ */
+export interface BilanPrecisionQuestion {
+  question: string; // Question à poser pour obtenir plus de précisions
+}
+
 export interface BilanQuestionQuickReplyWithChunks {
   text: string;
   icon?: string;
   chunks: BilanChunk[];
-  askMore?: boolean; // Si true, proposer de demander des précisions après ce choix
+  askPrecision?: BilanPrecisionQuestion[]; // Array de questions supplémentaires à poser après ce choix
   answerType?: 'text' | 'address' | 'takeGeoloc' | 'askPrecision'; // Type de réponse attendu
 }
 
@@ -244,7 +251,7 @@ export interface BilanQuestionnaireUserAnswers {
  */
 export const INITIAL_BILAN_QUESTIONS: BilanQuestionnaireWithChunks = [
   {
-    question: "🌿 Comment te sens-tu en ce moment ?",
+    question: "🌿 Comment vous sentez-vous en ce moment ?",
     quickReplies: [
       { text: "😴 Fatigué(e) physiquement", icon: "sleep", chunks: [{ type: "symptome_chunk", text: "fatigue physique" }] },
       { text: "😰 Stressé(e) ou tendu(e)", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "stress tension" }] },
@@ -255,7 +262,7 @@ export const INITIAL_BILAN_QUESTIONS: BilanQuestionnaireWithChunks = [
     ]
   },
   {
-    question: "🌸 Ce que tu aimerais le plus améliorer",
+    question: "🌸 Ce que vous aimeriez le plus améliorer",
     quickReplies: [
       { text: "🌿 Mon énergie", icon: "zap", chunks: [{ type: "with_benefit_chunk", text: "améliorer énergie" }] },
       { text: "🛏️ Mon sommeil", icon: "sleep", chunks: [{ type: "with_benefit_chunk", text: "améliorer sommeil" }] },
@@ -268,7 +275,7 @@ export const INITIAL_BILAN_QUESTIONS: BilanQuestionnaireWithChunks = [
     ]
   },
   {
-    question: "🌞 Ton rythme de vie",
+    question: "🌞 Votre rythme de vie",
     quickReplies: [
       { text: "⏰ Je cours tout le temps / je suis souvent surmené(e)", icon: "zap", chunks: [{ type: "user_situation_chunk", text: "surmenage rythme effréné" }] },
       { text: "🌀 J'ai du mal à trouver du temps pour moi", icon: "alert-triangle", chunks: [{ type: "user_situation_chunk", text: "manque de temps pour soi" }] },
@@ -277,7 +284,7 @@ export const INITIAL_BILAN_QUESTIONS: BilanQuestionnaireWithChunks = [
     ]
   },
   {
-    question: "💆‍♀️ Ton rapport à ton corps",
+    question: "💆‍♀️ Votre rapport à votre corps",
     quickReplies: [
       { text: "🔸 Raide ou tendu(e)", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "raideur tension corporelle" }] },
       { text: "💤 Fatigué(e), sans énergie", icon: "sleep", chunks: [{ type: "symptome_chunk", text: "fatigue manque d'énergie" }] },
@@ -288,18 +295,18 @@ export const INITIAL_BILAN_QUESTIONS: BilanQuestionnaireWithChunks = [
     ]
   },
   {
-    question: "💖 Tes émotions",
+    question: "💖 Vos émotions",
     quickReplies: [
       { text: "🌧️ Je me sens souvent submergé(e)", icon: "alert-triangle", chunks: [{ type: "user_situation_chunk", text: "submergé par les émotions" }] },
       { text: "🌊 Je garde tout pour moi", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "garder tout pour soi" }] },
       { text: "💔 Je me sens vide ou triste", icon: "heart", chunks: [{ type: "symptome_chunk", text: "vide tristesse" }] },
       { text: "💫 Je ressens beaucoup, parfois trop", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "ressentir beaucoup d'émotions" }] },
       { text: "🌈 Je me sens stable et prêt(e) à m'élever", icon: "smile", chunks: [{ type: "with_benefit_chunk", text: "stabilité émotionnelle" }] },
-      { text: "😬 j'ai tendance à éviter les conflits", icon: "alert-triangle", chunks: [{ type: "user_situation_chunk", text: "éviter les conflits" }] }
+      { text: "😬 J'ai tendance à éviter les conflits", icon: "alert-triangle", chunks: [{ type: "user_situation_chunk", text: "éviter les conflits" }] }
     ]
   },
   {
-    question: "🌿 Ton besoin du moment",
+    question: "🌿 Votre besoin du moment",
     quickReplies: [
       { text: "⚡ Recharger mes batteries", icon: "zap", chunks: [{ type: "with_benefit_chunk", text: "recharger batteries" }] },
       { text: "🌸 Lâcher prise", icon: "heart", chunks: [{ type: "with_benefit_chunk", text: "lâcher prise" }] },
@@ -309,10 +316,26 @@ export const INITIAL_BILAN_QUESTIONS: BilanQuestionnaireWithChunks = [
     ]
   },
   {
-    question: "🐾 As-tu un compagnon à quatre pattes ?",
+    question: "🐾 Avez-vous un compagnon à quatre pattes ?",
     quickReplies: [
-      { text: "🐶 Oui, j'aimerais aussi prendre soin de mon animal", icon: "heart", chunks: [{ type: "user_situation_chunk", text: "compagnon animal" }] },
+      { 
+        text: "🐶 Oui, j'aimerais aussi prendre soin de mon animal", 
+        icon: "heart", 
+        askPrecision: [
+          { question: "Tu peux m'en dire plus sur ton animal de compagnie ? Par exemple, son genre et la façon dont tu t'en occupe." },
+          { question: "Est-ce que tu vois autre chose que je dois savoir ?" }
+        ],
+        chunks: [{ type: "user_situation_chunk", text: "compagnon animal" }] 
+      },
       { text: "🚫 Non, pas pour l'instant", icon: "smile", chunks: [] }
+    ]
+  },
+  {
+    question: "📍 Où souhaitez-vous découvrir vos praticiens ?",
+    quickReplies: [
+      { text: "📍 Utiliser ma géolocalisation", icon: "explore", answerType: "takeGeoloc", chunks: [] },
+      { text: "✏️ Saisir ma ville / code postal", icon: "explore", answerType: "address", chunks: [] },
+      { text: "🏠 Mon adresse d'inscription", icon: "home", answerType: "address", chunks: [] }
     ]
   }
 ];

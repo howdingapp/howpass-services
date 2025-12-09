@@ -118,18 +118,43 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       const mode = questionnaireData?.mode || 'init';
 
       if (questionnaireAnswers && questionnaireAnswers.length > 0) {
-        // Convertir les réponses en format bilan_answers
-        const bilanAnswers = questionnaireAnswers.map(answer => ({
-          questionIndex: answer.questionIndex,
-          answerIndex: answer.answerIndex,
-          answerText: answer.answerText,
-          ...(answer.moreResponse && {
-            moreResponse: answer.moreResponse,
-            moreResponseType: answer.moreResponseType || 'text'
-          })
-        }));
+        // Récupérer le questionnaire courant pour filtrer les réponses de type "address"
+        const currentQuestionnaire = this.getCurrentQuestionnaire(context);
         
-        // Construire le message au format bilan_answers avec le mode
+        // Convertir les réponses en format bilan_answers et filtrer celles de type "address"
+        const bilanAnswers = questionnaireAnswers
+          .map(answer => ({
+            questionIndex: answer.questionIndex,
+            answerIndex: answer.answerIndex,
+            answerText: answer.answerText,
+            ...(answer.moreResponse && {
+              moreResponse: answer.moreResponse,
+              moreResponseType: answer.moreResponseType || 'text'
+            })
+          }))
+          .filter(answer => {
+            // Filtrer les réponses de type "address" ou "takeGeoloc"
+            const questionData = answer.questionIndex >= 0 && answer.questionIndex < currentQuestionnaire.length
+              ? currentQuestionnaire[answer.questionIndex]
+              : null;
+            
+            if (questionData) {
+              // Vérifier si la question a une quickReply avec answerType "address" ou "takeGeoloc"
+              if (answer.answerIndex !== null && answer.answerIndex >= 0 && answer.answerIndex < questionData.quickReplies.length) {
+                const quickReply = questionData.quickReplies[answer.answerIndex];
+                if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc')) {
+                  return false; // Exclure cette réponse
+                }
+              }
+              // Vérifier aussi si moreResponseType est "address" ou "gps"
+              if ((answer as any).moreResponseType === 'address' || (answer as any).moreResponseType === 'gps') {
+                return false; // Exclure cette réponse
+              }
+            }
+            return true; // Inclure cette réponse
+          });
+        
+        // Construire le message au format bilan_answers avec le mode (sans les réponses de type address)
         const userMessage = JSON.stringify({
           type: 'bilan_answers',
           mode: mode,
@@ -137,9 +162,31 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         });
         
         // Si des réponses custom sont présentes, appeler handleIntent pour calculer les chunks
-        const hasCustomResponses = bilanAnswers.some(answer => 
-          answer.answerIndex === null || answer.moreResponse
-        );
+        // Exclure les réponses de type "address" ou "takeGeoloc" qui ne sont pas des réponses custom
+        const hasCustomResponses = bilanAnswers.some(answer => {
+          // Si answerIndex est null, vérifier si c'est une question de type address
+          if (answer.answerIndex === null) {
+            const questionData = answer.questionIndex >= 0 && answer.questionIndex < currentQuestionnaire.length
+              ? currentQuestionnaire[answer.questionIndex]
+              : null;
+            // Si la question a une quickReply avec answerType "address" ou "takeGeoloc", ce n'est pas custom
+            if (questionData && questionData.quickReplies.some((qr: any) => 
+              qr.answerType === 'address' || qr.answerType === 'takeGeoloc'
+            )) {
+              return false; // Ce n'est pas une réponse custom
+            }
+            return true; // C'est une réponse custom
+          }
+          // Si moreResponse est présent, vérifier si c'est de type "address" ou "gps"
+          if (answer.moreResponse) {
+            const moreResponseType = (answer as any).moreResponseType;
+            if (moreResponseType === 'address' || moreResponseType === 'gps') {
+              return false; // Ce n'est pas une réponse custom
+            }
+            return true; // C'est une réponse custom
+          }
+          return false; // Pas de réponse custom
+        });
         
         if (hasCustomResponses) {
           console.log('🔄 [BILAN] Réponses custom détectées, appel de handleIntent');
@@ -337,7 +384,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         };
         
         // Traiter toutes les réponses en une fois
-        const allAnswers = parsedMessage.answers as Array<{ questionIndex: number; answerIndex: number | null; answerText: string }>;
+        const allAnswers = parsedMessage.answers as Array<{ questionIndex: number; answerIndex: number | null; answerText: string; moreResponse?: string; moreResponseType?: string }>;
         
         // Récupérer le questionnaire courant
         const currentQuestionnaire = this.getCurrentQuestionnaire(context);
@@ -357,8 +404,19 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           
           const question = questionData?.question || `Question ${questionIndex + 1}`;
           
-          // Si answerIndex est null, c'est une réponse custom (index = -1)
-          const responseIndex = answerIndex !== null ? answerIndex : -1;
+          // Vérifier si la question a un answerType de type "address" ou "takeGeoloc"
+          // Si c'est le cas, même si answerIndex est null, ce n'est pas une réponse custom
+          let isAddressType = false;
+          if (questionData && answerIndex !== null && answerIndex >= 0 && answerIndex < questionData.quickReplies.length) {
+            const quickReply = questionData.quickReplies[answerIndex];
+            if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc')) {
+              isAddressType = true;
+            }
+          }
+          
+          // Si answerIndex est null et que ce n'est pas un type address, c'est une réponse custom (index = -1)
+          // Sinon, utiliser l'index de la quickReply
+          const responseIndex = (answerIndex !== null || isAddressType) ? (answerIndex !== null ? answerIndex : 0) : -1;
           
           questionResponses.push({
             question,
@@ -368,6 +426,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         }
         
         // Séparer les réponses standard (index >= 0) de celles qui sont custom (index == -1)
+        // ET extraire les réponses aux askPrecision (moreResponse de type "text")
         const standardResponses: Array<{ question: string; index: number; response: string; questionIndex: number }> = [];
         const customResponses: Array<{ question: string; response: string }> = [];
         
@@ -375,8 +434,22 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           const qr = questionResponses[i];
           if (!qr || !qr.response) continue;
           
-          if (qr.index === -1) {
-            // Réponse custom : pas d'index valide
+          // Vérifier si la question correspondante a un answerType de type "address" ou "takeGeoloc"
+          const originalAnswer = allAnswers[i];
+          const questionData = originalAnswer && originalAnswer.questionIndex >= 0 && originalAnswer.questionIndex < currentQuestionnaire.length
+            ? currentQuestionnaire[originalAnswer.questionIndex]
+            : null;
+          
+          let isAddressType = false;
+          if (questionData && qr.index >= 0 && qr.index < questionData.quickReplies.length) {
+            const quickReply = questionData.quickReplies[qr.index];
+            if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc')) {
+              isAddressType = true;
+            }
+          }
+          
+          if (qr.index === -1 && !isAddressType) {
+            // Réponse custom : pas d'index valide et ce n'est pas un type address
             customResponses.push({
               question: qr.question,
               response: qr.response
@@ -386,6 +459,31 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
             standardResponses.push({
               ...qr,
               questionIndex: i
+            });
+          }
+          
+          // Si la réponse a un moreResponse de type "text", c'est une réponse à un askPrecision
+          // L'ajouter aux custom réponses avec la question correspondante depuis askPrecision
+          if (originalAnswer && originalAnswer.moreResponse && originalAnswer.moreResponseType === 'text') {
+            const questionDataForMore = originalAnswer.questionIndex >= 0 && originalAnswer.questionIndex < currentQuestionnaire.length
+              ? currentQuestionnaire[originalAnswer.questionIndex]
+              : null;
+            
+            // Récupérer la question askPrecision correspondante
+            let precisionQuestion = "Peux-tu me donner plus de précisions ?";
+            if (questionDataForMore && originalAnswer.answerIndex !== null && originalAnswer.answerIndex >= 0 && originalAnswer.answerIndex < questionDataForMore.quickReplies.length) {
+              const quickReply = questionDataForMore.quickReplies[originalAnswer.answerIndex];
+              if (quickReply && quickReply.askPrecision && quickReply.askPrecision.length > 0 && quickReply.askPrecision[0]) {
+                // Utiliser la première question askPrecision (ou toutes si nécessaire)
+                // Pour l'instant, on utilise la première question
+                precisionQuestion = quickReply.askPrecision[0].question;
+              }
+            }
+            
+            // Ajouter la réponse aux askPrecision dans les custom réponses
+            customResponses.push({
+              question: precisionQuestion,
+              response: originalAnswer.moreResponse
             });
           }
         }
@@ -1436,9 +1534,11 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     let totalQuestions = currentQuestionnaire.length;
     let answeredQuestions = totalQuestions;
     
-    try {
-      parsedMessage = JSON.parse(userMessage || '');
-      if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
+    // Ne tenter le parsing que si userMessage existe et n'est pas vide
+    if (userMessage && userMessage.trim().length > 0) {
+      try {
+        parsedMessage = JSON.parse(userMessage);
+        if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
         const mode = parsedMessage.mode || 'init';
         console.log(`📋 [BILAN] computeGlobalIntentInfos - Traitement de ${parsedMessage.answers.length} réponses en batch (mode: ${mode})`);
         
@@ -1467,8 +1567,19 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           
           const question = questionData?.question || `Question ${questionIndex + 1}`;
           
-          // Si answerIndex est null, c'est une réponse custom (index = -1)
-          const responseIndex = answerIndex !== null ? answerIndex : -1;
+          // Vérifier si la question a un answerType de type "address" ou "takeGeoloc"
+          // Si c'est le cas, même si answerIndex est null, ce n'est pas une réponse custom
+          let isAddressType = false;
+          if (questionData) {
+            // Vérifier si une des quickReplies a un answerType de "address" ou "takeGeoloc"
+            isAddressType = questionData.quickReplies.some((qr: any) => 
+              qr.answerType === 'address' || qr.answerType === 'takeGeoloc'
+            );
+          }
+          
+          // Si answerIndex est null et que ce n'est pas un type address, c'est une réponse custom (index = -1)
+          // Sinon, utiliser l'index de la quickReply (ou 0 si answerIndex est null mais que c'est un type address)
+          const responseIndex = (answerIndex !== null || isAddressType) ? (answerIndex !== null ? answerIndex : 0) : -1;
           
           questionResponses.push({
             question,
@@ -1479,11 +1590,11 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         
         answeredQuestions = questionResponses.length;
         console.log(`✅ [BILAN] computeGlobalIntentInfos - ${answeredQuestions} réponses traitées en batch`);
-      }
-    } catch (parseError) {
-      // Ce n'est pas un JSON, ce n'est pas le format attendu
-      console.error(`❌ [BILAN] computeGlobalIntentInfos - Message non-JSON et non-format bilan_answers:`, parseError);
-      // Récupérer les questionnaires existants pour les conserver
+        }
+      } catch (parseError) {
+        // Ce n'est pas un JSON, ce n'est pas le format attendu
+        console.error(`❌ [BILAN] computeGlobalIntentInfos - Message non-JSON et non-format bilan_answers:`, parseError);
+        // Récupérer les questionnaires existants pour les conserver
       const previousBilanUniverContext = (context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
       const existingQuestionnaires = previousBilanUniverContext?.questionnaires?.value || [];
       
@@ -1503,6 +1614,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           computedAt: new Date().toISOString()
         }
       };
+      }
     }
     
     // Si on n'a pas traité en batch, retourner un globalIntentInfos vide
@@ -1631,11 +1743,11 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           activities: { info: '', value: [] },
           howerAngels: { info: '', value: [] },
           questionResponses: {
-            info: 'Réponses collectées jusqu\'à présent. L\'univers sera calculé après le 2ème questionnaire.',
+            info: 'Réponses collectées jusqu\'à présent.',
             value: allQuestionResponses
           },
           chunks: {
-            info: 'Chunks collectés jusqu\'à présent. L\'univers sera calculé après le 2ème questionnaire.',
+            info: 'Chunks collectés jusqu\'à présent.',
             value: allChunks
           },
           questionnaires: {
