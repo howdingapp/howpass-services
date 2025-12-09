@@ -148,7 +148,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       
         // Générer le summary en utilisant la méthode de la classe parente
         console.log('🔍 [BILAN] Génération du summary via generateConversationSummary');
-        const summaryResult = await this.generateConversationSummary(context);
+        const summaryResult = await this.generateConversationSummary(context, true); // firstCall = true car c'est le premier appel
         
         // Adapter le format de retour pour correspondre à RecommendationMessageResponse
         const summaryText = typeof summaryResult.summary === 'string' 
@@ -1015,7 +1015,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
   /**
    * Redéfinit generateConversationSummary pour ajouter systématiquement l'univers dans le résumé
    */
-  public override async generateConversationSummary(context: HowanaContext): Promise<{
+  public override async generateConversationSummary(context: HowanaContext, firstCall: boolean = false): Promise<{
     summary: any;
     extractedData: any;
     updatedContext: HowanaContext;
@@ -1060,7 +1060,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     }
 
     // Appeler la méthode parente pour générer le résumé
-    const result = await super.generateConversationSummary(context);
+    const result = await super.generateConversationSummary(context, firstCall);
 
     // Si l'univers existe, enrichir les recommandations avec les noms et ajouter l'univers au résumé
     if (bilanUniverContext) {

@@ -671,8 +671,10 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
 
   /**
    * Générer un résumé structuré de la conversation
+   * @param context Le contexte de la conversation
+   * @param firstCall Si true, indique que c'est le premier appel (pas de previousCallId nécessaire)
    */
-  async generateConversationSummary(context: HowanaContext): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined, updatedContext: HowanaContext, cost_input?: number | null, cost_cached_input?: number | null, cost_output?: number | null}> {
+  async generateConversationSummary(context: HowanaContext, firstCall: boolean = false): Promise<{summary: string, extractedData: ExtractedRecommandations|undefined, updatedContext: HowanaContext, cost_input?: number | null, cost_cached_input?: number | null, cost_output?: number | null}> {
     let totalTokens = { cost_input: 0, cost_cached_input: 0, cost_output: 0 }; // Tokens cumulés (déclaré en dehors du try pour être accessible dans le catch)
     try {
       // Vérifier si des recommandations sont requises pour le résumé
@@ -722,12 +724,17 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
       // Vérifier s'il y a un callID dans le contexte pour référencer l'appel précédent
       const previousCallId = recommendationResponse?.messageId || context.previousCallId;
       
-      if (!previousCallId) {
+      // Si c'est le premier appel, on ne nécessite pas de previousCallId
+      if (!firstCall && !previousCallId) {
         throw new Error('No previous call ID found');
       }
 
-      // Utiliser l'API responses pour référencer l'appel précédent
-      console.log('🔍 Génération du résumé via API responses avec callID:', previousCallId);
+      // Utiliser l'API responses pour référencer l'appel précédent (ou créer un nouvel appel si firstCall)
+      if (firstCall) {
+        console.log('🔍 Génération du résumé via API responses (premier appel, sans référence)');
+      } else {
+        console.log('🔍 Génération du résumé via API responses avec callID:', previousCallId);
+      }
       
       try {
         const systemPrompt = this.buildSummarySystemPrompt(context);
@@ -745,6 +752,7 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
         const summarySchema = this.getSummaryOutputSchema(context);
         const result = await this.openai.responses.create({
           model: this.AI_MODEL_QUALITY,
+          ...(previousCallId && !firstCall && { previous_response_id: previousCallId }),
           input: [
             {
               role: "user",
@@ -771,6 +779,12 @@ Merci de corriger la réponse en tenant compte de ces erreurs.`;
         const resultText = result.output
           .filter((output) => output.type === "message")
           .map((output) => (output as any).content?.[0]?.text)[0];
+
+        // Stocker le messageId dans le contexte pour les appels suivants
+        const messageId = result.id;
+        if (messageId) {
+          context.previousCallId = messageId;
+        }
 
         if (resultText) {
           try {
