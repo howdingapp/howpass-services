@@ -139,10 +139,10 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
               : null;
             
             if (questionData) {
-              // Vérifier si la question a une quickReply avec answerType "address" ou "takeGeoloc"
+              // Vérifier si la question a une quickReply avec answerType "address", "takeGeoloc" ou "homeAddress"
               if (answer.answerIndex !== null && answer.answerIndex >= 0 && answer.answerIndex < questionData.quickReplies.length) {
                 const quickReply = questionData.quickReplies[answer.answerIndex];
-                if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc')) {
+                if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc' || quickReply.answerType === 'homeAddress')) {
                   return false; // Exclure cette réponse
                 }
               }
@@ -169,9 +169,9 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
             const questionData = answer.questionIndex >= 0 && answer.questionIndex < currentQuestionnaire.length
               ? currentQuestionnaire[answer.questionIndex]
               : null;
-            // Si la question a une quickReply avec answerType "address" ou "takeGeoloc", ce n'est pas custom
+            // Si la question a une quickReply avec answerType "address", "takeGeoloc" ou "homeAddress", ce n'est pas custom
             if (questionData && questionData.quickReplies.some((qr: any) => 
-              qr.answerType === 'address' || qr.answerType === 'takeGeoloc'
+              qr.answerType === 'address' || qr.answerType === 'takeGeoloc' || qr.answerType === 'homeAddress'
             )) {
               return false; // Ce n'est pas une réponse custom
             }
@@ -404,12 +404,12 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           
           const question = questionData?.question || `Question ${questionIndex + 1}`;
           
-          // Vérifier si la question a un answerType de type "address" ou "takeGeoloc"
+          // Vérifier si la question a un answerType de type "address", "takeGeoloc" ou "homeAddress"
           // Si c'est le cas, même si answerIndex est null, ce n'est pas une réponse custom
           let isAddressType = false;
           if (questionData && answerIndex !== null && answerIndex >= 0 && answerIndex < questionData.quickReplies.length) {
             const quickReply = questionData.quickReplies[answerIndex];
-            if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc')) {
+            if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc' || quickReply.answerType === 'homeAddress')) {
               isAddressType = true;
             }
           }
@@ -434,7 +434,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           const qr = questionResponses[i];
           if (!qr || !qr.response) continue;
           
-          // Vérifier si la question correspondante a un answerType de type "address" ou "takeGeoloc"
+          // Vérifier si la question correspondante a un answerType de type "address", "takeGeoloc" ou "homeAddress"
           const originalAnswer = allAnswers[i];
           const questionData = originalAnswer && originalAnswer.questionIndex >= 0 && originalAnswer.questionIndex < currentQuestionnaire.length
             ? currentQuestionnaire[originalAnswer.questionIndex]
@@ -443,7 +443,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           let isAddressType = false;
           if (questionData && qr.index >= 0 && qr.index < questionData.quickReplies.length) {
             const quickReply = questionData.quickReplies[qr.index];
-            if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc')) {
+            if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc' || quickReply.answerType === 'homeAddress')) {
               isAddressType = true;
             }
           }
@@ -1567,13 +1567,13 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           
           const question = questionData?.question || `Question ${questionIndex + 1}`;
           
-          // Vérifier si la question a un answerType de type "address" ou "takeGeoloc"
+          // Vérifier si la question a un answerType de type "address", "takeGeoloc" ou "homeAddress"
           // Si c'est le cas, même si answerIndex est null, ce n'est pas une réponse custom
           let isAddressType = false;
           if (questionData) {
-            // Vérifier si une des quickReplies a un answerType de "address" ou "takeGeoloc"
+            // Vérifier si une des quickReplies a un answerType de "address", "takeGeoloc" ou "homeAddress"
             isAddressType = questionData.quickReplies.some((qr: any) => 
-              qr.answerType === 'address' || qr.answerType === 'takeGeoloc'
+              qr.answerType === 'address' || qr.answerType === 'takeGeoloc' || qr.answerType === 'homeAddress'
             );
           }
           

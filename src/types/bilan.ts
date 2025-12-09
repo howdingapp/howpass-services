@@ -204,7 +204,7 @@ export interface BilanQuestionQuickReplyWithChunks {
   icon?: string;
   chunks: BilanChunk[];
   askPrecision?: BilanPrecisionQuestion[]; // Array de questions supplémentaires à poser après ce choix
-  answerType?: 'text' | 'address' | 'takeGeoloc' | 'askPrecision'; // Type de réponse attendu
+  answerType?: 'text' | 'address' | 'takeGeoloc' | 'homeAddress' | 'askPrecision'; // Type de réponse attendu
 }
 
 /**
@@ -291,7 +291,14 @@ export const INITIAL_BILAN_QUESTIONS: BilanQuestionnaireWithChunks = [
       { text: "🌸 En déséquilibre (hormones, digestion, sommeil)", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "déséquilibre hormones digestion sommeil" }] },
       { text: "🌺 Bien dans l'ensemble, envie d'entretien", icon: "smile", chunks: [{ type: "with_benefit_chunk", text: "entretien du corps" }] },
       { text: "🌫️ Déconnecté(e), besoin de me reconnecter à lui", icon: "explore", chunks: [{ type: "user_situation_chunk", text: "déconnexion du corps" }] },
-      { text: "🔥 Avec des douleurs", icon: "alert-triangle", chunks: [{ type: "symptome_chunk", text: "douleurs" }] }
+      { 
+        text: "🔥 Avec des douleurs", 
+        icon: "alert-triangle",
+        askPrecision: [
+          { question: "Peux-tu me donner plus de précisions sur tes douleurs ?" }
+        ],
+        chunks: [{ type: "symptome_chunk", text: "douleurs" }] 
+      }
     ]
   },
   {
@@ -335,7 +342,7 @@ export const INITIAL_BILAN_QUESTIONS: BilanQuestionnaireWithChunks = [
     quickReplies: [
       { text: "📍 Utiliser ma géolocalisation", icon: "explore", answerType: "takeGeoloc", chunks: [] },
       { text: "✏️ Saisir ma ville / code postal", icon: "explore", answerType: "address", chunks: [] },
-      { text: "🏠 Mon adresse d'inscription", icon: "home", answerType: "address", chunks: [] }
+      { text: "🏠 Mon adresse d'inscription", icon: "home", answerType: "homeAddress", chunks: [] }
     ]
   }
 ];
