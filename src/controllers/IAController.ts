@@ -398,7 +398,20 @@ export class IAController {
       
       // Ajouter le coût de l'intent (seulement en input)
       const intentCost = (updatedContext.metadata?.['currentIntentInfos'] as any)?.intentCost as number | undefined ?? 0;
-      const totalCostInput = responseCostInput + intentCost;
+      
+      // Ajouter le coût des workers (workerExecutionCost)
+      const workerCost = updatedContext.metadata?.['workerExecutionCost'] as {
+        cost_input: number;
+        cost_cached_input: number;
+        cost_output: number;
+      } | undefined;
+      const workerCostInput = workerCost?.cost_input || 0;
+      const workerCostCachedInput = workerCost?.cost_cached_input || 0;
+      const workerCostOutput = workerCost?.cost_output || 0;
+      
+      const totalCostInput = responseCostInput + intentCost + workerCostInput;
+      const totalCostCachedInput = responseCostCachedInput + workerCostCachedInput;
+      const totalCostOutput = responseCostOutput + workerCostOutput;
 
       // 3. Déterminer valid_for_limit : true uniquement si l'ID correspond à taskData.aiResponseId
       const validForLimit = aiResponseId === taskData.aiResponseId;
@@ -412,8 +425,8 @@ export class IAController {
         response_text: JSON.stringify(iaResponse),
         next_response_id: null, // Dernière réponse, pas de suivant
         cost_input: totalCostInput > 0 ? totalCostInput : null,
-        cost_cached_input: responseCostCachedInput > 0 ? responseCostCachedInput : null,
-        cost_output: responseCostOutput > 0 ? responseCostOutput : null,
+        cost_cached_input: totalCostCachedInput > 0 ? totalCostCachedInput : null,
+        cost_output: totalCostOutput > 0 ? totalCostOutput : null,
         user_input_text: taskData.userMessage || null, // Message utilisateur qui a déclenché cette réponse
         valid_for_limit: validForLimit,
         metadata: {
@@ -547,7 +560,20 @@ export class IAController {
       
       // Ajouter le coût de l'intent (seulement pour la première réponse, en input)
       const intentCost = isFirstResponse ? ((updatedContext.metadata?.['currentIntentInfos'] as any)?.intentCost as number | undefined ?? 0) : 0;
-      const totalCostInput = responseCostInput + intentCost;
+      
+      // Ajouter le coût des workers (workerExecutionCost)
+      const workerCost = updatedContext.metadata?.['workerExecutionCost'] as {
+        cost_input: number;
+        cost_cached_input: number;
+        cost_output: number;
+      } | undefined;
+      const workerCostInput = workerCost?.cost_input || 0;
+      const workerCostCachedInput = workerCost?.cost_cached_input || 0;
+      const workerCostOutput = workerCost?.cost_output || 0;
+      
+      const totalCostInput = responseCostInput + intentCost + workerCostInput;
+      const totalCostCachedInput = responseCostCachedInput + workerCostCachedInput;
+      const totalCostOutput = responseCostOutput + workerCostOutput;
 
       // 5. Déterminer valid_for_limit : true uniquement si l'ID correspond à taskData.aiResponseId
       const validForLimit = aiResponseId === taskData.aiResponseId;
@@ -561,8 +587,8 @@ export class IAController {
         response_text: JSON.stringify(iaResponse),
         next_response_id: nextResponseId,
         cost_input: totalCostInput > 0 ? totalCostInput : null,
-        cost_cached_input: responseCostCachedInput > 0 ? responseCostCachedInput : null,
-        cost_output: responseCostOutput > 0 ? responseCostOutput : null,
+        cost_cached_input: totalCostCachedInput > 0 ? totalCostCachedInput : null,
+        cost_output: totalCostOutput > 0 ? totalCostOutput : null,
         user_input_text: taskData.userMessage || null, // Message utilisateur qui a déclenché cette réponse
         valid_for_limit: validForLimit,
         metadata: {
@@ -614,6 +640,16 @@ export class IAController {
    */
   private async processGenerateFirstResponse(_req: IAAuthenticatedRequest, taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
     console.log(`👋 Génération d'une première réponse IA pour: ${taskData.conversationId}`);
+    
+    // Nettoyer le workerExecutionCost avant l'appel (comme pour l'intent)
+    context.metadata = {
+      ...context.metadata,
+      workerExecutionCost: {
+        cost_input: 0,
+        cost_cached_input: 0,
+        cost_output: 0
+      }
+    };
     
     // Obtenir le service de chatbot approprié
     const chatBotService = this.getChatBotService(context);
@@ -721,6 +757,16 @@ export class IAController {
     }
 
     console.log(`🤖 Génération d'une réponse IA pour: ${taskData.conversationId}`);
+    
+    // Nettoyer le workerExecutionCost avant l'appel (comme pour l'intent)
+    context.metadata = {
+      ...context.metadata,
+      workerExecutionCost: {
+        cost_input: 0,
+        cost_cached_input: 0,
+        cost_output: 0
+      }
+    };
     
     // Obtenir le service de chatbot approprié
     const chatBotService = this.getChatBotService(context);
@@ -842,10 +888,23 @@ export class IAController {
   private async processGenerateSummary(_req: IAAuthenticatedRequest, taskData: IATaskRequest, context: HowanaContext): Promise<{ updatedContext: HowanaContext; iaResponse: any }> {
     console.log(`📝 Génération d'un résumé IA pour: ${taskData.conversationId}`);
     
+    // Nettoyer le workerExecutionCost avant l'appel (comme pour l'intent)
+    context.metadata = {
+      ...context.metadata,
+      workerExecutionCost: {
+        cost_input: 0,
+        cost_cached_input: 0,
+        cost_output: 0
+      }
+    };
+    
     // Obtenir le service de chatbot approprié
     const chatBotService = this.getChatBotService(context);
     
     const summary = await chatBotService.generateConversationSummary(context);
+    
+    // Récupérer le contexte mis à jour depuis le summary
+    const updatedContext = summary.updatedContext || context;
     
     // Récupérer les extractedData depuis la réponse du résumé si disponible
     const extractedData = summary.extractedData;
@@ -854,25 +913,43 @@ export class IAController {
     const recommendations = extractedData ? {
       activities: extractedData.activities || [],
       practices: extractedData.practices || []
-    } : (context.recommendations || { activities: [], practices: [] });
+    } : (updatedContext.recommendations || { activities: [], practices: [] });
+
+    // Ajouter le coût des workers (workerExecutionCost) aux coûts du summary
+    const workerCost = updatedContext.metadata?.['workerExecutionCost'] as {
+      cost_input: number;
+      cost_cached_input: number;
+      cost_output: number;
+    } | undefined;
+    const workerCostInput = workerCost?.cost_input || 0;
+    const workerCostCachedInput = workerCost?.cost_cached_input || 0;
+    const workerCostOutput = workerCost?.cost_output || 0;
+    
+    const summaryCostInput = summary.cost_input ?? 0;
+    const summaryCostCachedInput = summary.cost_cached_input ?? 0;
+    const summaryCostOutput = summary.cost_output ?? 0;
+    
+    const totalCostInput = summaryCostInput + workerCostInput;
+    const totalCostCachedInput = summaryCostCachedInput + workerCostCachedInput;
+    const totalCostOutput = summaryCostOutput + workerCostOutput;
 
     // Créer l'objet de réponse IA pour le résumé
     const iaResponse = {
       response: { summary: summary.summary },
-      target_table: context.type === 'bilan' ? 'bilans' : context.type === 'activity' ? 'activities' : 'ai_responses',
-      target_id: context.bilanId || context.activityId || null,
+      target_table: updatedContext.type === 'bilan' ? 'bilans' : updatedContext.type === 'activity' ? 'activities' : 'ai_responses',
+      target_id: updatedContext.bilanId || updatedContext.activityId || null,
       summary_type: 'conversation_summary',
       recommendations: recommendations,
       hasRecommendations: (recommendations.activities.length > 0 || recommendations.practices.length > 0),
       messageId: `summary_${Date.now()}`,
       type: 'summary',
-      cost_input: summary.cost_input ?? null,
-      cost_cached_input: summary.cost_cached_input ?? null,
-      cost_output: summary.cost_output ?? null,
+      cost_input: totalCostInput > 0 ? totalCostInput : null,
+      cost_cached_input: totalCostCachedInput > 0 ? totalCostCachedInput : null,
+      cost_output: totalCostOutput > 0 ? totalCostOutput : null,
     };
 
     return {
-      updatedContext: context,
+      updatedContext: updatedContext,
       iaResponse
     };
   }

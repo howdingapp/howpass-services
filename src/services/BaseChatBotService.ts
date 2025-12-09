@@ -1685,4 +1685,231 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
     // Par défaut, renvoyer la réponse sans modification
     return aiResponse;
   }
+
+  /**
+   * Fonction générique pour analyser des items par groupes via des workers IA
+   * Chaque worker analyse un sous-ensemble d'items et retourne ceux qui sont pertinents
+   * @param items Les items à analyser (génériques, sans notion de pratiques/bilan)
+   * @param userContext Le contexte utilisateur à analyser (texte ou chunks)
+   * @param itemToText Fonction pour extraire le texte d'un item (titre, description, etc.)
+   * @param context Le contexte de la conversation pour cumuler les coûts
+   * @param workerInstruction Instructions spécifiques pour le worker (définit l'objectif et le contexte métier)
+   * @param itemsPerWorker Nombre d'items par worker (défaut: 10)
+   * @param minRelevanceScore Score de pertinence minimum (défaut: 6/10 = 0.6)
+   * @param maxResults Nombre maximum de résultats à retourner (défaut: 10)
+   * @returns Les items pertinents avec leur score de confiance et leurs raisons
+   */
+  protected async retrieveDataFromAgentWorkerSearch<TItem extends { id: string }>(
+    items: TItem[],
+    userContext: string | string[],
+    itemToText: (item: TItem) => string,
+    context: HowanaContext,
+    workerInstruction: string,
+    itemsPerWorker: number = 10,
+    minRelevanceScore: number = 0.6,
+    maxResults: number = 10
+  ): Promise<{
+    results: Array<{
+      item: TItem;
+      confidenceScore: number;
+      reasons: string[];
+    }>;
+    totalCost: {
+      cost_input: number;
+      cost_cached_input: number;
+      cost_output: number;
+    };
+  }> {
+    console.log(`🔍 [WORKER] Démarrage de l'analyse de ${items.length} items avec ${Math.ceil(items.length / itemsPerWorker)} workers`);
+    
+    // Convertir le contexte utilisateur en texte
+    const userContextText = Array.isArray(userContext) 
+      ? userContext.join('\n\n')
+      : userContext;
+    
+    // Diviser les items en groupes de itemsPerWorker
+    const itemGroups: TItem[][] = [];
+    for (let i = 0; i < items.length; i += itemsPerWorker) {
+      itemGroups.push(items.slice(i, i + itemsPerWorker));
+    }
+    
+    console.log(`🔍 [WORKER] ${itemGroups.length} groupes créés (${itemsPerWorker} items par groupe)`);
+    
+    // Traiter chaque groupe en parallèle
+    const workerPromises = itemGroups.map(async (group, groupIndex) => {
+      console.log(`🔍 [WORKER] Traitement du groupe ${groupIndex + 1}/${itemGroups.length} (${group.length} items)`);
+      
+      // Construire le prompt pour ce groupe
+      const itemsText = group.map((item, index) => {
+        const itemText = itemToText(item);
+        return `Item ${index + 1} (ID: ${item.id}):\n${itemText}`;
+      }).join('\n\n---\n\n');
+      
+      const workerPrompt = `${workerInstruction}
+
+CONTEXTE UTILISATEUR À ANALYSER:
+${userContextText}
+
+ITEMS À ANALYSER:
+${itemsText}
+
+Pour chaque item, détermine s'il est pertinent pour le contexte utilisateur. Retourne uniquement les items pertinents avec:
+- Un score de confiance entre 0 et 10 (0 = non pertinent, 10 = très pertinent)
+- Des raisons expliquant pourquoi l'item est pertinent
+
+Retourne uniquement les items avec un score >= 6/10.`;
+
+      // Schéma de sortie pour le worker
+      const workerSchema = {
+        format: {
+          type: "json_schema" as const,
+          name: "WorkerAnalysisResult",
+          schema: {
+            type: "object",
+            properties: {
+              relevantItems: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    itemId: {
+                      type: "string",
+                      description: "ID de l'item analysé"
+                    },
+                    confidenceScore: {
+                      type: "number",
+                      minimum: 0,
+                      maximum: 10,
+                      description: "Score de confiance de pertinence (0-10, minimum 6 pour être inclus)"
+                    },
+                    reasons: {
+                      type: "array",
+                      items: { type: "string" },
+                      description: "Raisons expliquant pourquoi cet item est pertinent pour le contexte utilisateur"
+                    }
+                  },
+                  required: ["itemId", "confidenceScore", "reasons"],
+                  additionalProperties: false
+                },
+                description: "Liste des items pertinents (score >= 6/10)"
+              }
+            },
+            required: ["relevantItems"],
+            additionalProperties: false
+          },
+          strict: true
+        }
+      };
+
+      try {
+        // Appeler l'IA pour analyser ce groupe
+        const result = await this.openai.responses.create({
+          model: this.AI_MODEL,
+          input: [
+            {
+              role: "user",
+              content: [{ type: "input_text", text: workerPrompt }],
+            },
+          ],
+          text: workerSchema
+        });
+
+        // Extraire les tokens
+        const tokens = this.extractTokensFromUsage(result.usage);
+        
+        // Extraire le texte de la réponse
+        const messageOutput = result.output.find((output: any) => output.type === "message") as any;
+        let resultText = "";
+        
+        if (messageOutput?.content?.[0]) {
+          const content = messageOutput.content[0];
+          if ('text' in content) {
+            resultText = content.text;
+          }
+        }
+
+        if (!resultText) {
+          console.warn(`⚠️ [WORKER] Aucune réponse générée pour le groupe ${groupIndex + 1}`);
+          return { results: [], cost: tokens };
+        }
+
+        // Parser le JSON
+        const parsedResult = JSON.parse(resultText);
+        const relevantItems = parsedResult.relevantItems || [];
+
+        // Mapper les résultats avec les items originaux
+        // Le schéma demande un score entre 0-10, on filtre selon minRelevanceScore (0-1 converti en 0-10)
+        const minScore = Math.round(minRelevanceScore * 10); // Convertir 0.6 en 6
+        const mappedResults = relevantItems
+          .filter((item: any) => item.confidenceScore >= minScore) // Score minimum selon paramètre
+          .map((item: any) => {
+            const originalItem = group.find(i => i.id === item.itemId);
+            if (!originalItem) {
+              return null;
+            }
+            return {
+              item: originalItem,
+              confidenceScore: item.confidenceScore / 10, // Convertir en 0-1
+              reasons: item.reasons || []
+            };
+          })
+          .filter((r: any) => r !== null);
+
+        console.log(`✅ [WORKER] Groupe ${groupIndex + 1}: ${mappedResults.length} items pertinents trouvés`);
+        
+        return { results: mappedResults, cost: tokens };
+      } catch (error) {
+        console.error(`❌ [WORKER] Erreur lors du traitement du groupe ${groupIndex + 1}:`, error);
+        return { results: [], cost: { cost_input: 0, cost_cached_input: 0, cost_output: 0 } };
+      }
+    });
+
+    // Attendre tous les workers
+    const workerResults = await Promise.all(workerPromises);
+    
+    // Combiner tous les résultats
+    const allResults = workerResults.flatMap(wr => wr.results);
+    
+    // Cumuler les coûts
+    const totalCost = workerResults.reduce(
+      (acc, wr) => ({
+        cost_input: acc.cost_input + wr.cost.cost_input,
+        cost_cached_input: acc.cost_cached_input + wr.cost.cost_cached_input,
+        cost_output: acc.cost_output + wr.cost.cost_output
+      }),
+      { cost_input: 0, cost_cached_input: 0, cost_output: 0 }
+    );
+    
+    // Trier par score de confiance décroissant
+    allResults.sort((a, b) => b.confidenceScore - a.confidenceScore);
+    
+    // Prendre les maxResults meilleurs
+    const topResults = allResults.slice(0, maxResults);
+    
+    console.log(`✅ [WORKER] Analyse terminée: ${topResults.length} items pertinents sur ${items.length} analysés`);
+    console.log(`💰 [WORKER] Coût total: Input=${totalCost.cost_input}, Cached=${totalCost.cost_cached_input}, Output=${totalCost.cost_output}`);
+    
+    // Cumuler les coûts dans le contexte
+    const existingWorkerCost = context.metadata?.['workerExecutionCost'] as {
+      cost_input: number;
+      cost_cached_input: number;
+      cost_output: number;
+    } | undefined;
+    
+    const newWorkerCost = {
+      cost_input: (existingWorkerCost?.cost_input || 0) + totalCost.cost_input,
+      cost_cached_input: (existingWorkerCost?.cost_cached_input || 0) + totalCost.cost_cached_input,
+      cost_output: (existingWorkerCost?.cost_output || 0) + totalCost.cost_output
+    };
+    
+    context.metadata = {
+      ...context.metadata,
+      workerExecutionCost: newWorkerCost
+    };
+    
+    return {
+      results: topResults,
+      totalCost
+    };
+  }
 }

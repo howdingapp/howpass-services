@@ -1762,6 +1762,151 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
   }
 
   /**
+   * Récupère les données depuis la recherche sémantique (méthode actuelle)
+   * @param allChunksTexts Les textes des chunks pour la recherche
+   * @returns Les résultats de recherche sémantique
+   */
+  protected async retrieveDataFromSemanticSearch(
+    allChunksTexts: string[]
+  ): Promise<{
+    practices: PracticeSearchResult[];
+    activities: ActivitySearchResult[];
+    howerAngels: HowerAngelSearchResult[];
+  }> {
+    console.log(`🔍 [SEMANTIC] Recherche sémantique avec ${allChunksTexts.length} chunks`);
+    
+    // Réaliser les recherches sémantiques en parallèle avec withMatchInfos
+    const [practicesResults, activitiesResults, howerAngelsResult] = await Promise.all([
+      this.supabaseService.searchPracticesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
+      this.supabaseService.searchActivitiesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
+      this.supabaseService.searchHowerAngelsByUserSituation(allChunksTexts, 10, true) // withMatchInfos = true
+    ]);
+    
+    const practices: PracticeSearchResult[] = practicesResults.results || [];
+    const activities: ActivitySearchResult[] = activitiesResults.results || [];
+    const howerAngels: HowerAngelSearchResult[] = howerAngelsResult.success ? (howerAngelsResult.data || []) : [];
+    
+    console.log(`✅ [SEMANTIC] ${practices.length} pratiques, ${activities.length} activités et ${howerAngels.length} hower angels trouvés`);
+    
+    return {
+      practices,
+      activities,
+      howerAngels
+    };
+  }
+
+  /**
+   * Récupère les données depuis la recherche agentique via workers IA
+   * @param allChunksTexts Les textes des chunks pour le contexte utilisateur
+   * @param context Le contexte de la conversation
+   * @param semanticPractices Les pratiques trouvées par la recherche sémantique (pour enrichir les résultats)
+   * @returns Les pratiques pertinentes trouvées par les workers IA
+   */
+  protected async retrieveDataFromAgentWorkerSearchForPractices(
+    allChunksTexts: string[],
+    context: HowanaContext,
+    semanticPractices: PracticeSearchResult[]
+  ): Promise<PracticeSearchResult[]> {
+    console.log(`🔍 [WORKER] Démarrage de la recherche agentique pour les pratiques`);
+    
+    // Récupérer toutes les pratiques avec leurs informations complètes
+    const allPracticesResult = await this.supabaseService.getAllPracticesWithFullInfo();
+    
+    if (!allPracticesResult.success || !allPracticesResult.data) {
+      console.warn('⚠️ [WORKER] Impossible de récupérer les pratiques, retour d\'un tableau vide');
+      return [];
+    }
+    
+    console.log(`🔍 [WORKER] Analyse de ${allPracticesResult.data.length} pratiques via workers IA`);
+    
+    // Fonction pour extraire le texte d'une pratique
+    const practiceToText = (practice: typeof allPracticesResult.data[0]): string => {
+      const parts: string[] = [];
+      parts.push(`Titre: ${practice.title}`);
+      if (practice.longDescription) {
+        parts.push(`Description: ${practice.longDescription}`);
+      }
+      if (practice.benefits) {
+        const benefitsText = Array.isArray(practice.benefits) 
+          ? practice.benefits.join(', ')
+          : JSON.stringify(practice.benefits);
+        parts.push(`Bénéfices: ${benefitsText}`);
+      }
+      if (practice.typicalSituations) {
+        const situationsText = Array.isArray(practice.typicalSituations)
+          ? practice.typicalSituations.join(', ')
+          : JSON.stringify(practice.typicalSituations);
+        parts.push(`Situations typiques: ${situationsText}`);
+      }
+      return parts.join('\n\n');
+    };
+    
+    // Construire les instructions spécifiques pour les workers de pratiques
+    const totalPractices = allPracticesResult.data.length;
+    const itemsPerWorker = 10;
+    const workerInstruction = `Tu es un assistant spécialisé dans l'analyse de pertinence de pratiques de bien-être.
+
+OBJECTIF:
+Tu dois identifier les pratiques les plus adaptées parmi un total de ${totalPractices} pratiques disponibles sur la plateforme HOW PASS.
+
+TA MISSION:
+Tu es en charge d'analyser ${itemsPerWorker} pratiques parmi les ${totalPractices} disponibles. Pour chaque pratique, tu dois évaluer sa pertinence globale en fonction du contexte utilisateur fourni.
+
+CRITÈRES D'ÉVALUATION:
+- Analyse la correspondance entre les besoins exprimés dans le contexte utilisateur et les bénéfices de la pratique
+- Évalue la pertinence des situations typiques de la pratique par rapport au profil de l'utilisateur
+- Considère la description longue de la pratique pour comprendre son champ d'application
+- Évalue la pertinence globale, pas seulement une correspondance partielle
+
+Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
+
+    // Appeler la fonction générique de worker
+    const workerResults = await this.retrieveDataFromAgentWorkerSearch(
+      allPracticesResult.data,
+      allChunksTexts, // Contexte utilisateur = chunks
+      practiceToText,
+      context,
+      workerInstruction,
+      itemsPerWorker, // 10 pratiques par worker
+      0.6, // Score minimum 6/10
+      10  // Top 10 résultats
+    );
+    
+    // Convertir les résultats en PracticeSearchResult
+    const workerPractices = workerResults.results.map(result => {
+      const practice = result.item;
+      // Trouver la pratique correspondante dans les résultats sémantiques pour récupérer les infos complètes
+      const semanticPractice = semanticPractices.find(p => p.id === practice.id);
+      
+      return {
+        type: 'practice' as const,
+        id: practice.id,
+        title: practice.title,
+        longDescription: practice.longDescription || undefined,
+        benefits: practice.benefits,
+        typicalSituations: practice.typicalSituations,
+        relevanceScore: result.confidenceScore, // Score de confiance du worker (0-1)
+        similarity: result.confidenceScore,
+        vectorSimilarity: null,
+        bm25Similarity: null,
+        categoryId: semanticPractice?.categoryId || null,
+        categoryName: semanticPractice?.categoryName || null,
+        categoryDescription: semanticPractice?.categoryDescription || null,
+        familyId: semanticPractice?.familyId || null,
+        familyName: semanticPractice?.familyName || null,
+        familyDescription: semanticPractice?.familyDescription || null,
+        matchCount: 1,
+        workerReasons: result.reasons, // Raisons du worker
+        source: 'worker' as const // Indiquer la provenance
+      } as PracticeSearchResult & { workerReasons?: string[]; source?: 'semantic' | 'worker' };
+    });
+    
+    console.log(`✅ [WORKER] ${workerPractices.length} pratiques pertinentes trouvées via workers IA`);
+    
+    return workerPractices;
+  }
+
+  /**
    * Calcule l'univers du bilan en réalisant une recherche sémantique sur tous les chunks de l'intent
    * et en classant les familles par dominance par rapport aux pratiques et hower angels trouvés
    * @param intent L'intent contenant les chunks
@@ -1950,21 +2095,71 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       console.log(`📍 [BILAN] Position GPS trouvée pour la recherche: ${gpsPosition.latitude}, ${gpsPosition.longitude}`);
     }
     
-    // Réaliser les recherches sémantiques en parallèle avec withMatchInfos pour récupérer les chunks qui ont permis le matching
-    // Les fonctions de recherche font maintenant le regroupement et le tri en interne
-    // Note: Pour l'instant, les fonctions de recherche ne prennent pas en compte l'adresse/GPS directement
-    // L'adresse/GPS sera utilisée ultérieurement pour filtrer les résultats si nécessaire
-    const [practicesResults, activitiesResults, howerAngelsResult] = await Promise.all([
-      this.supabaseService.searchPracticesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
-      this.supabaseService.searchActivitiesBySituationChunks(allChunksTexts, true), // withMatchInfos = true
-      this.supabaseService.searchHowerAngelsByUserSituation(allChunksTexts, 10, true) // withMatchInfos = true
+    // 1. Recherche sémantique et agentique en parallèle pour optimiser les coûts dans le cloud
+    console.log(`🚀 [BILAN] Lancement des recherches sémantique et agentique en parallèle`);
+    
+    const [semanticResults, workerPracticesResult] = await Promise.all([
+      // Recherche sémantique (méthode actuelle)
+      this.retrieveDataFromSemanticSearch(allChunksTexts),
+      // Recherche via workers IA (nouvelle méthode) - seulement si context est disponible
+      context ? this.retrieveDataFromAgentWorkerSearchForPractices(allChunksTexts, context, []) : Promise.resolve([])
     ]);
     
-    const practices: PracticeSearchResult[] = practicesResults.results || [];
-    const activities: ActivitySearchResult[] = activitiesResults.results || [];
-    const howerAngels: HowerAngelSearchResult[] = howerAngelsResult.success ? (howerAngelsResult.data || []) : [];
+    const semanticPractices: PracticeSearchResult[] = semanticResults.practices;
+    const activities: ActivitySearchResult[] = semanticResults.activities;
+    const howerAngels: HowerAngelSearchResult[] = semanticResults.howerAngels;
+    const workerPractices: PracticeSearchResult[] = workerPracticesResult;
     
-    console.log(`✅ [BILAN] ${practices.length} pratiques, ${activities.length} activités et ${howerAngels.length} hower angels trouvés`);
+    // Enrichir les pratiques workers avec les infos sémantiques si disponibles
+    const enrichedWorkerPractices = workerPractices.map(workerPractice => {
+      const semanticPractice = semanticPractices.find(p => p.id === workerPractice.id);
+      if (semanticPractice) {
+        return {
+          ...workerPractice,
+          categoryId: semanticPractice.categoryId ?? workerPractice.categoryId ?? null,
+          categoryName: semanticPractice.categoryName ?? workerPractice.categoryName ?? null,
+          categoryDescription: semanticPractice.categoryDescription ?? workerPractice.categoryDescription ?? null,
+          familyId: semanticPractice.familyId ?? workerPractice.familyId ?? null,
+          familyName: semanticPractice.familyName ?? workerPractice.familyName ?? null,
+          familyDescription: semanticPractice.familyDescription ?? workerPractice.familyDescription ?? null
+        } as PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] };
+      }
+      return workerPractice;
+    });
+    
+    // Utiliser les pratiques enrichies
+    const finalWorkerPractices = enrichedWorkerPractices;
+    
+    // Combiner les deux sources de pratiques avec leur provenance
+    // Marquer les pratiques sémantiques avec leur source
+    const semanticPracticesWithSource = semanticPractices.map(p => ({
+      ...p,
+      source: 'semantic' as const
+    })) as Array<PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] }>;
+    
+    // Combiner les deux listes (en évitant les doublons par ID)
+    const practicesMap = new Map<string, PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] }>();
+    
+    // Ajouter d'abord les pratiques sémantiques
+    semanticPracticesWithSource.forEach(p => {
+      practicesMap.set(p.id, p);
+    });
+    
+    // Ajouter les pratiques workers (peuvent compléter les sémantiques)
+    finalWorkerPractices.forEach(p => {
+      const existing = practicesMap.get(p.id);
+      if (existing) {
+        // Si la pratique existe déjà, on garde la pratique sémantique et on ajoute les infos du worker
+        existing.workerReasons = (p as any).workerReasons;
+        // On garde 'semantic' comme source principale, mais on note qu'on a aussi les raisons du worker
+      } else {
+        practicesMap.set(p.id, p);
+      }
+    });
+    
+    const practices: Array<PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] }> = Array.from(practicesMap.values());
+    
+    console.log(`✅ [BILAN] ${practices.length} pratiques totales (${semanticPractices.length} sémantiques, ${workerPractices.length} workers), ${activities.length} activités et ${howerAngels.length} hower angels trouvés`);
     
     // Extraire les familles directement depuis les résultats de recherche (plus besoin de requêtes supplémentaires)
     const familyIds = new Set<string>();
@@ -2170,9 +2365,11 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     // Enrichir les pratiques et activités avec les chunks qui ont permis le matching
     // chunkText contient le fragment de chunk de la base de données qui a matché
     // matchCount est déjà présent dans les pratiques et activités après déduplication
-    const practicesWithMatchCount = practices.map((practice: PracticeSearchResult) => ({
+    const practicesWithMatchCount = practices.map((practice: PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] }) => ({
       ...practice,
-      matchingChunks: practice.chunkText || null // Fragment de chunk de la BD qui a permis le matching
+      matchingChunks: practice.chunkText || null, // Fragment de chunk de la BD qui a permis le matching
+      source: practice.source || 'semantic', // Provenance de la recommandation
+      workerReasons: practice.workerReasons || undefined // Raisons du worker si disponible
     }));
     
     const activitiesWithMatchCount = activities.map((activity: ActivitySearchResult) => ({
@@ -2233,7 +2430,31 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         value: familiesWithTopItems
       },
       practices: {
-        info: 'Liste des pratiques bien-être HOW PASS identifiées comme pertinentes pour l\'utilisateur basées sur ses réponses au questionnaire. Chaque pratique inclut un score de pertinence et un compteur de matchs indiquant combien de fois elle a été trouvée dans les recherches sémantiques.',
+        info: `Liste des pratiques bien-être HOW PASS identifiées comme pertinentes pour l'utilisateur basées sur ses réponses au questionnaire. Cette liste combine deux sources de recommandation:
+
+1. SOURCE "semantic" (Recherche sémantique vectorielle):
+   - Méthode: Recherche par similarité vectorielle basée sur les chunks extraits des réponses de l'utilisateur
+   - Principe: Compare les fragments de texte des réponses avec les descriptions et situations typiques des pratiques dans la base de données
+   - Avantage: Détecte les correspondances textuelles et sémantiques précises
+   - Score: Basé sur la similarité vectorielle et BM25
+   - Utilisation: Idéal pour trouver des pratiques correspondant à des mots-clés ou expressions spécifiques mentionnées par l'utilisateur
+
+2. SOURCE "worker" (Analyse par workers IA):
+   - Méthode: Analyse globale par des workers IA qui évaluent la pertinence de chaque pratique
+   - Principe: Les workers analysent les bénéfices, situations typiques et descriptions complètes des pratiques en fonction du contexte utilisateur global
+   - Avantage: Comprend la pertinence globale et les nuances, même sans correspondance textuelle exacte
+   - Score: Score de confiance (0-10) basé sur une évaluation holistique
+   - Raisons: Chaque pratique worker inclut des raisons détaillées expliquant pourquoi elle est pertinente
+   - Utilisation: Idéal pour découvrir des pratiques pertinentes même si l'utilisateur ne les a pas mentionnées explicitement
+
+Chaque pratique inclut:
+- Un score de pertinence
+- Un compteur de matchs (pour les pratiques semantic)
+- La source de la recommandation (semantic, worker)
+- Les raisons de pertinence (pour les pratiques worker)
+- Les fragments de chunks qui ont permis le matching (pour les pratiques semantic)
+
+Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiques "semantic" sont souvent plus précises mais peuvent manquer des opportunités, tandis que les pratiques "worker" peuvent révéler des pratiques pertinentes que l'utilisateur n'aurait pas pensé à mentionner.`,
         value: practicesWithMatchCount
       },
       activities: {

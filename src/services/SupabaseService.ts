@@ -2234,6 +2234,66 @@ export class SupabaseService {
   }
 
   /**
+   * Récupère toutes les pratiques actives avec leurs informations complètes
+   * (benefits, typical_situations, long_description, title)
+   */
+  async getAllPracticesWithFullInfo(): Promise<{
+    success: boolean;
+    data?: Array<{
+      id: string;
+      title: string;
+      longDescription: string | null;
+      benefits: any;
+      typicalSituations: any;
+    }>;
+    error?: string;
+  }> {
+    try {
+      console.log(`🔍 Récupération de toutes les pratiques avec informations complètes`);
+
+      const { data, error } = await this.supabase
+        .from('practices')
+        .select(`
+          id,
+          title,
+          long_description,
+          benefits,
+          typical_situations
+        `)
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des pratiques:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      const practices = (data || []).map((practice: any) => ({
+        id: practice.id,
+        title: practice.title,
+        longDescription: practice.long_description || null,
+        benefits: practice.benefits || null,
+        typicalSituations: practice.typical_situations || null,
+      }));
+
+      console.log(`✅ ${practices.length} pratiques récupérées avec informations complètes`);
+      return {
+        success: true,
+        data: practices
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des pratiques:', error);
+      return {
+        success: false,
+        error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
    * Recherche vectorielle des hower angels par situation utilisateur
    * Utilise match_user_data pour récupérer les données enrichies (activités, spécialités transformées)
    */
