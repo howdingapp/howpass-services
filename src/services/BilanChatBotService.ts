@@ -100,7 +100,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
    * Si questionnaireAnswers est présent, on génère directement le summary
    * Note: L'intent et globalIntentInfos sont déjà calculés par computeFirstResponseIntent
    */
-  public override async generateFirstResponse(context: HowanaContext, userInputText?: string | null): Promise<RecommendationMessageResponse> {
+  public override async generateFirstResponse(context: HowanaContext, _userInputText?: string | null): Promise<RecommendationMessageResponse> {
     
     // Vérifier si l'intent a été calculé (via computeFirstResponseIntent)
     const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;
