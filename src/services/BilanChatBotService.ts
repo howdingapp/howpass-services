@@ -1800,6 +1800,7 @@ CRITÈRES D'ÉVALUATION:
 - Évalue la pertinence des situations typiques de la pratique par rapport au profil de l'utilisateur
 - Considère la description longue de la pratique pour comprendre son champ d'application
 - Évalue la pertinence globale, pas seulement une correspondance partielle
+- IMPORTANT: Ne te base PAS QUE sur la notoriété ou la déclaration de la pratique. Certaines pratiques peuvent être créées et pas forcément connues du grand public, mais si les mots-clés et les bénéfices semblent pertinents par rapport au contexte utilisateur, tu dois les mettre en avant. La pertinence se juge principalement sur la correspondance des mots-clés et des bénéfices, pas uniquement sur la popularité.
 
 Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
 
