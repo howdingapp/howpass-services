@@ -13,3 +13,4 @@ export { ChatBotServiceFactory } from './ChatBotServiceFactory';
 export { ConversationService } from './ConversationService';
 export { SupabaseService } from './SupabaseService';
 export { HowerAngelService } from './HowerAngelService';
+export { GeolocationService, GeolocationPosition, DistanceResult } from './GeolocationService';

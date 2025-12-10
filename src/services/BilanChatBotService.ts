@@ -19,7 +19,7 @@ import {
   HowerAngelSearchResult
 } from '../types/search';
 import { BaseChatBotService } from './BaseChatBotService';
-import { HowerAngelService } from './HowerAngelService';
+import { HowerAngelService, HowerAngelWithDistance } from './HowerAngelService';
 import * as crypto from 'crypto';
 
 export class BilanChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
@@ -1737,7 +1737,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     console.log(`🔍 [WORKER] Analyse de ${allHowerAngels.length} hower angels via workers IA`);
     
     // Fonction pour extraire le texte d'un hower angel
-    const howerAngelToText = (howerAngel: HowerAngelSearchResult): string => {
+    const howerAngelToText = (howerAngel: HowerAngelSearchResult | HowerAngelWithDistance): string => {
       const parts: string[] = [];
       parts.push(`Nom: ${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`);
       if (howerAngel.profile) {
@@ -1747,7 +1747,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         parts.push(`Expérience: ${howerAngel.experience}`);
       }
       if (howerAngel.specialties && howerAngel.specialties.length > 0) {
-        const specialtiesText = howerAngel.specialties.map(s => s.title || s.name || '').join(', ');
+        const specialtiesText = howerAngel.specialties.map(s => s.title || '').join(', ');
         parts.push(`Spécialités: ${specialtiesText}`);
       }
       if (howerAngel.activities && howerAngel.activities.length > 0) {
@@ -1755,6 +1755,10 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           .map(a => `${a.title}${a.shortDescription ? ` - ${a.shortDescription}` : ''}`)
           .join('; ');
         parts.push(`Activités: ${activitiesText}`);
+      }
+      // Ajouter la mention de distance si disponible
+      if ('distanceFromOrigin' in howerAngel && howerAngel.distanceFromOrigin) {
+        parts.push(`Distance: à ${howerAngel.distanceFromOrigin.formattedDistance} de distance`);
       }
       return parts.join('\n\n');
     };
@@ -2124,7 +2128,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
     
     const semanticPractices: PracticeSearchResult[] = semanticResults.practices;
     const activities: ActivitySearchResult[] = semanticResults.activities;
-    let howerAngels: HowerAngelSearchResult[] = semanticResults.howerAngels;
+    let howerAngels: HowerAngelSearchResult[] | HowerAngelWithDistance[] = semanticResults.howerAngels;
     const workerPractices: PracticeSearchResult[] = workerPracticesResult;
     const workerHowerAngels: HowerAngelSearchResult[] = workerHowerAngelsResult;
     
@@ -2165,7 +2169,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
       try {
         // Accéder au client Supabase via une propriété protégée ou une méthode publique
         const supabaseClient = (this.supabaseService as any).supabase;
-        let workerHowerAngelsWithDistances: HowerAngelSearchResult[] = [];
+        let workerHowerAngelsWithDistances: HowerAngelWithDistance[] = [];
         
         if (address) {
           workerHowerAngelsWithDistances = await this.howerAngelService.associateDistancesFromAddress(
@@ -2275,7 +2279,32 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
       }
     });
     
-    const practices: Array<PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] }> = Array.from(practicesMap.values());
+    let practices: Array<PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] }> = Array.from(practicesMap.values());
+    
+    // 4. Calculer les distances pour les pratiques pertinentes
+    // en trouvant les hower angels qui les proposent et en prenant la distance la plus courte
+    if ((address || gpsPosition) && practices.length > 0 && howerAngels.length > 0) {
+      console.log(`📍 [BILAN] Calcul des distances pour ${practices.length} pratiques`);
+      
+      try {
+        // Convertir howerAngels en HowerAngelWithDistance si nécessaire
+        const howerAngelsWithDistances = howerAngels.filter(ha => 
+          'distanceFromOrigin' in ha && ha.distanceFromOrigin
+        ) as HowerAngelWithDistance[];
+        
+        if (howerAngelsWithDistances.length > 0) {
+          practices = this.howerAngelService.associateDistancesToPractices(
+            practices,
+            howerAngelsWithDistances
+          );
+          console.log(`✅ [BILAN] Distances calculées pour les pratiques`);
+        } else {
+          console.warn('⚠️ [BILAN] Aucun hower angel avec distance trouvé, impossible de calculer les distances des pratiques');
+        }
+      } catch (error) {
+        console.warn('⚠️ [BILAN] Erreur lors du calcul des distances pour les pratiques:', error);
+      }
+    }
     
     console.log(`✅ [BILAN] ${practices.length} pratiques totales (${semanticPractices.length} sémantiques, ${workerPractices.length} workers), ${activities.length} activités et ${howerAngels.length} hower angels trouvés`);
     

@@ -71,6 +71,7 @@ jobs:
           --set-env-vars=GCP_TASKS_QUEUE_NAME=ia-processing-queue
           --set-env-vars=IA_PROCESSING_SERVICE_URL=${{ secrets.IA_PROCESSING_SERVICE_URL }}
           --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          --set-env-vars=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
           --set-env-vars=MAX_CONVERSATION_MESSAGES=${{ vars.MAX_CONVERSATION_MESSAGES }}
           --set-env-vars=MAX_DAILY_MESSAGES=${{ vars.MAX_DAILY_MESSAGES }}
           --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }}
@@ -136,6 +137,7 @@ jobs:
             --set-env-vars=GCP_LOCATION=europe-west1 \
             --set-env-vars=GCP_JOB_NAME=video-processing-job \
             --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }} \
             --set-env-vars=MAX_CONVERSATION_MESSAGES=${{ vars.MAX_CONVERSATION_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES=${{ vars.MAX_DAILY_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
@@ -167,6 +169,7 @@ jobs:
             --set-env-vars=GCP_LOCATION=europe-west1 \
             --set-env-vars=GCP_JOB_NAME=video-processing-job \
             --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }} \
             --set-env-vars=MAX_CONVERSATION_MESSAGES=${{ vars.MAX_CONVERSATION_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES=${{ vars.MAX_DAILY_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
@@ -204,6 +207,7 @@ jobs:
             --set-env-vars=GCP_LOCATION=europe-west1 \
             --set-env-vars=GCP_JOB_NAME=rgpd-processing-job \
             --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }} \
             --set-env-vars=MAX_CONVERSATION_MESSAGES=${{ vars.MAX_CONVERSATION_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES=${{ vars.MAX_DAILY_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
@@ -237,6 +241,7 @@ jobs:
             --set-env-vars=GCP_LOCATION=europe-west1 \
             --set-env-vars=GCP_JOB_NAME=rgpd-processing-job \
             --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }} \
             --set-env-vars=MAX_CONVERSATION_MESSAGES=${{ vars.MAX_CONVERSATION_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES=${{ vars.MAX_DAILY_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
@@ -278,6 +283,7 @@ jobs:
             --set-env-vars=GCP_LOCATION=europe-west1 \
             --set-env-vars=GCP_JOB_NAME=file-cleanup-job \
             --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }} \
             --set-env-vars=MAX_CONVERSATION_MESSAGES=${{ vars.MAX_CONVERSATION_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES=${{ vars.MAX_DAILY_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \
@@ -311,6 +317,7 @@ jobs:
             --set-env-vars=GCP_LOCATION=europe-west1 \
             --set-env-vars=GCP_JOB_NAME=file-cleanup-job \
             --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --set-env-vars=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }} \
             --set-env-vars=MAX_CONVERSATION_MESSAGES=${{ vars.MAX_CONVERSATION_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES=${{ vars.MAX_DAILY_MESSAGES }} \
             --set-env-vars=MAX_DAILY_MESSAGES_FREE=${{ vars.MAX_DAILY_MESSAGES_FREE }} \

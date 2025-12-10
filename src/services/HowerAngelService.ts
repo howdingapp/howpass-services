@@ -1,21 +1,8 @@
-import { HowerAngelSearchResult } from '../types/search';
+import { HowerAngelSearchResult, PracticeSearchResult } from '../types/search';
+import { GeolocationService, GeolocationPosition, DistanceResult } from './GeolocationService';
 
-/**
- * Interface pour les coordonnées GPS
- */
-export interface GeolocationPosition {
-  lat: number;
-  lng: number;
-}
-
-/**
- * Interface pour le résultat de distance
- */
-export interface DistanceResult {
-  distance: number; // en kilomètres
-  duration?: number; // en minutes (si disponible)
-  formattedDistance: string; // formaté pour l'affichage
-}
+// Réexport pour compatibilité
+export type { GeolocationPosition, DistanceResult } from './GeolocationService';
 
 /**
  * Interface pour un hower angel avec distance
@@ -29,79 +16,15 @@ export interface HowerAngelWithDistance extends HowerAngelSearchResult {
  * Service pour calculer les distances des hower angels
  */
 export class HowerAngelService {
-  private googleMapsApiKey: string | undefined;
+  private geolocationService: GeolocationService;
 
   constructor() {
-    this.googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
-  }
-
-  /**
-   * Calcule la distance en ligne droite entre deux points (formule de Haversine)
-   */
-  private calculateHaversineDistance(
-    point1: GeolocationPosition,
-    point2: GeolocationPosition
-  ): DistanceResult {
-    const R = 6371; // Rayon de la Terre en km
-    const dLat = (point2.lat - point1.lat) * Math.PI / 180;
-    const dLon = (point2.lng - point1.lng) * Math.PI / 180;
-    
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const distance = R * c;
-
-    return {
-      distance,
-      formattedDistance: this.formatDistance(distance)
-    };
-  }
-
-  /**
-   * Calcule la distance routière via Google Maps Distance Matrix API
-   * Fallback vers Haversine si l'API n'est pas disponible ou échoue
-   */
-  private async calculateGoogleMapsDistance(
-    origin: GeolocationPosition,
-    destination: GeolocationPosition
-  ): Promise<DistanceResult> {
-    try {
-      if (!this.googleMapsApiKey) {
-        console.warn('⚠️ Clé API Google Maps non configurée, utilisation de Haversine');
-        return this.calculateHaversineDistance(origin, destination);
-      }
-
-      const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.lat},${origin.lng}&destinations=${destination.lat},${destination.lng}&key=${this.googleMapsApiKey}&mode=driving&units=metric`;
-      
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.status === 'OK' && data.rows[0]?.elements[0]?.status === 'OK') {
-        const element = data.rows[0].elements[0];
-        const distance = element.distance.value / 1000; // Convertir en km
-        const duration = element.duration.value / 60; // Convertir en minutes
-
-        return {
-          distance,
-          duration,
-          formattedDistance: this.formatDistance(distance)
-        };
-      } else {
-        // Fallback vers Haversine si l'API échoue
-        console.warn('⚠️ Google Maps Distance Matrix API a échoué, fallback vers Haversine');
-        return this.calculateHaversineDistance(origin, destination);
-      }
-    } catch (error) {
-      console.warn('⚠️ Erreur Google Maps Distance Matrix API, fallback vers Haversine:', error);
-      return this.calculateHaversineDistance(origin, destination);
-    }
+    this.geolocationService = new GeolocationService();
   }
 
   /**
    * Calcule les distances pour une liste de destinations depuis une origine
+   * Utilise uniquement la formule de Haversine (distance à vol d'oiseau)
    */
   private async calculateMultipleDistances(
     origin: GeolocationPosition,
@@ -110,150 +33,14 @@ export class HowerAngelService {
     const results = [];
 
     for (const destination of destinations) {
-      let result: DistanceResult;
-      
-      if (this.googleMapsApiKey) {
-        result = await this.calculateGoogleMapsDistance(origin, destination);
-      } else {
-        result = this.calculateHaversineDistance(origin, destination);
-      }
-
+      // Utiliser getDistanceFrom depuis GeolocationService
+      const result = this.geolocationService.getDistanceFrom(origin, destination);
       results.push({ destination, result });
     }
 
     return results;
   }
 
-  /**
-   * Formate la distance pour l'affichage
-   */
-  private formatDistance(distance: number): string {
-    if (distance < 1) {
-      return `${Math.round(distance * 1000)} m`;
-    } else if (distance < 10) {
-      return `${distance.toFixed(0)} km`;
-    } else {
-      return `${Math.round(distance)} km`;
-    }
-  }
-
-  /**
-   * Géocode une adresse en coordonnées GPS via Google Maps Geocoding API
-   * Utilise le cache Supabase si disponible (via la table geocoding_results)
-   */
-  async geocodeAddress(
-    address: string,
-    supabaseClient?: any
-  ): Promise<GeolocationPosition | null> {
-    try {
-      if (!address || typeof address !== 'string' || address.trim() === '') {
-        console.warn('⚠️ Adresse vide ou invalide');
-        return null;
-      }
-
-      const normalizedAddress = address.trim();
-
-      // 1. Vérifier si le résultat existe déjà dans le cache Supabase
-      if (supabaseClient) {
-        try {
-          const { data: cachedData, error: cacheError } = await supabaseClient
-            .from('geocoding_results')
-            .select('latitude, longitude')
-            .eq('address', normalizedAddress)
-            .single();
-
-          if (cachedData && !cacheError) {
-            console.log(`✅ Résultat de géocodage trouvé dans le cache pour: ${normalizedAddress}`);
-            return {
-              lat: cachedData.latitude,
-              lng: cachedData.longitude
-            };
-          }
-        } catch (cacheErr) {
-          // Si le cache échoue, continuer avec l'API Google Maps
-          console.warn('⚠️ Erreur lors de la vérification du cache:', cacheErr);
-        }
-      }
-
-      // 2. Si pas dans le cache, appeler Google Maps API
-      if (!this.googleMapsApiKey) {
-        console.error('❌ Clé API Google Maps non configurée');
-        return null;
-      }
-
-      // Prétraiter l'adresse pour corriger les codes postaux incomplets
-      const processedAddress = this.preprocessAddress(normalizedAddress);
-      const encodedAddress = encodeURIComponent(processedAddress);
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&key=${this.googleMapsApiKey}`;
-      
-      console.log(`🌍 Appel à Google Maps API pour: ${normalizedAddress}`);
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (data.status === 'OK' && data.results && data.results.length > 0) {
-        const location = data.results[0].geometry.location;
-        const latitude = location.lat;
-        const longitude = location.lng;
-
-        // 3. Sauvegarder le résultat dans le cache Supabase si disponible
-        if (supabaseClient) {
-          try {
-            const { error: saveError } = await supabaseClient
-              .from('geocoding_results')
-              .upsert(
-                {
-                  address: normalizedAddress,
-                  latitude,
-                  longitude
-                },
-                {
-                  onConflict: 'address',
-                  ignoreDuplicates: false
-                }
-              );
-
-            if (saveError) {
-              console.warn('⚠️ Impossible de sauvegarder le résultat dans le cache:', saveError);
-            } else {
-              console.log(`✅ Résultat de géocodage sauvegardé dans le cache pour: ${normalizedAddress}`);
-            }
-          } catch (saveErr) {
-            console.warn('⚠️ Erreur lors de la sauvegarde dans le cache:', saveErr);
-          }
-        }
-
-        return {
-          lat: latitude,
-          lng: longitude
-        };
-      }
-      
-      console.warn('⚠️ Géocodage échoué pour l\'adresse:', normalizedAddress, data.status);
-      return null;
-
-    } catch (error) {
-      console.error('❌ Erreur lors du géocodage:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Prétraite une adresse pour corriger les codes postaux incomplets
-   * Règle spécifique aux codes postaux français : complète les codes de 1 à 4 chiffres
-   * en ajoutant des zéros à gauche pour obtenir 5 chiffres
-   */
-  private preprocessAddress(address: string): string {
-    // Expression régulière pour détecter les codes postaux français incomplets (1 à 4 chiffres)
-    const frenchPostalCodeRegex = /\b(\d{1,4})\b/g;
-    
-    return address.replace(frenchPostalCodeRegex, (match, digits) => {
-      // Si c'est un code postal français incomplet (1 à 4 chiffres), le compléter avec des zéros à gauche
-      if (digits.length >= 1 && digits.length <= 4) {
-        return digits.padStart(5, '0');
-      }
-      return match;
-    });
-  }
 
   /**
    * Extrait les coordonnées GPS depuis un hower angel
@@ -361,7 +148,7 @@ export class HowerAngelService {
   ): Promise<HowerAngelWithDistance[]> {
     try {
       // 1. Géocoder l'adresse en coordonnées GPS
-      const originCoordinates = await this.geocodeAddress(address, supabaseClient);
+      const originCoordinates = await this.geolocationService.geocodeAddress(address, supabaseClient);
       
       if (!originCoordinates) {
         console.warn('⚠️ Impossible de géocoder l\'adresse, retour des hower angels sans distance');
@@ -400,11 +187,13 @@ export class HowerAngelService {
         
         if (coordsIndex >= 0 && coordsIndex < distanceResults.length) {
           const distanceResult = distanceResults[coordsIndex];
-          return {
-            ...howerAngel,
-            distanceFromOrigin: distanceResult.result,
-            coordinates: distanceResult.destination
-          };
+          if (distanceResult) {
+            return {
+              ...howerAngel,
+              distanceFromOrigin: distanceResult.result,
+              coordinates: distanceResult.destination
+            };
+          }
         }
         
         return { ...howerAngel };
@@ -468,11 +257,13 @@ export class HowerAngelService {
         
         if (coordsIndex >= 0 && coordsIndex < distanceResults.length) {
           const distanceResult = distanceResults[coordsIndex];
-          return {
-            ...howerAngel,
-            distanceFromOrigin: distanceResult.result,
-            coordinates: distanceResult.destination
-          };
+          if (distanceResult) {
+            return {
+              ...howerAngel,
+              distanceFromOrigin: distanceResult.result,
+              coordinates: distanceResult.destination
+            };
+          }
         }
         
         return { ...howerAngel };
@@ -489,6 +280,62 @@ export class HowerAngelService {
       console.error('❌ Erreur lors de l\'association des distances depuis les coordonnées:', error);
       return howerAngels.map(ha => ({ ...ha }));
     }
+  }
+
+  /**
+   * Calcule la distance la plus courte d'une pratique en trouvant les hower angels qui la proposent
+   * @param practiceId ID de la pratique
+   * @param howerAngels Liste des hower angels avec distances (doivent avoir été calculées)
+   * @returns Distance la plus courte ou null si aucun hower angel ne propose cette pratique
+   */
+  getShortestDistanceForPractice(
+    practiceId: string,
+    howerAngels: HowerAngelWithDistance[]
+  ): DistanceResult | null {
+    // Trouver tous les hower angels qui proposent cette pratique (via leurs spécialités)
+    const howerAngelsWithPractice = howerAngels.filter(howerAngel => {
+      if (!howerAngel.specialties || howerAngel.specialties.length === 0) {
+        return false;
+      }
+      // Vérifier si une spécialité correspond à la pratique
+      return howerAngel.specialties.some(specialty => specialty.id === practiceId);
+    });
+
+    if (howerAngelsWithPractice.length === 0) {
+      return null;
+    }
+
+    // Trouver la distance la plus courte
+    let shortestDistance: DistanceResult | null = null;
+    let minDistance = Infinity;
+
+    for (const howerAngel of howerAngelsWithPractice) {
+      if (howerAngel.distanceFromOrigin && howerAngel.distanceFromOrigin.distance < minDistance) {
+        minDistance = howerAngel.distanceFromOrigin.distance;
+        shortestDistance = howerAngel.distanceFromOrigin;
+      }
+    }
+
+    return shortestDistance;
+  }
+
+  /**
+   * Associe les distances aux pratiques en trouvant les hower angels qui les proposent
+   * @param practices Liste des pratiques
+   * @param howerAngels Liste des hower angels avec distances (doivent avoir été calculées)
+   * @returns Liste des pratiques avec leurs distances (distance la plus courte)
+   */
+  associateDistancesToPractices(
+    practices: PracticeSearchResult[],
+    howerAngels: HowerAngelWithDistance[]
+  ): Array<PracticeSearchResult & { distanceFromOrigin?: DistanceResult }> {
+    return practices.map(practice => {
+      const distance = this.getShortestDistanceForPractice(practice.id, howerAngels);
+      return {
+        ...practice,
+        ...(distance && { distanceFromOrigin: distance })
+      };
+    });
   }
 }
 
