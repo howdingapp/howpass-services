@@ -585,7 +585,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         const intent = currentIntentInfos?.intent as RecommendationIntent | undefined;
         
         // Calculer globalIntentInfos avec toutes les réponses
-        // Si on a déjà 2 questionnaires, computeGlobalIntentInfos calculera l'univers
+        // computeGlobalIntentInfos calcule l'univers pour chaque questionnaire
         let globalIntentInfos = await this.computeGlobalIntentInfos(intent, context, userMessage);
         
         context.metadata = {
@@ -1285,20 +1285,10 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
   /**
    * Schéma de sortie pour les messages
    * Permet à l'IA de retourner un questionnaire optionnel après avoir reçu des réponses
-   * Si on a déjà 2 questionnaires, on ne génère plus de questionnaire, on appelle le parent
+   * L'univers est calculé pour chaque questionnaire, donc on peut toujours générer un questionnaire si nécessaire
    */
-  protected override getAddMessageOutputSchema(context: HowanaContext, forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
-    // Récupérer le nombre de questionnaires déjà reçus
-    const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;
-    const questionnaires = bilanUniverContext?.questionnaires?.value || [];
-    const questionnairesCount = questionnaires.length;
-    
-    // Si on a déjà 2 questionnaires (INITIAL + 1 relance), on ne génère plus de questionnaire, on appelle le parent
-    if (questionnairesCount >= 2) {
-      return super.getAddMessageOutputSchema(context, forceSummaryToolCall);
-    }
-    
-    // Sinon, on peut générer un nouveau questionnaire
+  protected override getAddMessageOutputSchema(_context: HowanaContext, _forceSummaryToolCall: boolean = false): ChatBotOutputSchema {
+    // On peut toujours générer un nouveau questionnaire si nécessaire
     return {
       format: { 
         type: "json_schema",
@@ -1627,84 +1617,52 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     
     console.log(`📋 [BILAN] Total: ${allQuestionResponses.length} réponses (${previousQuestionResponses.length} précédentes + ${questionResponses.length} courantes)`);
     
-    // Ne calculer l'univers qu'après avoir reçu toutes les réponses (2 questionnaires)
-    if (questionnaires.length >= 2) {
-      console.log(`✅ [BILAN] ${questionnaires.length} questionnaires détectés, calcul de l'univers avec toutes les réponses`);
-      
-      // Récupérer les chunks précédents depuis l'univers précédent
-      const previousChunks = previousBilanUniverContext?.chunks?.value || [];
-      
-      // Combiner les chunks précédents avec les chunks de l'intent actuel
-      const currentChunks = (intent as BilanQuestionIntent)?.universContext?.chunks || [];
-      const allChunks = [...previousChunks, ...currentChunks];
-      
-      // Créer un intent combiné avec tous les chunks
-      const combinedIntent: BilanQuestionIntent = {
-        type: "bilan_question",
-        universContext: {
-          chunks: allChunks
-        }
-      };
-      
-      console.log(`✅ [BILAN] ${allChunks.length} chunks combinés (${previousChunks.length} précédents + ${currentChunks.length} courants)`);
-      
-      // Calculer l'univers avec toutes les réponses de tous les questionnaires
-      const universe = await this.computeUniverse(
-        combinedIntent, 
-        allQuestionResponses, 
-        questionnaires, // Passer tous les questionnaires
-        totalQuestions, 
-        answeredQuestions,
-        context // Passer le contexte pour accéder aux questionnaireAnswers
-      );
-      
-      // Créer globalIntentInfos avec les résultats de l'univers
-      return {
-        bilanUniverContext: {
-          families: universe.families,
-          practices: universe.practices,
-          activities: universe.activities,
-          howerAngels: universe.howerAngels,
-          questionResponses: universe.questionResponses,
-          chunks: universe.chunks,
-          questionnaires: {
-            info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
-            value: questionnaires
-          },
-          computedAt: new Date().toISOString()
-        }
-      };
-    } else {
-      console.log(`📋 [BILAN] ${questionnaires.length} questionnaire(s), pas encore de calcul d'univers (attente du 2ème questionnaire)`);
-      
-      // Récupérer les chunks précédents et les combiner avec les chunks actuels
-      const previousChunks = previousBilanUniverContext?.chunks?.value || [];
-      const currentChunks = (intent as BilanQuestionIntent)?.universContext?.chunks || [];
-      const allChunks = [...previousChunks, ...currentChunks];
-      
-      // Stocker les réponses du questionnaire courant et les chunks sans calculer l'univers
-      return {
-        bilanUniverContext: {
-          families: { info: '', value: [] },
-          practices: { info: '', value: [] },
-          activities: { info: '', value: [] },
-          howerAngels: { info: '', value: [] },
-          questionResponses: {
-            info: 'Réponses collectées jusqu\'à présent.',
-            value: allQuestionResponses
-          },
-          chunks: {
-            info: 'Chunks collectés jusqu\'à présent.',
-            value: allChunks
-          },
-          questionnaires: {
-            info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
-            value: questionnaires
-          },
-          computedAt: new Date().toISOString()
-        }
-      };
-    }
+    // Calculer l'univers pour chaque questionnaire (plus besoin d'attendre 2 questionnaires)
+    console.log(`✅ [BILAN] ${questionnaires.length} questionnaire(s) détecté(s), calcul de l'univers avec toutes les réponses`);
+    
+    // Récupérer les chunks précédents depuis l'univers précédent
+    const previousChunks = previousBilanUniverContext?.chunks?.value || [];
+    
+    // Combiner les chunks précédents avec les chunks de l'intent actuel
+    const currentChunks = (intent as BilanQuestionIntent)?.universContext?.chunks || [];
+    const allChunks = [...previousChunks, ...currentChunks];
+    
+    // Créer un intent combiné avec tous les chunks
+    const combinedIntent: BilanQuestionIntent = {
+      type: "bilan_question",
+      universContext: {
+        chunks: allChunks
+      }
+    };
+    
+    console.log(`✅ [BILAN] ${allChunks.length} chunks combinés (${previousChunks.length} précédents + ${currentChunks.length} courants)`);
+    
+    // Calculer l'univers avec toutes les réponses de tous les questionnaires
+    const universe = await this.computeUniverse(
+      combinedIntent, 
+      allQuestionResponses, 
+      questionnaires, // Passer tous les questionnaires
+      totalQuestions, 
+      answeredQuestions,
+      context // Passer le contexte pour accéder aux questionnaireAnswers
+    );
+    
+    // Créer globalIntentInfos avec les résultats de l'univers
+    return {
+      bilanUniverContext: {
+        families: universe.families,
+        practices: universe.practices,
+        activities: universe.activities,
+        howerAngels: universe.howerAngels,
+        questionResponses: universe.questionResponses,
+        chunks: universe.chunks,
+        questionnaires: {
+          info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
+          value: questionnaires
+        },
+        computedAt: new Date().toISOString()
+      }
+    };
 
   }
 
@@ -2678,8 +2636,36 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
         };
       }
       
-      // Vérifier la présence de l'objet summary
-      const summary = parsedResponse?.summary;
+      // Détecter la structure du summary : peut être directement dans parsedResponse ou dans parsedResponse.summary
+      let summary: any = null;
+      let recommendation: any = null;
+      let userProfile: any = null;
+      
+      // Cas 1 : Le summary est directement dans parsedResponse (format: { recommendation: ..., userProfile: ... })
+      if (parsedResponse.recommendation && typeof parsedResponse.recommendation === 'object') {
+        summary = parsedResponse;
+        recommendation = parsedResponse.recommendation;
+        userProfile = parsedResponse.userProfile;
+      }
+      // Cas 2 : Le summary est dans parsedResponse.summary (format: { summary: { recommendation: ..., userProfile: ... } })
+      else if (parsedResponse.summary && typeof parsedResponse.summary === 'object') {
+        summary = parsedResponse.summary;
+        // Vérifier si recommendation est directement dans summary ou dans summary.summary
+        if (summary.recommendation && typeof summary.recommendation === 'object') {
+          recommendation = summary.recommendation;
+          userProfile = summary.userProfile;
+        } else if (summary.summary?.recommendation && typeof summary.summary.recommendation === 'object') {
+          recommendation = summary.summary.recommendation;
+          userProfile = summary.summary.userProfile;
+          // Reformater pour avoir recommendation et userProfile au niveau supérieur
+          summary = {
+            ...summary.summary,
+            recommendation: recommendation,
+            userProfile: userProfile
+          };
+        }
+      }
+      
       if (!summary || typeof summary !== 'object') {
         return {
           isValid: false,
@@ -2687,9 +2673,43 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
         };
       }
       
-      // Toutes les validations sont passées, on peut marquer comme "summary"
-      const finalResponse = validationResult.finalObject || response;
-      // Modifier le type en "summary"
+      // Vérifier la présence des 2 champs obligatoires : recommendation et userProfile
+      if (!recommendation || typeof recommendation !== 'object') {
+        return {
+          isValid: false,
+          reason: 'Le summary ne contient pas le champ obligatoire "recommendation"'
+        };
+      }
+      
+      // Utiliser userProfile détecté ou celui dans summary
+      const finalUserProfile = userProfile || summary.userProfile;
+      if (!finalUserProfile || typeof finalUserProfile !== 'object') {
+        return {
+          isValid: false,
+          reason: 'Le summary ne contient pas le champ obligatoire "userProfile"'
+        };
+      }
+      
+      // Reformater le summary pour s'assurer qu'il a le bon format
+      // Format attendu : { summary: { recommendation: ..., userProfile: ... } }
+      const formattedSummary = {
+        recommendation: recommendation,
+        userProfile: finalUserProfile,
+        // Préserver les autres champs si présents (importanteKnowledge, univers, etc.)
+        ...(summary.importanteKnowledge && { importanteKnowledge: summary.importanteKnowledge }),
+        ...(summary.univers && { univers: summary.univers })
+      };
+      
+      // Formater la réponse pour qu'IAController détecte bien un summary
+      // IAController vérifie : iaResponse.type === 'summary' || iaResponse.message_type === 'summary'
+      // Et attend le format : response: { summary: summary.summary } (en string JSON)
+      const finalResponse = validationResult.finalObject || { ...response };
+      
+      // S'assurer que response contient bien { summary: ... } en format JSON string
+      // RecommendationMessageResponse.response est de type string
+      finalResponse.response = JSON.stringify({ summary: formattedSummary });
+      
+      // Marquer explicitement comme summary pour qu'IAController le détecte
       (finalResponse as any).type = 'summary';
       (finalResponse as any).message_type = 'summary';
       
