@@ -1061,15 +1061,15 @@ export class SupabaseService {
       title: string;
       short_description?: string;
       long_description?: string;
-      category_id: string;
-      tags?: string[];
+      category_id?: string;
+      practice_id?: string;
     }> | null;
     error?: any;
   }> {
     try {
       const { data, error } = await this.supabase
         .from('activities')
-        .select('id, title, short_description, long_description, category_id, tags');
+        .select('id, title, short_description, long_description, category_id, practice_id');
 
       if (error) {
         console.error('❌ Erreur lors de la récupération des activités:', error);
@@ -1093,14 +1093,13 @@ export class SupabaseService {
       short_description?: string;
       long_description?: string;
       category_id: string;
-      tags?: string[];
     }> | null;
     error?: any;
   }> {
     try {
       const { data, error } = await this.supabase
         .from('practices')
-        .select('id, title, short_description, long_description, category_id, tags');
+        .select('id, title, short_description, long_description, category_id');
 
       if (error) {
         console.error('❌ Erreur lors de la récupération des pratiques:', error);
@@ -1312,7 +1311,7 @@ export class SupabaseService {
           relevanceScore
         };
         if (withMatchInfos) {
-          result.typicalSituations = r?.typical_situations;
+          result.typicalSituations = r?.typical_situation;
         }
         return result;
       };
@@ -1390,7 +1389,7 @@ export class SupabaseService {
           familyDescription: r?.family_description ?? null
         };
         if (withMatchInfos) {
-          result.typicalSituations = r?.typical_situations;
+          result.typicalSituations = r?.typical_situation;
           result.chunkId = r?.chunk_id ?? null;
           result.chunkText = r?.chunk_text ?? null;
         }
@@ -2235,7 +2234,7 @@ export class SupabaseService {
 
   /**
    * Récupère toutes les pratiques actives avec leurs informations complètes
-   * (benefits, typical_situations, long_description, title)
+   * (benefits, typical_situation, long_description, title)
    */
   async getAllPracticesWithFullInfo(): Promise<{
     success: boolean;
@@ -2243,8 +2242,8 @@ export class SupabaseService {
       id: string;
       title: string;
       longDescription: string | null;
-      benefits: any;
-      typicalSituations: any;
+      benefits: string[] | undefined;
+      typicalSituations: string[] | undefined;
     }>;
     error?: string;
   }> {
@@ -2258,7 +2257,7 @@ export class SupabaseService {
           title,
           long_description,
           benefits,
-          typical_situations
+          typical_situation
         `)
         .eq('is_active', true);
 
@@ -2274,8 +2273,8 @@ export class SupabaseService {
         id: practice.id,
         title: practice.title,
         longDescription: practice.long_description || null,
-        benefits: practice.benefits || null,
-        typicalSituations: practice.typical_situations || null,
+        benefits: practice.benefits || undefined,
+        typicalSituations: practice.typical_situation || undefined,
       }));
 
       console.log(`✅ ${practices.length} pratiques récupérées avec informations complètes`);
