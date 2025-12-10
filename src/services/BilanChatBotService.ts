@@ -8,6 +8,7 @@ import {
   BilanFamily,
   BilanQuestionnaireWithChunks,
   BilanQuestionnaireUserAnswers,
+  BilanQuestionnaireUserMessage,
   BilanQuestionnaireAnswers,
   INITIAL_BILAN_QUESTIONS,
   BILAN_ERROR_MESSAGES
@@ -26,7 +27,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
    * Calcule l'intent pour la première réponse en utilisant computeIntent avec les réponses du questionnaire
    */
   public override async computeFirstResponseIntent(context: HowanaContext, userInputText?: string | null): Promise<{
-    intent: any;
+    intent: BilanQuestionIntent|null;
     intentCost: number | null;
     globalIntentInfos: any;
   }> {
@@ -365,15 +366,15 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     return true;
   }
 
-  public override async computeIntent(context: HowanaContext, userMessage: string): Promise<{ intent: any; intentCost: number | null; globalIntentInfos: any }> {
+  public override async computeIntent(context: HowanaContext, userMessage: string): Promise<{ intent: BilanQuestionIntent|null; intentCost: number | null; globalIntentInfos: any }> {
     
     // Récupérer le globalIntentInfos existant pour le conserver
     const existingGlobalIntentInfos = context.metadata?.['globalIntentInfos'] as any;
     
     // Vérifier si le message contient toutes les réponses en une fois (format JSON stringifié)
-    let parsedMessage: any = null;
+    let parsedMessage: BilanQuestionnaireUserMessage | null = null;
     try {
-      parsedMessage = JSON.parse(userMessage);
+      parsedMessage = JSON.parse(userMessage) as BilanQuestionnaireUserMessage;
       if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
         const mode = parsedMessage.mode || 'init';
         console.log(`📋 [BILAN] Détection du format bilan_answers avec ${parsedMessage.answers.length} réponses (mode: ${mode})`);
@@ -508,7 +509,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         // Retourner un intent avec les chunks cumulés
         return {
           intent: {
-            type: "bilan_questionnaire",
+            type: "bilan_question",
             universContext: {
               chunks: allChunks
             }
@@ -523,7 +524,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       // Retourner un intent vide
       return {
         intent: { 
-          type: "bilan_questionnaire",
+          type: "bilan_question",
           universContext: {
             chunks: []
           }
@@ -537,7 +538,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     console.error(`❌ [BILAN] Format de message non reconnu`);
     return {
       intent: { 
-        type: "bilan_questionnaire",
+        type: "bilan_question",
         universContext: {
           chunks: []
         }
@@ -560,9 +561,9 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
   ): Promise<HowanaContext> {
 
     // Vérifier si le message contient toutes les réponses en une fois (format JSON stringifié)
-    let parsedMessage: any = null;
+    let parsedMessage: BilanQuestionnaireUserMessage | null = null;
     try {
-      parsedMessage = JSON.parse(userMessage);
+      parsedMessage = JSON.parse(userMessage) as BilanQuestionnaireUserMessage;
       if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
         const mode = parsedMessage.mode || 'init';
         console.log(`✅ [BILAN] Toutes les réponses reçues en une fois (mode: ${mode})`);
@@ -1500,63 +1501,65 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     const currentQuestionnaire = this.getCurrentQuestionnaire(context);
     
     // Vérifier si le message contient toutes les réponses en une fois (format JSON stringifié)
-    let parsedMessage: any = null;
+    let parsedMessage: BilanQuestionnaireUserMessage | null = null;
     let questionResponses: BilanQuestionnaireAnswers = [];
     let totalQuestions = currentQuestionnaire.length;
     let answeredQuestions = totalQuestions;
     
+    console.log("userMessage.length = ", userMessage?.length || 0);
+
     // Ne tenter le parsing que si userMessage existe et n'est pas vide
     if (userMessage && userMessage.trim().length > 0) {
       try {
-        parsedMessage = JSON.parse(userMessage);
+        parsedMessage = JSON.parse(userMessage) as BilanQuestionnaireUserMessage;
         if (parsedMessage && parsedMessage.type === 'bilan_answers' && Array.isArray(parsedMessage.answers)) {
-        const mode = parsedMessage.mode || 'init';
-        console.log(`📋 [BILAN] computeGlobalIntentInfos - Traitement de ${parsedMessage.answers.length} réponses en batch (mode: ${mode})`);
-        
-        // Stocker l'ensemble des données parsées dans le contexte
-        const questionnaireUserAnswers: BilanQuestionnaireUserAnswers = {
-          mode: mode as 'init' | 'specific',
-          answers: parsedMessage.answers as BilanQuestionnaireAnswers
-        };
-        
-        if (context.metadata) {
-          context.metadata['questionnaireUserAnswers'] = questionnaireUserAnswers;
-        } else {
-          context.metadata = { ['questionnaireUserAnswers']: questionnaireUserAnswers };
-        }
-        
-        // Construire les questionResponses à partir de toutes les réponses
-        // Les réponses sont déjà au format BilanQuestionAnswer, on les utilise directement
-        for (const answer of parsedMessage.answers) {
-          questionResponses.push(answer);
-        }
-        
-        answeredQuestions = questionResponses.length;
-        console.log(`✅ [BILAN] computeGlobalIntentInfos - ${answeredQuestions} réponses traitées en batch`);
+          const mode = parsedMessage.mode || 'init';
+          console.log(`📋 [BILAN] computeGlobalIntentInfos - Traitement de ${parsedMessage.answers.length} réponses en batch (mode: ${mode})`);
+          
+          // Stocker l'ensemble des données parsées dans le contexte
+          const questionnaireUserAnswers: BilanQuestionnaireUserAnswers = {
+            mode: mode as 'init' | 'specific',
+            answers: parsedMessage.answers as BilanQuestionnaireAnswers
+          };
+          
+          if (context.metadata) {
+            context.metadata['questionnaireUserAnswers'] = questionnaireUserAnswers;
+          } else {
+            context.metadata = { ['questionnaireUserAnswers']: questionnaireUserAnswers };
+          }
+          
+          // Construire les questionResponses à partir de toutes les réponses
+          // Les réponses sont déjà au format BilanQuestionAnswer, on les utilise directement
+          for (const answer of parsedMessage.answers) {
+            questionResponses.push(answer);
+          }
+          
+          answeredQuestions = questionResponses.length;
+          console.log(`✅ [BILAN] computeGlobalIntentInfos - ${answeredQuestions} réponses traitées en batch`);
         }
       } catch (parseError) {
         // Ce n'est pas un JSON, ce n'est pas le format attendu
         console.error(`❌ [BILAN] computeGlobalIntentInfos - Message non-JSON et non-format bilan_answers:`, parseError);
-        // Récupérer les questionnaires existants pour les conserver
-      const previousBilanUniverContext = (context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
-      const existingQuestionnaires = previousBilanUniverContext?.questionnaires?.value || [];
-      
-      // Retourner un globalIntentInfos vide mais en conservant les questionnaires existants
-      return {
-        bilanUniverContext: {
-          families: { info: '', value: [] },
-          practices: { info: '', value: [] },
-          activities: { info: '', value: [] },
-          howerAngels: { info: '', value: [] },
-          questionResponses: { info: '', value: [] },
-          chunks: { info: '', value: [] },
-          questionnaires: {
-            info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
-            value: existingQuestionnaires
-          },
-          computedAt: new Date().toISOString()
-        }
-      };
+          // Récupérer les questionnaires existants pour les conserver
+        const previousBilanUniverContext = (context.metadata?.['globalIntentInfos'] as any)?.bilanUniverContext;
+        const existingQuestionnaires = previousBilanUniverContext?.questionnaires?.value || [];
+        
+        // Retourner un globalIntentInfos vide mais en conservant les questionnaires existants
+        return {
+          bilanUniverContext: {
+            families: { info: '', value: [] },
+            practices: { info: '', value: [] },
+            activities: { info: '', value: [] },
+            howerAngels: { info: '', value: [] },
+            questionResponses: { info: '', value: [] },
+            chunks: { info: '', value: [] },
+            questionnaires: {
+              info: 'Liste des questionnaires utilisés pour ce bilan, dans l\'ordre chronologique. Le dernier questionnaire de la liste est le questionnaire courant.',
+              value: existingQuestionnaires
+            },
+            computedAt: new Date().toISOString()
+          }
+        };
       }
     }
     

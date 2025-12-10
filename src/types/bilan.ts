@@ -245,6 +245,15 @@ export interface BilanQuestionnaireUserAnswers {
 }
 
 /**
+ * Format du message utilisateur parsé pour les réponses de questionnaire
+ */
+export interface BilanQuestionnaireUserMessage {
+  type: 'bilan_answers';
+  mode?: 'init' | 'specific';
+  answers: BilanQuestionnaireAnswers;
+}
+
+/**
  * Questions de bilan prédéfinies avec leurs réponses suggérées
  * Chaque question inclut la question elle-même et des quick replies avec icônes emoji et chunks
  * Chaque quickReply a ses propres chunks précalculés
