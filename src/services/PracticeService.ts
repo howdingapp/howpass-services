@@ -1,15 +1,13 @@
 import { PracticeSearchResult } from '../types/search';
-import { GeolocationService, DistanceResult } from './GeolocationService';
+import { DistanceResult } from './GeolocationService';
 import { HowerAngelWithDistance } from './HowerAngelService';
 
 /**
  * Service pour calculer les distances des pratiques
  */
 export class PracticeService {
-  private geolocationService: GeolocationService;
-
   constructor() {
-    this.geolocationService = new GeolocationService();
+    // Pas besoin de GeolocationService car on utilise les distances déjà calculées des hower angels
   }
 
   /**
