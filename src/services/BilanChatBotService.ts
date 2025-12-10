@@ -2862,6 +2862,142 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       }
     }
 
+    // Enrichir la réponse avec les distances depuis l'univers
+    // Récupérer l'univers depuis les métadonnées
+    const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;
+    
+    if (bilanUniverContext) {
+      // Créer une map simplifiée des distances : ID -> DistanceResult
+      const distancesMap = new Map<string, DistanceResult>();
+      
+      // Extraire les distances des pratiques
+      const practices = bilanUniverContext.practices?.value || [];
+      practices.forEach((practice: any) => {
+        if (practice.id && practice.distanceFromOrigin) {
+          distancesMap.set(`practice:${practice.id}`, practice.distanceFromOrigin);
+        }
+      });
+      
+      // Extraire les distances des activités
+      const activities = bilanUniverContext.activities?.value || [];
+      activities.forEach((activity: any) => {
+        if (activity.id && activity.distanceFromOrigin) {
+          distancesMap.set(`activity:${activity.id}`, activity.distanceFromOrigin);
+        }
+      });
+      
+      // Extraire les distances des hower angels
+      const howerAngels = bilanUniverContext.howerAngels?.value || [];
+      howerAngels.forEach((howerAngel: any) => {
+        if (howerAngel.id && howerAngel.distanceFromOrigin) {
+          distancesMap.set(`howerAngel:${howerAngel.id}`, howerAngel.distanceFromOrigin);
+        }
+      });
+      
+      // Stocker la map des distances dans le contexte pour utilisation future
+      context.metadata = {
+        ...context.metadata,
+        distancesMap: Object.fromEntries(distancesMap)
+      };
+      
+      // Enrichir la réponse si c'est un summary
+      try {
+        const responseText = response.response;
+        if (responseText && typeof responseText === 'string') {
+          let parsedResponse: any;
+          try {
+            parsedResponse = JSON.parse(responseText);
+          } catch {
+            // Si ce n'est pas du JSON, on ne fait rien
+            return {
+              isValid: true
+            };
+          }
+          
+          // Vérifier si c'est un summary de bilan
+          let summary: any = null;
+          if (parsedResponse.summary && typeof parsedResponse.summary === 'object') {
+            summary = parsedResponse.summary;
+          } else if (parsedResponse.recommendation && typeof parsedResponse.recommendation === 'object') {
+            summary = parsedResponse;
+          }
+          
+          if (summary && summary.recommendation) {
+            // Enrichir top1Recommandation avec la distance
+            if (summary.recommendation.top1Recommandation) {
+              const top1 = summary.recommendation.top1Recommandation;
+              const distanceKey = top1.type === 'activity' 
+                ? `activity:${top1.id}` 
+                : `practice:${top1.id}`;
+              const distance = distancesMap.get(distanceKey);
+              if (distance) {
+                top1.distance = distance;
+              }
+            }
+            
+            // Enrichir topRecommendedPanel avec les distances
+            if (summary.recommendation.topRecommendedPanel) {
+              const panel = summary.recommendation.topRecommendedPanel;
+              
+              if (panel.orderedTopPractices) {
+                panel.orderedTopPractices.forEach((practice: any) => {
+                  const distance = distancesMap.get(`practice:${practice.id}`);
+                  if (distance) {
+                    practice.distance = distance;
+                  }
+                });
+              }
+              
+              if (panel.orderedTopActivities) {
+                panel.orderedTopActivities.forEach((activity: any) => {
+                  const distance = distancesMap.get(`activity:${activity.id}`);
+                  if (distance) {
+                    activity.distance = distance;
+                  }
+                });
+              }
+            }
+            
+            // Enrichir byFamilyRecommendedPanel avec les distances
+            if (summary.recommendation.byFamilyRecommendedPanel) {
+              summary.recommendation.byFamilyRecommendedPanel.forEach((family: any) => {
+                if (family.orderedRecommendedPractices) {
+                  family.orderedRecommendedPractices.forEach((practice: any) => {
+                    const distance = distancesMap.get(`practice:${practice.id}`);
+                    if (distance) {
+                      practice.distance = distance;
+                    }
+                  });
+                }
+                
+                if (family.orderedRecommendedActivities) {
+                  family.orderedRecommendedActivities.forEach((activity: any) => {
+                    const distance = distancesMap.get(`activity:${activity.id}`);
+                    if (distance) {
+                      activity.distance = distance;
+                    }
+                  });
+                }
+              });
+            }
+            
+            // Reconstruire la réponse avec les distances enrichies
+            const enrichedResponse: RecommendationMessageResponse = {
+              ...response,
+              response: JSON.stringify(parsedResponse)
+            };
+            
+            return {
+              isValid: true,
+              finalObject: enrichedResponse
+            };
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ [BILAN] Erreur lors de l\'enrichissement des distances:', error);
+      }
+    }
+    
     // Toutes les validations sont passées
     return {
       isValid: true
