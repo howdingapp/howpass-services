@@ -19,7 +19,7 @@ import {
   HowerAngelSearchResult
 } from '../types/search';
 import { BaseChatBotService } from './BaseChatBotService';
-import { HowerAngelService, HowerAngelWithDistance } from './HowerAngelService';
+import { HowerAngelService, HowerAngelWithDistance, DistanceResult } from './HowerAngelService';
 import * as crypto from 'crypto';
 
 export class BilanChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
@@ -2279,7 +2279,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
       }
     });
     
-    let practices: Array<PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] }> = Array.from(practicesMap.values());
+    let practices: Array<PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[]; distanceFromOrigin?: DistanceResult }> = Array.from(practicesMap.values());
     
     // 4. Calculer les distances pour les pratiques pertinentes
     // en trouvant les hower angels qui les proposent et en prenant la distance la plus courte
@@ -2512,11 +2512,13 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
     // Enrichir les pratiques et activités avec les chunks qui ont permis le matching
     // chunkText contient le fragment de chunk de la base de données qui a matché
     // matchCount est déjà présent dans les pratiques et activités après déduplication
-    const practicesWithMatchCount = practices.map((practice: PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] }) => ({
+    // distanceFromOrigin est déjà présent si les distances ont été calculées
+    const practicesWithMatchCount = practices.map((practice: PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[]; distanceFromOrigin?: DistanceResult }) => ({
       ...practice,
       matchingChunks: practice.chunkText || null, // Fragment de chunk de la BD qui a permis le matching
       source: practice.source || 'semantic', // Provenance de la recommandation
-      workerReasons: practice.workerReasons || undefined // Raisons du worker si disponible
+      workerReasons: practice.workerReasons || undefined, // Raisons du worker si disponible
+      // distanceFromOrigin est préservé via le spread operator ...practice
     }));
     
     const activitiesWithMatchCount = activities.map((activity: ActivitySearchResult) => ({
