@@ -8,6 +8,7 @@ import {
   BilanFamily,
   BilanQuestionnaireWithChunks,
   BilanQuestionnaireUserAnswers,
+  BilanQuestionnaireAnswers,
   INITIAL_BILAN_QUESTIONS,
   BILAN_ERROR_MESSAGES
 } from '../types/bilan';
@@ -377,102 +378,73 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         const mode = parsedMessage.mode || 'init';
         console.log(`📋 [BILAN] Détection du format bilan_answers avec ${parsedMessage.answers.length} réponses (mode: ${mode})`);
         
-        // Stocker le mode dans le contexte pour utilisation ultérieure
+        // Stocker l'ensemble des données parsées dans le contexte
+        const questionnaireUserAnswers: BilanQuestionnaireUserAnswers = {
+          mode: mode as 'init' | 'specific',
+          answers: parsedMessage.answers as BilanQuestionnaireAnswers
+        };
+        
         context.metadata = {
           ...context.metadata,
-          ['questionnaireMode']: mode
+          ['questionnaireUserAnswers']: questionnaireUserAnswers
         };
         
         // Traiter toutes les réponses en une fois
-        const allAnswers = parsedMessage.answers as Array<{ questionIndex: number; answerIndex: number | null; answerText: string; moreResponse?: string; moreResponseType?: string }>;
+        const allAnswers = parsedMessage.answers as BilanQuestionnaireAnswers;
         
         // Récupérer le questionnaire courant
         const currentQuestionnaire = this.getCurrentQuestionnaire(context);
         
-        // Construire les questionResponses à partir de toutes les réponses
-        const questionResponses: Array<{ question: string; index: number; response: string }> = [];
+        // Utiliser directement les réponses qui sont déjà au format BilanQuestionAnswer
+        const questionResponses: BilanQuestionnaireAnswers = allAnswers;
         
-        for (const answer of allAnswers) {
-          const questionIndex = answer.questionIndex;
-          const answerIndex = answer.answerIndex;
-          const answerText = answer.answerText;
-          
-          // Récupérer la question correspondante depuis le questionnaire courant
-          const questionData = questionIndex >= 0 && questionIndex < currentQuestionnaire.length
-            ? currentQuestionnaire[questionIndex]
-            : null;
-          
-          const question = questionData?.question || `Question ${questionIndex + 1}`;
-          
-          // Vérifier si la question a un answerType de type "address", "takeGeoloc" ou "homeAddress"
-          // Si c'est le cas, même si answerIndex est null, ce n'est pas une réponse custom
-          let isAddressType = false;
-          if (questionData && answerIndex !== null && answerIndex >= 0 && answerIndex < questionData.quickReplies.length) {
-            const quickReply = questionData.quickReplies[answerIndex];
-            if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc' || quickReply.answerType === 'homeAddress')) {
-              isAddressType = true;
-            }
-          }
-          
-          // Si answerIndex est null et que ce n'est pas un type address, c'est une réponse custom (index = -1)
-          // Sinon, utiliser l'index de la quickReply
-          const responseIndex = (answerIndex !== null || isAddressType) ? (answerIndex !== null ? answerIndex : 0) : -1;
-          
-          questionResponses.push({
-            question,
-            index: responseIndex,
-            response: answerText
-          });
-        }
-        
-        // Séparer les réponses standard (index >= 0) de celles qui sont custom (index == -1)
+        // Séparer les réponses standard (answerIndex !== null) de celles qui sont custom (answerIndex === null)
         // ET extraire les réponses aux askPrecision (moreResponse de type "text")
-        const standardResponses: Array<{ question: string; index: number; response: string; questionIndex: number }> = [];
+        const standardResponses: BilanQuestionnaireAnswers = [];
         const customResponses: Array<{ question: string; response: string }> = [];
         
         for (let i = 0; i < questionResponses.length; i++) {
           const qr = questionResponses[i];
-          if (!qr || !qr.response) continue;
+          if (!qr || !qr.answerText) continue;
           
-          // Vérifier si la question correspondante a un answerType de type "address", "takeGeoloc" ou "homeAddress"
-          const originalAnswer = allAnswers[i];
-          const questionData = originalAnswer && originalAnswer.questionIndex >= 0 && originalAnswer.questionIndex < currentQuestionnaire.length
-            ? currentQuestionnaire[originalAnswer.questionIndex]
+          // Récupérer la question correspondante depuis le questionnaire courant
+          const questionData = qr.questionIndex >= 0 && qr.questionIndex < currentQuestionnaire.length
+            ? currentQuestionnaire[qr.questionIndex]
             : null;
           
+          const question = questionData?.question || `Question ${qr.questionIndex + 1}`;
+          
+          // Vérifier si la question a un answerType de type "address", "takeGeoloc" ou "homeAddress"
           let isAddressType = false;
-          if (questionData && qr.index >= 0 && qr.index < questionData.quickReplies.length) {
-            const quickReply = questionData.quickReplies[qr.index];
+          if (questionData && qr.answerIndex !== null && qr.answerIndex >= 0 && qr.answerIndex < questionData.quickReplies.length) {
+            const quickReply = questionData.quickReplies[qr.answerIndex];
             if (quickReply && (quickReply.answerType === 'address' || quickReply.answerType === 'takeGeoloc' || quickReply.answerType === 'homeAddress')) {
               isAddressType = true;
             }
           }
           
-          if (qr.index === -1 && !isAddressType) {
+          if (qr.answerIndex === null && !isAddressType) {
             // Réponse custom : pas d'index valide et ce n'est pas un type address
             customResponses.push({
-              question: qr.question,
-              response: qr.response
+              question,
+              response: qr.answerText
             });
           } else {
-            // Réponse standard : index valide, ajouter questionIndex (position dans questionResponses)
-            standardResponses.push({
-              ...qr,
-              questionIndex: i
-            });
+            // Réponse standard : index valide
+            standardResponses.push(qr);
           }
           
           // Si la réponse a un moreResponse de type "text", c'est une réponse à un askPrecision
           // L'ajouter aux custom réponses avec la question correspondante depuis askPrecision
-          if (originalAnswer && originalAnswer.moreResponse && originalAnswer.moreResponseType === 'text') {
-            const questionDataForMore = originalAnswer.questionIndex >= 0 && originalAnswer.questionIndex < currentQuestionnaire.length
-              ? currentQuestionnaire[originalAnswer.questionIndex]
+          if (qr.moreResponse && qr.moreResponseType === 'text') {
+            const questionDataForMore = qr.questionIndex >= 0 && qr.questionIndex < currentQuestionnaire.length
+              ? currentQuestionnaire[qr.questionIndex]
               : null;
             
             // Récupérer la question askPrecision correspondante
             let precisionQuestion = "Peux-tu me donner plus de précisions ?";
-            if (questionDataForMore && originalAnswer.answerIndex !== null && originalAnswer.answerIndex >= 0 && originalAnswer.answerIndex < questionDataForMore.quickReplies.length) {
-              const quickReply = questionDataForMore.quickReplies[originalAnswer.answerIndex];
+            if (questionDataForMore && qr.answerIndex !== null && qr.answerIndex >= 0 && qr.answerIndex < questionDataForMore.quickReplies.length) {
+              const quickReply = questionDataForMore.quickReplies[qr.answerIndex];
               if (quickReply && quickReply.askPrecision && quickReply.askPrecision.length > 0 && quickReply.askPrecision[0]) {
                 // Utiliser la première question askPrecision (ou toutes si nécessaire)
                 // Pour l'instant, on utilise la première question
@@ -483,7 +455,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
             // Ajouter la réponse aux askPrecision dans les custom réponses
             customResponses.push({
               question: precisionQuestion,
-              response: originalAnswer.moreResponse
+              response: qr.moreResponse
             });
           }
         }
@@ -492,21 +464,15 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         const quickReplyChunks: BilanChunk[] = [];
         
         for (const qr of standardResponses) {
-          if (!qr || qr.index < 0) continue;
+          if (!qr || qr.answerIndex === null || qr.answerIndex < 0) continue;
           
-          // Utiliser questionIndex pour trouver la question dans le questionnaire courant
-          // questionIndex correspond à la position dans questionResponses, pas dans le questionnaire
-          // On doit utiliser la questionIndex originale depuis l'answer
-          const originalAnswer = allAnswers[qr.questionIndex];
-          if (!originalAnswer) continue;
-          
-          const questionData = originalAnswer.questionIndex >= 0 && originalAnswer.questionIndex < currentQuestionnaire.length
-            ? currentQuestionnaire[originalAnswer.questionIndex]
+          const questionData = qr.questionIndex >= 0 && qr.questionIndex < currentQuestionnaire.length
+            ? currentQuestionnaire[qr.questionIndex]
             : null;
           
           if (!questionData) continue;
           
-          const quickReply = questionData.quickReplies[qr.index];
+          const quickReply = questionData.quickReplies[qr.answerIndex];
           if (quickReply && quickReply.chunks) {
             quickReplyChunks.push(...quickReply.chunks);
           }
@@ -601,10 +567,15 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         const mode = parsedMessage.mode || 'init';
         console.log(`✅ [BILAN] Toutes les réponses reçues en une fois (mode: ${mode})`);
         
-        // Stocker le mode dans le contexte pour utilisation ultérieure
+        // Stocker l'ensemble des données parsées dans le contexte
+        const questionnaireUserAnswers: BilanQuestionnaireUserAnswers = {
+          mode: mode as 'init' | 'specific',
+          answers: parsedMessage.answers as BilanQuestionnaireAnswers
+        };
+        
         context.metadata = {
           ...context.metadata,
-          ['questionnaireMode']: mode
+          ['questionnaireUserAnswers']: questionnaireUserAnswers
         };
         
         // Récupérer intent depuis le contexte
@@ -1530,7 +1501,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     
     // Vérifier si le message contient toutes les réponses en une fois (format JSON stringifié)
     let parsedMessage: any = null;
-    let questionResponses: Array<{ question: string; index: number; response: string }> = [];
+    let questionResponses: BilanQuestionnaireAnswers = [];
     let totalQuestions = currentQuestionnaire.length;
     let answeredQuestions = totalQuestions;
     
@@ -1542,50 +1513,22 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         const mode = parsedMessage.mode || 'init';
         console.log(`📋 [BILAN] computeGlobalIntentInfos - Traitement de ${parsedMessage.answers.length} réponses en batch (mode: ${mode})`);
         
-        // Stocker le mode dans le contexte pour utilisation ultérieure
+        // Stocker l'ensemble des données parsées dans le contexte
+        const questionnaireUserAnswers: BilanQuestionnaireUserAnswers = {
+          mode: mode as 'init' | 'specific',
+          answers: parsedMessage.answers as BilanQuestionnaireAnswers
+        };
+        
         if (context.metadata) {
-          context.metadata['questionnaireMode'] = mode;
+          context.metadata['questionnaireUserAnswers'] = questionnaireUserAnswers;
         } else {
-          context.metadata = { ['questionnaireMode']: mode };
+          context.metadata = { ['questionnaireUserAnswers']: questionnaireUserAnswers };
         }
         
         // Construire les questionResponses à partir de toutes les réponses
+        // Les réponses sont déjà au format BilanQuestionAnswer, on les utilise directement
         for (const answer of parsedMessage.answers) {
-          const questionIndex = answer.questionIndex;
-          const answerIndex = answer.answerIndex;
-          let answerText = answer.answerText;
-          
-          // Si moreResponse est présent, l'ajouter à la réponse
-          if (answer.moreResponse) {
-            answerText = `${answerText}${answer.moreResponse ? ' ' + answer.moreResponse : ''}`;
-          }
-          
-          // Récupérer la question correspondante depuis le questionnaire courant
-          const questionData = questionIndex >= 0 && questionIndex < currentQuestionnaire.length
-            ? currentQuestionnaire[questionIndex]
-            : null;
-          
-          const question = questionData?.question || `Question ${questionIndex + 1}`;
-          
-          // Vérifier si la question a un answerType de type "address", "takeGeoloc" ou "homeAddress"
-          // Si c'est le cas, même si answerIndex est null, ce n'est pas une réponse custom
-          let isAddressType = false;
-          if (questionData) {
-            // Vérifier si une des quickReplies a un answerType de "address", "takeGeoloc" ou "homeAddress"
-            isAddressType = questionData.quickReplies.some((qr: any) => 
-              qr.answerType === 'address' || qr.answerType === 'takeGeoloc' || qr.answerType === 'homeAddress'
-            );
-          }
-          
-          // Si answerIndex est null et que ce n'est pas un type address, c'est une réponse custom (index = -1)
-          // Sinon, utiliser l'index de la quickReply (ou 0 si answerIndex est null mais que c'est un type address)
-          const responseIndex = (answerIndex !== null || isAddressType) ? (answerIndex !== null ? answerIndex : 0) : -1;
-          
-          questionResponses.push({
-            question,
-            index: responseIndex,
-            response: answerText
-          });
+          questionResponses.push(answer);
         }
         
         answeredQuestions = questionResponses.length;
