@@ -19,9 +19,16 @@ import {
   HowerAngelSearchResult
 } from '../types/search';
 import { BaseChatBotService } from './BaseChatBotService';
+import { HowerAngelService } from './HowerAngelService';
 import * as crypto from 'crypto';
 
 export class BilanChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
+  protected howerAngelService: HowerAngelService;
+
+  constructor() {
+    super();
+    this.howerAngelService = new HowerAngelService();
+  }
   
   /**
    * Calcule l'intent pour la première réponse en utilisant computeIntent avec les réponses du questionnaire
@@ -1701,6 +1708,108 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
   }
 
   /**
+   * Récupère les données depuis la recherche agentique via workers IA pour les hower angels
+   * @param allChunksTexts Les textes des chunks pour le contexte utilisateur
+   * @param context Le contexte de la conversation
+   * @returns Les 15 meilleurs hower angels trouvés par les workers IA
+   */
+  protected async retrieveDataFromAgentWorkerSearchForHowerAngels(
+    allChunksTexts: string[],
+    context: HowanaContext
+  ): Promise<HowerAngelSearchResult[]> {
+    console.log(`🔍 [WORKER] Démarrage de la recherche agentique pour les hower angels`);
+    
+    // Récupérer tous les hower angels avec leurs informations complètes
+    // Note: On utilise searchHowerAngelsByUserSituation avec un limit élevé pour avoir plus de résultats
+    // puis on les filtre via les workers IA
+    const allHowerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(
+      allChunksTexts,
+      50, // Récupérer plus de résultats pour avoir un pool plus large
+      true // withMatchInfos = true
+    );
+    
+    if (!allHowerAngelsResult.success || !allHowerAngelsResult.data || allHowerAngelsResult.data.length === 0) {
+      console.warn('⚠️ [WORKER] Impossible de récupérer les hower angels, retour d\'un tableau vide');
+      return [];
+    }
+    
+    const allHowerAngels = allHowerAngelsResult.data;
+    console.log(`🔍 [WORKER] Analyse de ${allHowerAngels.length} hower angels via workers IA`);
+    
+    // Fonction pour extraire le texte d'un hower angel
+    const howerAngelToText = (howerAngel: HowerAngelSearchResult): string => {
+      const parts: string[] = [];
+      parts.push(`Nom: ${howerAngel.firstName || ''} ${howerAngel.lastName || ''}`);
+      if (howerAngel.profile) {
+        parts.push(`Profil: ${howerAngel.profile}`);
+      }
+      if (howerAngel.experience) {
+        parts.push(`Expérience: ${howerAngel.experience}`);
+      }
+      if (howerAngel.specialties && howerAngel.specialties.length > 0) {
+        const specialtiesText = howerAngel.specialties.map(s => s.title || s.name || '').join(', ');
+        parts.push(`Spécialités: ${specialtiesText}`);
+      }
+      if (howerAngel.activities && howerAngel.activities.length > 0) {
+        const activitiesText = howerAngel.activities
+          .map(a => `${a.title}${a.shortDescription ? ` - ${a.shortDescription}` : ''}`)
+          .join('; ');
+        parts.push(`Activités: ${activitiesText}`);
+      }
+      return parts.join('\n\n');
+    };
+    
+    // Construire les instructions spécifiques pour les workers de hower angels
+    const totalHowerAngels = allHowerAngels.length;
+    const itemsPerWorker = 10;
+    const workerInstruction = `Tu es un assistant spécialisé dans l'analyse de pertinence de praticiens de bien-être (hower angels).
+
+OBJECTIF:
+Tu dois identifier les praticiens les plus adaptés parmi un total de ${totalHowerAngels} praticiens disponibles sur la plateforme HOW PASS.
+
+TA MISSION:
+Tu es en charge d'analyser ${itemsPerWorker} praticiens parmi les ${totalHowerAngels} disponibles. Pour chaque praticien, tu dois évaluer sa pertinence globale en fonction du contexte utilisateur fourni.
+
+CRITÈRES D'ÉVALUATION:
+- Analyse la correspondance entre les besoins exprimés dans le contexte utilisateur et les spécialités du praticien
+- Évalue la pertinence des activités proposées par le praticien par rapport au profil de l'utilisateur
+- Considère l'expérience et le profil du praticien pour comprendre son champ d'expertise
+- Évalue la pertinence globale, pas seulement une correspondance partielle
+- IMPORTANT: Ne te base PAS QUE sur la notoriété ou la déclaration du praticien. La pertinence se juge principalement sur la correspondance des spécialités et activités avec les besoins exprimés par l'utilisateur.
+
+Retourne uniquement les praticiens avec un score de pertinence >= 6/10.`;
+
+    // Appeler la fonction générique de worker (héritée de BaseChatBotService)
+    const workerResults = await this.retrieveDataFromAgentWorkerSearch(
+      allHowerAngels,
+      allChunksTexts, // Contexte utilisateur = chunks
+      howerAngelToText,
+      context,
+      workerInstruction,
+      itemsPerWorker, // 10 hower angels par worker
+      0.6, // Score minimum 6/10
+      15  // Top 15 résultats
+    );
+    
+    // Convertir les résultats en HowerAngelSearchResult
+    const workerHowerAngels = workerResults.results.map(result => {
+      const howerAngel = result.item;
+      
+      return {
+        ...howerAngel,
+        relevanceScore: result.confidenceScore, // Score de confiance du worker (0-1)
+        similarity: result.confidenceScore,
+        workerReasons: result.reasons, // Raisons du worker
+        source: 'worker' as const // Indiquer la provenance
+      } as HowerAngelSearchResult & { workerReasons?: string[]; source?: 'semantic' | 'worker' };
+    });
+    
+    console.log(`✅ [WORKER] ${workerHowerAngels.length} hower angels pertinents trouvés via workers IA`);
+    
+    return workerHowerAngels;
+  }
+
+  /**
    * Récupère les données depuis la recherche agentique via workers IA
    * @param allChunksTexts Les textes des chunks pour le contexte utilisateur
    * @param context Le contexte de la conversation
@@ -2004,17 +2113,120 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
     // 1. Recherche sémantique et agentique en parallèle pour optimiser les coûts dans le cloud
     console.log(`🚀 [BILAN] Lancement des recherches sémantique et agentique en parallèle`);
     
-    const [semanticResults, workerPracticesResult] = await Promise.all([
+    const [semanticResults, workerPracticesResult, workerHowerAngelsResult] = await Promise.all([
       // Recherche sémantique (méthode actuelle)
       this.retrieveDataFromSemanticSearch(allChunksTexts),
-      // Recherche via workers IA (nouvelle méthode) - seulement si context est disponible
-      context ? this.retrieveDataFromAgentWorkerSearchForPractices(allChunksTexts, context, []) : Promise.resolve([])
+      // Recherche via workers IA pour les pratiques - seulement si context est disponible
+      context ? this.retrieveDataFromAgentWorkerSearchForPractices(allChunksTexts, context, []) : Promise.resolve([]),
+      // Recherche via workers IA pour les hower angels - seulement si context est disponible
+      context ? this.retrieveDataFromAgentWorkerSearchForHowerAngels(allChunksTexts, context) : Promise.resolve([])
     ]);
     
     const semanticPractices: PracticeSearchResult[] = semanticResults.practices;
     const activities: ActivitySearchResult[] = semanticResults.activities;
-    const howerAngels: HowerAngelSearchResult[] = semanticResults.howerAngels;
+    let howerAngels: HowerAngelSearchResult[] = semanticResults.howerAngels;
     const workerPractices: PracticeSearchResult[] = workerPracticesResult;
+    const workerHowerAngels: HowerAngelSearchResult[] = workerHowerAngelsResult;
+    
+    // 2. Calculer les distances pour les hower angels trouvés par recherche sémantique
+    // et réordonnancer par distance si une adresse ou GPS est disponible
+    if ((address || gpsPosition) && howerAngels.length > 0) {
+      console.log(`📍 [BILAN] Calcul des distances pour ${howerAngels.length} hower angels (recherche sémantique)`);
+      
+      try {
+        // Accéder au client Supabase via une propriété protégée ou une méthode publique
+        // Note: On utilise une assertion de type pour accéder à la propriété privée
+        const supabaseClient = (this.supabaseService as any).supabase;
+        
+        if (address) {
+          howerAngels = await this.howerAngelService.associateDistancesFromAddress(
+            howerAngels,
+            address,
+            supabaseClient
+          );
+        } else if (gpsPosition) {
+          howerAngels = await this.howerAngelService.associateDistancesFromCoordinates(
+            howerAngels,
+            { lat: gpsPosition.latitude, lng: gpsPosition.longitude },
+            supabaseClient
+          );
+        }
+        
+        console.log(`✅ [BILAN] Distances calculées pour les hower angels (recherche sémantique)`);
+      } catch (error) {
+        console.warn('⚠️ [BILAN] Erreur lors du calcul des distances pour les hower angels sémantiques:', error);
+      }
+    }
+    
+    // 3. Calculer les distances pour les hower angels trouvés par recherche agentique
+    if ((address || gpsPosition) && workerHowerAngels.length > 0) {
+      console.log(`📍 [BILAN] Calcul des distances pour ${workerHowerAngels.length} hower angels (recherche agentique)`);
+      
+      try {
+        // Accéder au client Supabase via une propriété protégée ou une méthode publique
+        const supabaseClient = (this.supabaseService as any).supabase;
+        let workerHowerAngelsWithDistances: HowerAngelSearchResult[] = [];
+        
+        if (address) {
+          workerHowerAngelsWithDistances = await this.howerAngelService.associateDistancesFromAddress(
+            workerHowerAngels,
+            address,
+            supabaseClient
+          );
+        } else if (gpsPosition) {
+          workerHowerAngelsWithDistances = await this.howerAngelService.associateDistancesFromCoordinates(
+            workerHowerAngels,
+            { lat: gpsPosition.latitude, lng: gpsPosition.longitude },
+            supabaseClient
+          );
+        }
+        
+        // Combiner les hower angels workers avec les sémantiques (éviter les doublons par ID)
+        const howerAngelsMap = new Map<string, HowerAngelSearchResult>();
+        
+        // Ajouter d'abord les hower angels sémantiques
+        howerAngels.forEach(ha => {
+          howerAngelsMap.set(ha.id, ha);
+        });
+        
+        // Ajouter les hower angels workers (peuvent compléter les sémantiques)
+        workerHowerAngelsWithDistances.forEach(ha => {
+          const existing = howerAngelsMap.get(ha.id);
+          if (existing) {
+            // Si la hower angel existe déjà, on garde la sémantique et on ajoute les infos du worker
+            (existing as any).workerReasons = (ha as any).workerReasons;
+            (existing as any).source = 'semantic'; // On garde 'semantic' comme source principale
+          } else {
+            howerAngelsMap.set(ha.id, ha);
+          }
+        });
+        
+        howerAngels = Array.from(howerAngelsMap.values());
+        
+        console.log(`✅ [BILAN] Distances calculées pour les hower angels (recherche agentique), total: ${howerAngels.length}`);
+      } catch (error) {
+        console.warn('⚠️ [BILAN] Erreur lors du calcul des distances pour les hower angels workers:', error);
+        // En cas d'erreur, combiner quand même les listes sans distance
+        const howerAngelsMap = new Map<string, HowerAngelSearchResult>();
+        howerAngels.forEach(ha => howerAngelsMap.set(ha.id, ha));
+        workerHowerAngels.forEach(ha => {
+          if (!howerAngelsMap.has(ha.id)) {
+            howerAngelsMap.set(ha.id, ha);
+          }
+        });
+        howerAngels = Array.from(howerAngelsMap.values());
+      }
+    } else if (workerHowerAngels.length > 0) {
+      // Si pas d'adresse/GPS, combiner quand même les listes
+      const howerAngelsMap = new Map<string, HowerAngelSearchResult>();
+      howerAngels.forEach(ha => howerAngelsMap.set(ha.id, ha));
+      workerHowerAngels.forEach(ha => {
+        if (!howerAngelsMap.has(ha.id)) {
+          howerAngelsMap.set(ha.id, ha);
+        }
+      });
+      howerAngels = Array.from(howerAngelsMap.values());
+    }
     
     // Enrichir les pratiques workers avec les infos sémantiques si disponibles
     const enrichedWorkerPractices = workerPractices.map(workerPractice => {

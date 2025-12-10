@@ -12,3 +12,4 @@ export { ChatBotServiceFactory } from './ChatBotServiceFactory';
 // Services existants (pour compatibilité)
 export { ConversationService } from './ConversationService';
 export { SupabaseService } from './SupabaseService';
+export { HowerAngelService } from './HowerAngelService';
