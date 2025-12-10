@@ -1603,14 +1603,15 @@ Détermine l'intent actuel de l'utilisateur basé sur le contexte de la conversa
     userMessage: string,
     onIaResponse: (response: any) => Promise<void>,
     forceSummary: boolean = false,
-    autoResponse?: string
+    autoResponse?: string,
+    isFirstCall: boolean = false
   ): Promise<HowanaContext> {
     // Si forceSummary est true, générer le résumé au lieu d'une réponse normale
     if (forceSummary) {
       console.log('✅ [BASE] Génération forcée du résumé via handleIntent');
       
       // Générer le résumé
-      const summaryResult = await this.generateConversationSummary(context);
+      const summaryResult = await this.generateConversationSummary(context, isFirstCall);
       context = summaryResult.updatedContext;
       
       // Construire la réponse au format attendu par onIaResponse

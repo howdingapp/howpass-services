@@ -1453,7 +1453,8 @@ export class RecommendationChatBotService extends BaseChatBotService<Recommendat
     userMessage: string,
     onIaResponse: (response: any) => Promise<void>,
     forceSummary: boolean = false,
-    autoResponse?: string
+    autoResponse?: string,
+    _isFirstCall: boolean = false
   ): Promise<HowanaContext> {
     // Récupérer intent depuis le contexte
     const currentIntentInfos = context.metadata?.['currentIntentInfos'] as any;

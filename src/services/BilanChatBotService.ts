@@ -192,7 +192,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         
         if (hasCustomResponses) {
           console.log('🔄 [BILAN] Réponses custom détectées, appel de handleIntent');
-          await this.handleIntent(context, userMessage, async () => {}, true);
+          await this.handleIntent(context, userMessage, async () => {}, false, undefined, false);
         }
       
         // Générer le summary en utilisant la méthode de la classe parente
@@ -557,7 +557,8 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     userMessage: string,
     onIaResponse: (response: any) => Promise<void>,
     _forceSummary: boolean = false,
-    _autoResponse?: string // Paramètre optionnel pour compatibilité avec la signature parente
+    _autoResponse?: string, // Paramètre optionnel pour compatibilité avec la signature parente
+    _isFirstCall: boolean = false
   ): Promise<HowanaContext> {
 
     // Vérifier si le message contient toutes les réponses en une fois (format JSON stringifié)
@@ -592,7 +593,7 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           ['globalIntentInfos']: globalIntentInfos
         };
         
-        return super.handleIntent(context, userMessage, onIaResponse, true);
+        return super.handleIntent(context, userMessage, onIaResponse, true, undefined, true);
 
       }
     } catch (parseError) {
