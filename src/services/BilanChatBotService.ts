@@ -20,14 +20,20 @@ import {
 } from '../types/search';
 import { BaseChatBotService } from './BaseChatBotService';
 import { HowerAngelService, HowerAngelWithDistance, DistanceResult } from './HowerAngelService';
+import { PracticeService } from './PracticeService';
+import { ActivityService } from './ActivityService';
 import * as crypto from 'crypto';
 
 export class BilanChatBotService extends BaseChatBotService<RecommendationMessageResponse> {
   protected howerAngelService: HowerAngelService;
+  protected practiceService: PracticeService;
+  protected activityService: ActivityService;
 
   constructor() {
     super();
     this.howerAngelService = new HowerAngelService();
+    this.practiceService = new PracticeService();
+    this.activityService = new ActivityService();
   }
   
   /**
@@ -2127,7 +2133,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
     ]);
     
     const semanticPractices: PracticeSearchResult[] = semanticResults.practices;
-    const activities: ActivitySearchResult[] = semanticResults.activities;
+    let activities: ActivitySearchResult[] = semanticResults.activities;
     let howerAngels: HowerAngelSearchResult[] | HowerAngelWithDistance[] = semanticResults.howerAngels;
     const workerPractices: PracticeSearchResult[] = workerPracticesResult;
     const workerHowerAngels: HowerAngelSearchResult[] = workerHowerAngelsResult;
@@ -2293,7 +2299,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
         ) as HowerAngelWithDistance[];
         
         if (howerAngelsWithDistances.length > 0) {
-          practices = this.howerAngelService.associateDistancesToPractices(
+          practices = this.practiceService.associateDistancesToPractices(
             practices,
             howerAngelsWithDistances
           );
@@ -2303,6 +2309,35 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
         }
       } catch (error) {
         console.warn('⚠️ [BILAN] Erreur lors du calcul des distances pour les pratiques:', error);
+      }
+    }
+    
+    // 5. Calculer les distances pour les activités pertinentes
+    // en utilisant l'adresse de chaque activité
+    if ((address || gpsPosition) && activities.length > 0) {
+      console.log(`📍 [BILAN] Calcul des distances pour ${activities.length} activités`);
+      
+      try {
+        // Accéder au client Supabase via une propriété protégée ou une méthode publique
+        const supabaseClient = (this.supabaseService as any).supabase;
+        
+        if (address) {
+          activities = await this.activityService.associateDistancesFromAddress(
+            activities,
+            address,
+            supabaseClient
+          );
+        } else if (gpsPosition) {
+          activities = await this.activityService.associateDistancesFromCoordinates(
+            activities,
+            { lat: gpsPosition.latitude, lng: gpsPosition.longitude },
+            supabaseClient
+          );
+        }
+        
+        console.log(`✅ [BILAN] Distances calculées pour les activités`);
+      } catch (error) {
+        console.warn('⚠️ [BILAN] Erreur lors du calcul des distances pour les activités:', error);
       }
     }
     
@@ -2521,9 +2556,10 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
       // distanceFromOrigin est préservé via le spread operator ...practice
     }));
     
-    const activitiesWithMatchCount = activities.map((activity: ActivitySearchResult) => ({
+    const activitiesWithMatchCount = activities.map((activity: ActivitySearchResult & { distanceFromOrigin?: DistanceResult }) => ({
       ...activity,
-      matchingChunks: activity.chunkText || null // Fragment de chunk de la BD qui a permis le matching
+      matchingChunks: activity.chunkText || null, // Fragment de chunk de la BD qui a permis le matching
+      // distanceFromOrigin est préservé via le spread operator ...activity
     }));
     
     // Enrichir les hower angels avec les chunks qui ont permis le matching
