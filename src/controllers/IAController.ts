@@ -742,6 +742,46 @@ export class IAController {
 
     console.log(`📋 Recommandations requises pour le résumé: ${chatBotService['recommendationRequiredForSummary'](context)}`);
 
+    // Si c'est un summary, s'assurer que le format correspond au format attendu
+    if (this.isSummary(iaResponse)) {
+      console.log('✅ Première réponse détectée comme summary, vérification du format...');
+      
+      // Parser la réponse pour extraire le summary
+      let parsedResponse: any;
+      try {
+        const responseText = typeof iaResponse.response === 'string' ? iaResponse.response : JSON.stringify(iaResponse.response);
+        parsedResponse = JSON.parse(responseText);
+      } catch (error) {
+        console.error('❌ Erreur lors du parsing de la réponse pour vérifier le format summary:', error);
+        // Continuer avec la réponse originale si le parsing échoue
+      }
+      
+      // Vérifier que parsedResponse contient un objet summary
+      if (parsedResponse && parsedResponse.summary && typeof parsedResponse.summary === 'object') {
+        // Reconstruire iaResponse avec le format attendu pour un summary
+        const recommendations = iaResponse.recommendations || updatedContext.recommendations || { activities: [], practices: [] };
+        
+        iaResponse = {
+          response: { summary: parsedResponse.summary },
+          target_table: updatedContext.type === 'bilan' ? 'bilans' : updatedContext.type === 'activity' ? 'activities' : 'ai_responses',
+          target_id: updatedContext.bilanId || updatedContext.activityId || null,
+          summary_type: 'conversation_summary',
+          recommendations: recommendations,
+          hasRecommendations: (recommendations.activities?.length > 0 || recommendations.practices?.length > 0),
+          messageId: iaResponse.messageId || `summary_${Date.now()}`,
+          type: 'summary',
+          message_type: 'summary',
+          cost_input: iaResponse.cost_input !== undefined ? iaResponse.cost_input : null,
+          cost_cached_input: iaResponse.cost_cached_input !== undefined ? iaResponse.cost_cached_input : null,
+          cost_output: iaResponse.cost_output !== undefined ? iaResponse.cost_output : null,
+        };
+        
+        console.log('✅ Format summary appliqué avec succès');
+      } else {
+        console.warn('⚠️ La réponse est marquée comme summary mais ne contient pas d\'objet summary valide');
+      }
+    }
+
     return {
       updatedContext,
       iaResponse

@@ -2634,6 +2634,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
   /**
    * Valide une première réponse IA générée pour le bilan
    * Utilise la même logique que validateResponse mais adaptée pour la première réponse
+   * Vérifie que la réponse respecte le format Summary avant de la marquer comme "summary"
    * @param response La première réponse IA à valider
    * @param context Le contexte de la conversation
    * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (RecommendationMessageResponse optionnel)
@@ -2648,7 +2649,60 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
   }> {
     // Pour la première réponse, on utilise la même validation que validateResponse
     // car la logique de validation est identique
-    return this.validateResponse(response, context);
+    const validationResult = await this.validateResponse(response, context);
+    
+    // Si la validation de base a échoué, retourner le résultat tel quel
+    if (!validationResult.isValid) {
+      return validationResult;
+    }
+    
+    // Vérifier que la réponse respecte le format Summary avant de la marquer comme "summary"
+    try {
+      const responseText = validationResult.finalObject?.response || response.response;
+      
+      if (!responseText || typeof responseText !== 'string') {
+        return {
+          isValid: false,
+          reason: 'La réponse ne contient pas de contenu valide pour être un summary'
+        };
+      }
+      
+      // Parser le JSON de la réponse
+      let parsedResponse: any;
+      try {
+        parsedResponse = JSON.parse(responseText);
+      } catch (parseError) {
+        return {
+          isValid: false,
+          reason: 'La réponse n\'est pas un JSON valide pour être un summary'
+        };
+      }
+      
+      // Vérifier la présence de l'objet summary
+      const summary = parsedResponse?.summary;
+      if (!summary || typeof summary !== 'object') {
+        return {
+          isValid: false,
+          reason: 'La réponse ne contient pas d\'objet "summary" valide'
+        };
+      }
+      
+      // Toutes les validations sont passées, on peut marquer comme "summary"
+      const finalResponse = validationResult.finalObject || response;
+      // Modifier le type en "summary"
+      (finalResponse as any).type = 'summary';
+      (finalResponse as any).message_type = 'summary';
+      
+      return {
+        isValid: true,
+        finalObject: finalResponse
+      };
+    } catch (error) {
+      return {
+        isValid: false,
+        reason: `Erreur lors de la validation du format Summary: ${error instanceof Error ? error.message : 'Erreur inconnue'}`
+      };
+    }
   }
 
 }
