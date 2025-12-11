@@ -3046,7 +3046,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
     
     if (parsedResponse.summary && typeof parsedResponse.summary === 'object') {
       summary = parsedResponse.summary as BilanSummary;
-      recommendation = summary.recommendation;
+      recommendation = summary.recommendation || null;
     } else if (parsedResponse.recommendation && typeof parsedResponse.recommendation === 'object') {
       summary = parsedResponse as BilanSummary;
       recommendation = parsedResponse.recommendation as BilanRecommendation;
@@ -3082,7 +3082,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
     // Créer des Sets pour vérifier rapidement l'existence des IDs
     const activityIds = new Set((globalIntentInfos.activities || []).map(a => a.id));
     (globalIntentInfos.howerAngels || []).forEach(howerAngel => {
-      if (howerAngel.activities) {
+      if (howerAngel.activities && Array.isArray(howerAngel.activities)) {
         howerAngel.activities.forEach(activity => {
           if (activity.id) {
             activityIds.add(activity.id);
@@ -3093,7 +3093,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
 
     const practiceIds = new Set((globalIntentInfos.practices || []).map(p => p.id));
     (globalIntentInfos.howerAngels || []).forEach(howerAngel => {
-      if (howerAngel.specialties) {
+      if (howerAngel.specialties && Array.isArray(howerAngel.specialties)) {
         howerAngel.specialties.forEach(specialty => {
           if (specialty.id) {
             practiceIds.add(specialty.id);
@@ -3223,6 +3223,14 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
     // Vérifier top1Recommandation
     if (recommendation.top1Recommandation) {
       const top1 = recommendation.top1Recommandation;
+      
+      // Vérifier que le type est valide
+      if (!top1.type || (top1.type !== 'activity' && top1.type !== 'practice')) {
+        return {
+          isValid: false,
+          reason: `top1Recommandation : le type est manquant ou invalide (doit être 'activity' ou 'practice')`
+        };
+      }
       
       // Valider l'ID
       const idValidation = validateAndExtractId(top1.id, top1.type === 'activity' ? 'activity' : 'practice');
