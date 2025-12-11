@@ -3390,6 +3390,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
     
     // Si la validation du summary a échoué, retourner le résultat
     if (!summaryValidationResult.isValid) {
+      console.log("Invalid sumarry detected", summaryValidationResult.reason );
       return summaryValidationResult;
     }
     
