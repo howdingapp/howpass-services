@@ -2173,6 +2173,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
         
         if (questionnaireAnswers) {
           for (const answer of questionnaireAnswers) {
+            console.log(`📍 [BILAN] Réponse du questionnaire: ${JSON.stringify(answer)}`);
             if (answer.moreResponseType === 'address' && answer.moreResponse) {
               address = answer.moreResponse;
             } else if (answer.moreResponseType === 'gps' && answer.moreResponse) {
@@ -2191,9 +2192,10 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
     
     if (address) {
       console.log(`📍 [BILAN] Adresse trouvée pour la recherche: ${address}`);
-    }
-    if (gpsPosition) {
+    } else if (gpsPosition) {
       console.log(`📍 [BILAN] Position GPS trouvée pour la recherche: ${gpsPosition.latitude}, ${gpsPosition.longitude}`);
+    } else {
+      console.log(`📍 [BILAN] Aucune adresse ou position GPS trouvée pour la recherche`);
     }
     
     // 1. Recherche sémantique et agentique en parallèle pour optimiser les coûts dans le cloud
@@ -2261,6 +2263,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
         // Note: On utilise une assertion de type pour accéder à la propriété privée
         const supabaseClient = (this.supabaseService as any).supabase;
         
+        const howerAngelsBefore = howerAngels.filter((ha: any) => ha.distanceFromOrigin).length;
         if (address) {
           howerAngels = await this.howerAngelService.associateDistancesFromAddress(
             howerAngels,
@@ -2274,8 +2277,8 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
             supabaseClient
           );
         }
-        
-        console.log(`✅ [BILAN] Distances calculées pour les hower angels (recherche sémantique)`);
+        const howerAngelsAfter = howerAngels.filter((ha: any) => ha.distanceFromOrigin).length;
+        console.log(`✅ [BILAN] Distances calculées pour les hower angels (recherche sémantique): ${howerAngelsBefore} -> ${howerAngelsAfter} hower angels avec distance`);
       } catch (error) {
         console.warn('⚠️ [BILAN] Erreur lors du calcul des distances pour les hower angels sémantiques:', error);
       }
@@ -2417,11 +2420,13 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
         ) as HowerAngelWithDistance[];
         
         if (howerAngelsWithDistances.length > 0) {
+          const practicesBefore = practices.filter((p: any) => p.distanceFromOrigin).length;
           practices = this.practiceService.associateDistancesToPractices(
             practices,
             howerAngelsWithDistances
           );
-          console.log(`✅ [BILAN] Distances calculées pour les pratiques`);
+          const practicesAfter = practices.filter((p: any) => p.distanceFromOrigin).length;
+          console.log(`✅ [BILAN] Distances calculées pour les pratiques: ${practicesBefore} -> ${practicesAfter} pratiques avec distance`);
         } else {
           console.warn('⚠️ [BILAN] Aucun hower angel avec distance trouvé, impossible de calculer les distances des pratiques');
         }
@@ -2444,6 +2449,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
           'distanceFromOrigin' in ha || ha.id
         ) as Array<HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>;
         
+        const activitiesBefore = activities.filter((a: any) => a.distanceFromOrigin).length;
         if (address) {
           activities = await this.activityService.associateDistancesFromAddress(
             activities,
@@ -2459,8 +2465,8 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
             howerAngelsForActivities
           );
         }
-        
-        console.log(`✅ [BILAN] Distances calculées pour les activités`);
+        const activitiesAfter = activities.filter((a: any) => a.distanceFromOrigin).length;
+        console.log(`✅ [BILAN] Distances calculées pour les activités: ${activitiesBefore} -> ${activitiesAfter} activités avec distance`);
       } catch (error) {
         console.warn('⚠️ [BILAN] Erreur lors du calcul des distances pour les activités:', error);
       }
@@ -2669,6 +2675,16 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
       };
     });
     
+    // Logs avant le mapping pour vérifier les distances
+    const practicesWithDistanceBeforeMapping = practices.filter((p: any) => p.distanceFromOrigin).length;
+    const activitiesWithDistanceBeforeMapping = activities.filter((a: any) => a.distanceFromOrigin).length;
+    const howerAngelsWithDistanceBeforeMapping = howerAngels.filter((ha: any) => ha.distanceFromOrigin).length;
+    console.log(`📊 [BILAN] computeUniverse - Distances avant mapping:`, {
+      practices: practicesWithDistanceBeforeMapping,
+      activities: activitiesWithDistanceBeforeMapping,
+      howerAngels: howerAngelsWithDistanceBeforeMapping
+    });
+    
     // Enrichir les pratiques et activités avec les chunks qui ont permis le matching
     // chunkText contient le fragment de chunk de la base de données qui a matché
     // matchCount est déjà présent dans les pratiques et activités après déduplication
@@ -2692,6 +2708,16 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
       ...howerAngel,
       matchingChunks: howerAngel.chunkText || null // Fragment de chunk de la BD qui a permis le matching
     }));
+    
+    // Logs après le mapping pour vérifier que les distances sont préservées
+    const practicesWithDistanceAfterMapping = practicesWithMatchCount.filter((p: any) => p.distanceFromOrigin).length;
+    const activitiesWithDistanceAfterMapping = activitiesWithMatchCount.filter((a: any) => a.distanceFromOrigin).length;
+    const howerAngelsWithDistanceAfterMapping = howerAngelsWithChunks.filter((ha: any) => ha.distanceFromOrigin).length;
+    console.log(`📊 [BILAN] computeUniverse - Distances après mapping:`, {
+      practices: practicesWithDistanceAfterMapping,
+      activities: activitiesWithDistanceAfterMapping,
+      howerAngels: howerAngelsWithDistanceAfterMapping
+    });
     
     // Construire les informations pour questionResponses
     const questionResponsesInfo = totalQuestions !== undefined && answeredQuestions !== undefined
