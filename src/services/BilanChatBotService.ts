@@ -3005,6 +3005,308 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
   }
 
   /**
+   * Valide une réponse de type Summary pour le bilan
+   * Vérifie que :
+   * - La réponse est un format de summary valide
+   * - Tous les IDs (pratiques, activités, hower angels) sont valides et existent dans le contexte
+   * - Chaque pratique/activité/hower angel associé aux résultats a une distance depuis l'adresse ajoutée
+   * @param response La réponse IA à valider
+   * @param context Le contexte de la conversation
+   * @returns Un objet contenant isValid (boolean), reason (string optionnel) et finalObject (RecommendationMessageResponse optionnel)
+   */
+  protected async validateSummaryResponse(
+    response: RecommendationMessageResponse,
+    context: HowanaContext
+  ): Promise<{
+    isValid: boolean;
+    reason?: string;
+    finalObject?: RecommendationMessageResponse;
+  }> {
+    // Parser la réponse JSON
+    let parsedResponse: any;
+    try {
+      const responseText = response.response;
+      if (!responseText || typeof responseText !== 'string') {
+        return {
+          isValid: false,
+          reason: 'La réponse ne contient pas de contenu valide pour être un summary'
+        };
+      }
+      parsedResponse = JSON.parse(responseText);
+    } catch (parseError) {
+      return {
+        isValid: false,
+        reason: 'La réponse n\'est pas un JSON valide pour être un summary'
+      };
+    }
+
+    // Détecter la structure du summary
+    let summary: any = null;
+    let recommendation: any = null;
+    
+    if (parsedResponse.summary && typeof parsedResponse.summary === 'object') {
+      summary = parsedResponse.summary;
+      recommendation = summary.recommendation;
+    } else if (parsedResponse.recommendation && typeof parsedResponse.recommendation === 'object') {
+      summary = parsedResponse;
+      recommendation = parsedResponse.recommendation;
+    }
+
+    if (!summary || !recommendation || typeof recommendation !== 'object') {
+      return {
+        isValid: false,
+        reason: 'La réponse ne contient pas d\'objet "summary" avec "recommendation" valide'
+      };
+    }
+
+    // Récupérer le globalIntentInfos depuis le contexte pour vérifier les IDs
+    const globalIntentInfos = context.metadata?.['globalIntentInfos'] as GlobalRecommendationIntentInfos | undefined;
+    
+    if (!globalIntentInfos) {
+      return {
+        isValid: false,
+        reason: 'Impossible de valider le summary : globalIntentInfos non disponible dans le contexte'
+      };
+    }
+
+    // Récupérer l'univers pour vérifier les distances
+    const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;
+    
+    if (!bilanUniverContext) {
+      return {
+        isValid: false,
+        reason: 'Impossible de valider les distances : bilanUniverContext non disponible dans le contexte'
+      };
+    }
+
+    // Créer des Sets pour vérifier rapidement l'existence des IDs
+    const activityIds = new Set(globalIntentInfos.activities.map(a => a.id));
+    globalIntentInfos.howerAngels.forEach(howerAngel => {
+      if (howerAngel.activities) {
+        howerAngel.activities.forEach(activity => {
+          if (activity.id) {
+            activityIds.add(activity.id);
+          }
+        });
+      }
+    });
+
+    const practiceIds = new Set(globalIntentInfos.practices.map(p => p.id));
+    globalIntentInfos.howerAngels.forEach(howerAngel => {
+      if (howerAngel.specialties) {
+        howerAngel.specialties.forEach(specialty => {
+          if (specialty.id) {
+            practiceIds.add(specialty.id);
+          }
+        });
+      }
+    });
+
+    // Créer une map des distances : ID -> DistanceResult
+    const distancesMap = new Map<string, DistanceResult>();
+    
+    const practices = bilanUniverContext.practices?.value || [];
+    practices.forEach((practice: any) => {
+      if (practice.id && practice.distanceFromOrigin) {
+        distancesMap.set(practice.id, practice.distanceFromOrigin);
+      }
+    });
+    
+    const activities = bilanUniverContext.activities?.value || [];
+    activities.forEach((activity: any) => {
+      if (activity.id && activity.distanceFromOrigin) {
+        distancesMap.set(activity.id, activity.distanceFromOrigin);
+      }
+    });
+    
+    const howerAngels = bilanUniverContext.howerAngels?.value || [];
+    howerAngels.forEach((howerAngel: any) => {
+      if (howerAngel.id && howerAngel.distanceFromOrigin) {
+        distancesMap.set(howerAngel.id, howerAngel.distanceFromOrigin);
+      }
+    });
+
+    // Regexp pour extraire un UUID valide
+    const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+    // Fonction pour valider un ID et extraire l'UUID
+    const validateAndExtractId = (id: string, type: 'activity' | 'practice'): { isValid: boolean; extractedId?: string; reason?: string } => {
+      if (!id || typeof id !== 'string') {
+        return { isValid: false, reason: `L'ID ${type} est manquant ou invalide` };
+      }
+      
+      const trimmedId = id.trim();
+      const uuidMatch = trimmedId.match(uuidRegex);
+      
+      if (!uuidMatch) {
+        return { isValid: false, reason: `Impossible d'extraire un ${type}Id valide (format UUID) depuis "${trimmedId}"` };
+      }
+      
+      const extractedId = uuidMatch[0];
+      const idSet = type === 'activity' ? activityIds : practiceIds;
+      
+      if (!idSet.has(extractedId)) {
+        return { isValid: false, reason: `Le ${type}Id "${extractedId}" n'existe pas dans le contexte` };
+      }
+      
+      return { isValid: true, extractedId };
+    };
+
+    // Fonction pour vérifier qu'un élément a une distance
+    const validateDistance = (id: string, type: 'activity' | 'practice' | 'howerAngel', elementName: string): { isValid: boolean; reason?: string } => {
+      if (!id) {
+        return { isValid: false, reason: `${elementName} : l'ID est manquant` };
+      }
+      
+      const distance = distancesMap.get(id);
+      if (!distance) {
+        return { isValid: false, reason: `${elementName} : la distance est manquante pour ${type}Id "${id}"` };
+      }
+      
+      // Vérifier que la distance a les propriétés requises
+      if (typeof distance.distance !== 'number' || !distance.formattedDistance) {
+        return { isValid: false, reason: `${elementName} : la distance pour ${type}Id "${id}" est invalide (distance: ${distance.distance}, formattedDistance: ${distance.formattedDistance})` };
+      }
+      
+      return { isValid: true };
+    };
+
+    // Vérifier top1Recommandation
+    if (recommendation.top1Recommandation) {
+      const top1 = recommendation.top1Recommandation;
+      
+      // Valider l'ID
+      const idValidation = validateAndExtractId(top1.id, top1.type === 'activity' ? 'activity' : 'practice');
+      if (!idValidation.isValid) {
+        return {
+          isValid: false,
+          reason: `top1Recommandation : ${idValidation.reason || 'ID invalide'}`
+        };
+      }
+      
+      // Vérifier la distance
+      const distanceValidation = validateDistance(idValidation.extractedId!, top1.type, 'top1Recommandation');
+      if (!distanceValidation.isValid) {
+        return {
+          isValid: false,
+          reason: distanceValidation.reason || 'Distance manquante pour top1Recommandation'
+        };
+      }
+    }
+
+    // Vérifier topRecommendedPanel
+    if (recommendation.topRecommendedPanel) {
+      const panel = recommendation.topRecommendedPanel;
+      
+      if (panel.orderedTopPractices && Array.isArray(panel.orderedTopPractices)) {
+        for (let i = 0; i < panel.orderedTopPractices.length; i++) {
+          const practice = panel.orderedTopPractices[i];
+          if (!practice || !practice.id) continue;
+          
+          const idValidation = validateAndExtractId(practice.id, 'practice');
+          if (!idValidation.isValid) {
+            return {
+              isValid: false,
+              reason: `topRecommendedPanel.orderedTopPractices[${i}] : ${idValidation.reason || 'ID invalide'}`
+            };
+          }
+          
+          const distanceValidation = validateDistance(idValidation.extractedId!, 'practice', `topRecommendedPanel.orderedTopPractices[${i}]`);
+          if (!distanceValidation.isValid) {
+            return {
+              isValid: false,
+              reason: distanceValidation.reason || `Distance manquante pour topRecommendedPanel.orderedTopPractices[${i}]`
+            };
+          }
+        }
+      }
+      
+      if (panel.orderedTopActivities && Array.isArray(panel.orderedTopActivities)) {
+        for (let i = 0; i < panel.orderedTopActivities.length; i++) {
+          const activity = panel.orderedTopActivities[i];
+          if (!activity || !activity.id) continue;
+          
+          const idValidation = validateAndExtractId(activity.id, 'activity');
+          if (!idValidation.isValid) {
+            return {
+              isValid: false,
+              reason: `topRecommendedPanel.orderedTopActivities[${i}] : ${idValidation.reason || 'ID invalide'}`
+            };
+          }
+          
+          const distanceValidation = validateDistance(idValidation.extractedId!, 'activity', `topRecommendedPanel.orderedTopActivities[${i}]`);
+          if (!distanceValidation.isValid) {
+            return {
+              isValid: false,
+              reason: distanceValidation.reason || `Distance manquante pour topRecommendedPanel.orderedTopActivities[${i}]`
+            };
+          }
+        }
+      }
+    }
+
+    // Vérifier byFamilyRecommendedPanel
+    if (recommendation.byFamilyRecommendedPanel && Array.isArray(recommendation.byFamilyRecommendedPanel)) {
+      for (let familyIndex = 0; familyIndex < recommendation.byFamilyRecommendedPanel.length; familyIndex++) {
+        const family = recommendation.byFamilyRecommendedPanel[familyIndex];
+        if (!family) continue;
+        
+        if (family.orderedRecommendedPractices && Array.isArray(family.orderedRecommendedPractices)) {
+          for (let practiceIndex = 0; practiceIndex < family.orderedRecommendedPractices.length; practiceIndex++) {
+            const practice = family.orderedRecommendedPractices[practiceIndex];
+            if (!practice || !practice.id) continue;
+            
+            const idValidation = validateAndExtractId(practice.id, 'practice');
+            if (!idValidation.isValid) {
+              return {
+                isValid: false,
+                reason: `byFamilyRecommendedPanel[${familyIndex}].orderedRecommendedPractices[${practiceIndex}] : ${idValidation.reason || 'ID invalide'}`
+              };
+            }
+            
+            const distanceValidation = validateDistance(idValidation.extractedId!, 'practice', `byFamilyRecommendedPanel[${familyIndex}].orderedRecommendedPractices[${practiceIndex}]`);
+            if (!distanceValidation.isValid) {
+              return {
+                isValid: false,
+                reason: distanceValidation.reason || `Distance manquante pour byFamilyRecommendedPanel[${familyIndex}].orderedRecommendedPractices[${practiceIndex}]`
+              };
+            }
+          }
+        }
+        
+        if (family.orderedRecommendedActivities && Array.isArray(family.orderedRecommendedActivities)) {
+          for (let activityIndex = 0; activityIndex < family.orderedRecommendedActivities.length; activityIndex++) {
+            const activity = family.orderedRecommendedActivities[activityIndex];
+            if (!activity || !activity.id) continue;
+            
+            const idValidation = validateAndExtractId(activity.id, 'activity');
+            if (!idValidation.isValid) {
+              return {
+                isValid: false,
+                reason: `byFamilyRecommendedPanel[${familyIndex}].orderedRecommendedActivities[${activityIndex}] : ${idValidation.reason || 'ID invalide'}`
+              };
+            }
+            
+            const distanceValidation = validateDistance(idValidation.extractedId!, 'activity', `byFamilyRecommendedPanel[${familyIndex}].orderedRecommendedActivities[${activityIndex}]`);
+            if (!distanceValidation.isValid) {
+              return {
+                isValid: false,
+                reason: distanceValidation.reason || `Distance manquante pour byFamilyRecommendedPanel[${familyIndex}].orderedRecommendedActivities[${activityIndex}]`
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // Toutes les validations sont passées
+    return {
+      isValid: true,
+      finalObject: response
+    };
+  }
+
+  /**
    * Valide une première réponse IA générée pour le bilan
    * Utilise la même logique que validateResponse mais adaptée pour la première réponse
    * Vérifie que la réponse respecte le format Summary avant de la marquer comme "summary"
@@ -3020,18 +3322,20 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
     reason?: string;
     finalObject?: RecommendationMessageResponse;
   }> {
-    // Pour la première réponse, on utilise la même validation que validateResponse
-    // car la logique de validation est identique
-    const validationResult = await this.validateResponse(response, context);
+    // Utiliser validateSummaryResponse pour valider le format, les IDs et les distances
+    const summaryValidationResult = await this.validateSummaryResponse(
+      response,
+      context
+    );
     
-    // Si la validation de base a échoué, retourner le résultat tel quel
-    if (!validationResult.isValid) {
-      return validationResult;
+    // Si la validation du summary a échoué, retourner le résultat
+    if (!summaryValidationResult.isValid) {
+      return summaryValidationResult;
     }
     
     // Vérifier que la réponse respecte le format Summary avant de la marquer comme "summary"
     try {
-      const responseText = validationResult.finalObject?.response || response.response;
+      const responseText = summaryValidationResult.finalObject?.response || response.response;
       
       if (!responseText || typeof responseText !== 'string') {
         return {
@@ -3118,7 +3422,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       // Formater la réponse pour qu'IAController détecte bien un summary
       // IAController vérifie : iaResponse.type === 'summary' || iaResponse.message_type === 'summary'
       // Et attend le format : response: { summary: summary.summary } (en string JSON)
-      const finalResponse = validationResult.finalObject || { ...response };
+      const finalResponse = summaryValidationResult.finalObject || { ...response };
       
       // S'assurer que response contient bien { summary: ... } en format JSON string
       // RecommendationMessageResponse.response est de type string
