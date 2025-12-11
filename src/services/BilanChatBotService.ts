@@ -2785,6 +2785,29 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       }
     };
     
+    // Logs pour vérifier le nombre de données avec distance avant le return final
+    const practicesWithDistance = practicesWithMatchCount.filter((p: any) => p.distanceFromOrigin !== undefined && p.distanceFromOrigin !== null).length;
+    const activitiesWithDistance = activitiesWithMatchCount.filter((a: any) => a.distanceFromOrigin !== undefined && a.distanceFromOrigin !== null).length;
+    const howerAngelsWithDistance = howerAngelsWithChunks.filter((ha: any) => ha.distanceFromOrigin !== undefined && ha.distanceFromOrigin !== null).length;
+    
+    console.log(`📊 [BILAN] computeUniverse - Nombre de données avec distance avant return final:`, {
+      practices: {
+        total: practicesWithMatchCount.length,
+        withDistance: practicesWithDistance,
+        withoutDistance: practicesWithMatchCount.length - practicesWithDistance
+      },
+      activities: {
+        total: activitiesWithMatchCount.length,
+        withDistance: activitiesWithDistance,
+        withoutDistance: activitiesWithMatchCount.length - activitiesWithDistance
+      },
+      howerAngels: {
+        total: howerAngelsWithChunks.length,
+        withDistance: howerAngelsWithDistance,
+        withoutDistance: howerAngelsWithChunks.length - howerAngelsWithDistance
+      }
+    });
+    
     return result;
   }
 

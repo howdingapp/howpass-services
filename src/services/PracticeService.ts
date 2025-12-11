@@ -53,6 +53,11 @@ export class PracticeService {
     practiceId: string,
     howerAngels: HowerAngelWithDistance[]
   ): DistanceResult | null {
+    console.log(`[PracticeService] getShortestDistanceForPractice - Début pour pratique ${practiceId}`, {
+      howerAngelsCount: howerAngels.length,
+      howerAngelsWithDistance: howerAngels.filter(ha => ha.distanceFromOrigin).length
+    });
+    
     // Trouver tous les hower angels qui proposent cette pratique (via leurs spécialités)
     const howerAngelsWithPractice = howerAngels.filter(howerAngel => {
       if (!howerAngel.specialties || howerAngel.specialties.length === 0) {
@@ -62,7 +67,17 @@ export class PracticeService {
       return howerAngel.specialties.some(specialty => specialty.id === practiceId);
     });
 
+    console.log(`[PracticeService] getShortestDistanceForPractice - Hower angels avec pratique ${practiceId}:`, {
+      count: howerAngelsWithPractice.length,
+      howerAngelsIds: howerAngelsWithPractice.map(ha => ha.id),
+      howerAngelsWithDistance: howerAngelsWithPractice.filter(ha => ha.distanceFromOrigin).map(ha => ({
+        id: ha.id,
+        distance: ha.distanceFromOrigin?.distance
+      }))
+    });
+    
     if (howerAngelsWithPractice.length === 0) {
+      console.warn(`[PracticeService] getShortestDistanceForPractice - Aucun hower angel ne propose la pratique ${practiceId}`);
       return null;
     }
 
@@ -77,6 +92,11 @@ export class PracticeService {
       }
     }
 
+    console.log(`[PracticeService] getShortestDistanceForPractice - Distance la plus courte pour pratique ${practiceId}:`, {
+      hasDistance: !!shortestDistance,
+      distance: shortestDistance
+    });
+    
     return shortestDistance;
   }
 

@@ -69,8 +69,20 @@ export class ActivityService {
     origin: GeolocationPosition,
     supabaseClient?: any
   ): Promise<DistanceResult | null> {
+    console.log(`[ActivityService] getDistanceForActivity - Début pour activité ${activity.id}`, {
+      hasAddress: !!activity.address,
+      addressType: activity.address ? typeof activity.address : 'none',
+      addressValue: activity.address ? (typeof activity.address === 'string' ? activity.address.substring(0, 50) : 'object') : null
+    });
+    
     // 1. Extraire les coordonnées depuis l'adresse de l'activité
     let activityCoordinates = this.extractCoordinatesFromActivity(activity);
+    
+    console.log(`[ActivityService] getDistanceForActivity - Coordonnées extraites:`, {
+      activityId: activity.id,
+      hasCoordinates: !!activityCoordinates,
+      coordinates: activityCoordinates
+    });
 
     // 2. Si pas de coordonnées directes, essayer de géocoder l'adresse
     if (!activityCoordinates && activity.address) {
@@ -92,16 +104,29 @@ export class ActivityService {
       }
 
       if (addressString) {
+        console.log(`[ActivityService] getDistanceForActivity - Géocodage de l'adresse pour activité ${activity.id}:`, addressString.substring(0, 100));
         activityCoordinates = await this.geolocationService.geocodeAddress(addressString, supabaseClient);
+        console.log(`[ActivityService] getDistanceForActivity - Coordonnées après géocodage:`, {
+          activityId: activity.id,
+          hasCoordinates: !!activityCoordinates,
+          coordinates: activityCoordinates
+        });
       }
     }
 
     if (!activityCoordinates) {
+      console.warn(`[ActivityService] getDistanceForActivity - Aucune coordonnée trouvée pour activité ${activity.id}, retour null`);
       return null;
     }
 
     // 3. Calculer la distance
-    return this.geolocationService.getDistanceFrom(origin, activityCoordinates);
+    console.log(`[ActivityService] getDistanceForActivity - Calcul de la distance pour activité ${activity.id}`, {
+      origin,
+      destination: activityCoordinates
+    });
+    const distance = this.geolocationService.getDistanceFrom(origin, activityCoordinates);
+    console.log(`[ActivityService] getDistanceForActivity - Distance calculée pour activité ${activity.id}:`, distance);
+    return distance;
   }
 
   /**
@@ -191,11 +216,14 @@ export class ActivityService {
 
         // Si l'activité a sa propre adresse, l'utiliser
         if (activity.address) {
+          console.log(`[ActivityService] associateDistancesFromAddress - Activité ${activity.id} a une adresse, calcul de la distance`);
           const distance = await this.getDistanceForActivity(activity, originCoordinates, supabaseClient);
           return {
             ...activity,
             ...(distance && { distanceFromOrigin: distance })
           };
+        } else {
+          console.log(`[ActivityService] associateDistancesFromAddress - Activité ${activity.id} n'a PAS d'adresse`);
         }
 
         // Sinon, chercher l'adresse du créateur (hower angel)
@@ -269,11 +297,14 @@ export class ActivityService {
 
         // Si l'activité a sa propre adresse, l'utiliser
         if (activity.address) {
+          console.log(`[ActivityService] associateDistancesFromCoordinates - Activité ${activity.id} a une adresse, calcul de la distance`);
           const distance = await this.getDistanceForActivity(activity, coordinates, supabaseClient);
           return {
             ...activity,
             ...(distance && { distanceFromOrigin: distance })
           };
+        } else {
+          console.log(`[ActivityService] associateDistancesFromCoordinates - Activité ${activity.id} n'a PAS d'adresse`);
         }
 
         // Sinon, chercher l'adresse du créateur (hower angel)

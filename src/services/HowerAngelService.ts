@@ -305,16 +305,33 @@ export class HowerAngelService {
       const howerAngelsWithCoords: Array<{ howerAngel: HowerAngelSearchResult; coordinates: GeolocationPosition }> = [];
       
       for (const howerAngel of howerAngels) {
+        console.log(`[HowerAngelService] associateDistancesFromAddress - Traitement hower angel ${howerAngel.id}`, {
+          hasActivities: !!(howerAngel.activities && howerAngel.activities.length > 0),
+          activitiesCount: howerAngel.activities?.length || 0,
+          activitiesWithAddress: howerAngel.activities?.filter(a => a.address).length || 0
+        });
+        
         // Essayer d'abord d'extraire depuis les données du hower angel
         let coordinates = this.extractCoordinates(howerAngel);
+        console.log(`[HowerAngelService] associateDistancesFromAddress - Coordonnées extraites pour ${howerAngel.id}:`, {
+          hasCoordinates: !!coordinates,
+          coordinates
+        });
         
         // Si pas trouvé et qu'on a un supabaseClient, essayer de récupérer depuis open_map_data
         if (!coordinates && supabaseClient && howerAngel.id) {
+          console.log(`[HowerAngelService] associateDistancesFromAddress - Tentative de récupération depuis open_map_data pour ${howerAngel.id}`);
           coordinates = await this.getCoordinatesFromOpenMapData(howerAngel.id, supabaseClient);
+          console.log(`[HowerAngelService] associateDistancesFromAddress - Coordonnées depuis open_map_data pour ${howerAngel.id}:`, {
+            hasCoordinates: !!coordinates,
+            coordinates
+          });
         }
         
         if (coordinates) {
           howerAngelsWithCoords.push({ howerAngel, coordinates });
+        } else {
+          console.warn(`[HowerAngelService] associateDistancesFromAddress - Aucune coordonnée trouvée pour hower angel ${howerAngel.id}`);
         }
       }
 
@@ -324,8 +341,16 @@ export class HowerAngelService {
       }
 
       // 3. Calculer les distances
+      console.log(`[HowerAngelService] associateDistancesFromAddress - Calcul des distances pour ${howerAngelsWithCoords.length} hower angels`);
       const destinations = howerAngelsWithCoords.map(item => item.coordinates);
       const distanceResults = await this.calculateMultipleDistances(originCoordinates, destinations);
+      console.log(`[HowerAngelService] associateDistancesFromAddress - Distances calculées:`, distanceResults.map((r, i) => {
+        const howerAngelWithCoords = howerAngelsWithCoords[i];
+        return {
+          howerAngelId: howerAngelWithCoords?.howerAngel.id || 'unknown',
+          distance: r.result
+        };
+      }));
 
       // 4. Associer les distances aux hower angels
       const result: HowerAngelWithDistance[] = howerAngels.map(howerAngel => {
@@ -375,16 +400,33 @@ export class HowerAngelService {
       const howerAngelsWithCoords: Array<{ howerAngel: HowerAngelSearchResult; coordinates: GeolocationPosition }> = [];
       
       for (const howerAngel of howerAngels) {
+        console.log(`[HowerAngelService] associateDistancesFromCoordinates - Traitement hower angel ${howerAngel.id}`, {
+          hasActivities: !!(howerAngel.activities && howerAngel.activities.length > 0),
+          activitiesCount: howerAngel.activities?.length || 0,
+          activitiesWithAddress: howerAngel.activities?.filter(a => a.address).length || 0
+        });
+        
         // Essayer d'abord d'extraire depuis les données du hower angel
         let coords = this.extractCoordinates(howerAngel);
+        console.log(`[HowerAngelService] associateDistancesFromCoordinates - Coordonnées extraites pour ${howerAngel.id}:`, {
+          hasCoordinates: !!coords,
+          coordinates: coords
+        });
         
         // Si pas trouvé et qu'on a un supabaseClient, essayer de récupérer depuis open_map_data
         if (!coords && supabaseClient && howerAngel.id) {
+          console.log(`[HowerAngelService] associateDistancesFromCoordinates - Tentative de récupération depuis open_map_data pour ${howerAngel.id}`);
           coords = await this.getCoordinatesFromOpenMapData(howerAngel.id, supabaseClient);
+          console.log(`[HowerAngelService] associateDistancesFromCoordinates - Coordonnées depuis open_map_data pour ${howerAngel.id}:`, {
+            hasCoordinates: !!coords,
+            coordinates: coords
+          });
         }
         
         if (coords) {
           howerAngelsWithCoords.push({ howerAngel, coordinates: coords });
+        } else {
+          console.warn(`[HowerAngelService] associateDistancesFromCoordinates - Aucune coordonnée trouvée pour hower angel ${howerAngel.id}`);
         }
       }
 
@@ -394,8 +436,16 @@ export class HowerAngelService {
       }
 
       // 2. Calculer les distances
+      console.log(`[HowerAngelService] associateDistancesFromCoordinates - Calcul des distances pour ${howerAngelsWithCoords.length} hower angels`);
       const destinations = howerAngelsWithCoords.map(item => item.coordinates);
       const distanceResults = await this.calculateMultipleDistances(coordinates, destinations);
+      console.log(`[HowerAngelService] associateDistancesFromCoordinates - Distances calculées:`, distanceResults.map((r, i) => {
+        const howerAngelWithCoords = howerAngelsWithCoords[i];
+        return {
+          howerAngelId: howerAngelWithCoords?.howerAngel.id || 'unknown',
+          distance: r.result
+        };
+      }));
 
       // 3. Associer les distances aux hower angels
       const result: HowerAngelWithDistance[] = howerAngels.map(howerAngel => {
