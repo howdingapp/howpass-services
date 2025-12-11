@@ -1,6 +1,6 @@
 
 import { HowanaBilanContext, HowanaContext, HowanaRecommandationContext } from '../types/repositories';
-import { ChatBotOutputSchema, ExtractedRecommandations, GlobalRecommendationIntentInfos, OpenAIToolsDescription, RecommendationIntent, RecommendationMessageResponse } from '../types';
+import { ChatBotOutputSchema, ExtractedRecommandations, GlobalRecommendationIntentInfos, OpenAIToolsDescription, RecommendationIntent, RecommendationMessageResponse, BilanSummary, BilanRecommendation } from '../types';
 import {
   BilanChunk,
   BilanQuestionIntent,
@@ -3041,15 +3041,15 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
     }
 
     // Détecter la structure du summary
-    let summary: any = null;
-    let recommendation: any = null;
+    let summary: BilanSummary | null = null;
+    let recommendation: BilanRecommendation | null = null;
     
     if (parsedResponse.summary && typeof parsedResponse.summary === 'object') {
-      summary = parsedResponse.summary;
+      summary = parsedResponse.summary as BilanSummary;
       recommendation = summary.recommendation;
     } else if (parsedResponse.recommendation && typeof parsedResponse.recommendation === 'object') {
-      summary = parsedResponse;
-      recommendation = parsedResponse.recommendation;
+      summary = parsedResponse as BilanSummary;
+      recommendation = parsedResponse.recommendation as BilanRecommendation;
     }
 
     if (!summary || !recommendation || typeof recommendation !== 'object') {
@@ -3080,7 +3080,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
     }
 
     // Créer des Sets pour vérifier rapidement l'existence des IDs
-    const activityIds = new Set(globalIntentInfos.activities.map(a => a.id));
+    const activityIds = new Set((globalIntentInfos.activities || []).map(a => a.id));
     globalIntentInfos.howerAngels.forEach(howerAngel => {
       if (howerAngel.activities) {
         howerAngel.activities.forEach(activity => {
@@ -3091,7 +3091,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       }
     });
 
-    const practiceIds = new Set(globalIntentInfos.practices.map(p => p.id));
+    const practiceIds = new Set((globalIntentInfos.practices || []).map(p => p.id));
     globalIntentInfos.howerAngels.forEach(howerAngel => {
       if (howerAngel.specialties) {
         howerAngel.specialties.forEach(specialty => {
