@@ -2314,6 +2314,9 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
       howerAngels = Array.from(howerAngelsMap.values());
     }
     
+    // Type pour les pratiques avec source et workerReasons
+    type PracticeWithSource = PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] };
+    
     // Enrichir les pratiques workers avec les infos sémantiques si disponibles
     const enrichedWorkerPractices = workerPractices.map(workerPractice => {
       const semanticPractice = semanticPractices.find(p => p.id === workerPractice.id);
@@ -2326,23 +2329,23 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
           familyId: semanticPractice.familyId ?? workerPractice.familyId ?? null,
           familyName: semanticPractice.familyName ?? workerPractice.familyName ?? null,
           familyDescription: semanticPractice.familyDescription ?? workerPractice.familyDescription ?? null
-        } as PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] };
+        } as PracticeWithSource;
       }
       return workerPractice;
     });
     
     // Utiliser les pratiques enrichies
-    const finalWorkerPractices = enrichedWorkerPractices;
+    const finalWorkerPractices: PracticeWithSource[] = enrichedWorkerPractices;
     
     // Combiner les deux sources de pratiques avec leur provenance
     // Marquer les pratiques sémantiques avec leur source
-    const semanticPracticesWithSource = semanticPractices.map(p => ({
+    const semanticPracticesWithSource: PracticeWithSource[] = semanticPractices.map(p => ({
       ...p,
       source: 'semantic' as const
-    })) as Array<PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] }>;
+    })) as PracticeWithSource[];
     
     // Combiner les deux listes (en évitant les doublons par ID)
-    const practicesMap = new Map<string, PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] }>();
+    const practicesMap = new Map<string, PracticeWithSource>();
     
     // Ajouter d'abord les pratiques sémantiques
     semanticPracticesWithSource.forEach(p => {
@@ -2354,7 +2357,9 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
       const existing = practicesMap.get(p.id);
       if (existing) {
         // Si la pratique existe déjà, on garde la pratique sémantique et on ajoute les infos du worker
-        existing.workerReasons = (p as any).workerReasons;
+        if (p.workerReasons !== undefined) {
+          existing.workerReasons = p.workerReasons;
+        }
         // On garde 'semantic' comme source principale, mais on note qu'on a aussi les raisons du worker
       } else {
         practicesMap.set(p.id, p);
@@ -2389,7 +2394,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
     }
     
     // 5. Calculer les distances pour les activités pertinentes
-    // en utilisant l'adresse de chaque activité
+    // Logique : utiliser l'adresse de l'activité si disponible, sinon celle du créateur (hower angel)
     if ((address || gpsPosition) && activities.length > 0) {
       console.log(`📍 [BILAN] Calcul des distances pour ${activities.length} activités`);
       
@@ -2397,17 +2402,24 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
         // Accéder au client Supabase via une propriété protégée ou une méthode publique
         const supabaseClient = (this.supabaseService as any).supabase;
         
+        // Convertir howerAngels en format attendu (avec distanceFromOrigin si disponible)
+        const howerAngelsForActivities = howerAngels.filter(ha => 
+          'distanceFromOrigin' in ha || ha.id
+        ) as Array<HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>;
+        
         if (address) {
           activities = await this.activityService.associateDistancesFromAddress(
             activities,
             address,
-            supabaseClient
+            supabaseClient,
+            howerAngelsForActivities
           );
         } else if (gpsPosition) {
           activities = await this.activityService.associateDistancesFromCoordinates(
             activities,
             { lat: gpsPosition.latitude, lng: gpsPosition.longitude },
-            supabaseClient
+            supabaseClient,
+            howerAngelsForActivities
           );
         }
         
@@ -3219,14 +3231,97 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       return { isValid: true, extractedId };
     };
 
+    // Créer une map des hower angels pour haveExplanableDistance
+    const howerAngelsMap = new Map<string, HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>();
+    (globalIntentInfos.howerAngels || []).forEach((howerAngel: HowerAngelItem & { distanceFromOrigin?: DistanceResult }) => {
+      if (howerAngel.id) {
+        // Convertir HowerAngelItem en HowerAngelSearchResult pour la compatibilité
+        const howerAngelSearchResult: HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult } = {
+          id: howerAngel.id,
+          userId: howerAngel.userId,
+          ...(howerAngel.firstName !== undefined && { firstName: howerAngel.firstName }),
+          ...(howerAngel.lastName !== undefined && { lastName: howerAngel.lastName }),
+          ...(howerAngel.email !== undefined && { email: howerAngel.email }),
+          ...(howerAngel.specialties !== undefined && { specialties: howerAngel.specialties }),
+          ...(howerAngel.experience !== undefined && { experience: howerAngel.experience }),
+          profile: howerAngel.profile,
+          ...(howerAngel.activities !== undefined && { activities: howerAngel.activities }),
+          relevanceScore: howerAngel.relevanceScore,
+          similarity: 0,
+          ...(howerAngel.distanceFromOrigin !== undefined && { distanceFromOrigin: howerAngel.distanceFromOrigin })
+        };
+        howerAngelsMap.set(howerAngel.id, howerAngelSearchResult);
+        if (howerAngel.userId) {
+          howerAngelsMap.set(howerAngel.userId, howerAngelSearchResult);
+        }
+      }
+    });
+
+    // Convertir les hower angels en HowerAngelWithDistance[] pour les pratiques
+    const howerAngelsWithDistances: Array<HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }> = Array.from(howerAngelsMap.values());
+
     // Fonction pour vérifier qu'un élément a une distance
-    const validateDistance = (id: string, type: 'activity' | 'practice' | 'howerAngel', elementName: string): { isValid: boolean; reason?: string } => {
+    const validateDistance = async (id: string, type: 'activity' | 'practice' | 'howerAngel', elementName: string): Promise<{ isValid: boolean; reason?: string }> => {
       if (!id) {
         return { isValid: false, reason: `${elementName} : l'ID est manquant` };
       }
       
+      // Pour les activités, vérifier si elles devraient avoir une distance
+      if (type === 'activity') {
+        const activity = (globalIntentInfos.activities || []).find(a => a.id === id);
+        if (activity) {
+          const shouldHaveDistance = this.activityService.haveExplanableDistance(
+            activity as ActivitySearchResult,
+            howerAngelsMap
+          );
+          
+          // Si l'activité ne devrait pas avoir de distance, c'est valide
+          if (!shouldHaveDistance) {
+            return { isValid: true };
+          }
+        }
+      }
+      
+      // Pour les pratiques, vérifier si elles devraient avoir une distance
+      if (type === 'practice') {
+        const practice = (globalIntentInfos.practices || []).find(p => p.id === id);
+        if (practice) {
+          const shouldHaveDistance = this.practiceService.haveExplanableDistance(
+            practice as PracticeSearchResult,
+            howerAngelsWithDistances
+          );
+          
+          // Si la pratique ne devrait pas avoir de distance, c'est valide
+          if (!shouldHaveDistance) {
+            return { isValid: true };
+          }
+        }
+      }
+      
+      // Pour les hower angels, vérifier s'ils devraient avoir une distance
+      if (type === 'howerAngel') {
+        const howerAngel = howerAngelsMap.get(id);
+        if (howerAngel) {
+          // Accéder au client Supabase pour vérifier les coordonnées
+          const supabaseClient = (this.supabaseService as any).supabase;
+          const shouldHaveDistance = await this.howerAngelService.haveExplanableDistance(
+            howerAngel,
+            supabaseClient
+          );
+          
+          // Si le hower angel ne devrait pas avoir de distance, c'est valide
+          if (!shouldHaveDistance) {
+            return { isValid: true };
+          }
+        }
+      }
+      
       const distance = distancesMap.get(id);
       if (!distance) {
+        // Si l'élément devrait avoir une distance mais n'en a pas, c'est une erreur
+        if (type === 'activity' || type === 'practice' || type === 'howerAngel') {
+          return { isValid: false, reason: `${elementName} : la distance est manquante pour ${type}Id "${id}" alors qu'elle devrait en avoir une` };
+        }
         return { isValid: false, reason: `${elementName} : la distance est manquante pour ${type}Id "${id}"` };
       }
       
@@ -3253,7 +3348,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
           };
         }
         
-        const distanceValidation = validateDistance(idValidation.extractedId!, 'practice', `recommendedCategories[${i}]`);
+        const distanceValidation = await validateDistance(idValidation.extractedId!, 'practice', `recommendedCategories[${i}]`);
         if (!distanceValidation.isValid) {
           return {
             isValid: false,
@@ -3277,7 +3372,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
           };
         }
         
-        const distanceValidation = validateDistance(idValidation.extractedId!, 'activity', `recommendedActivities[${i}]`);
+        const distanceValidation = await validateDistance(idValidation.extractedId!, 'activity', `recommendedActivities[${i}]`);
         if (!distanceValidation.isValid) {
           return {
             isValid: false,
@@ -3309,7 +3404,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       }
       
       // Vérifier la distance
-      const distanceValidation = validateDistance(idValidation.extractedId!, top1.type, 'top1Recommandation');
+      const distanceValidation = await validateDistance(idValidation.extractedId!, top1.type, 'top1Recommandation');
       if (!distanceValidation.isValid) {
         return {
           isValid: false,
@@ -3335,7 +3430,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
             };
           }
           
-          const distanceValidation = validateDistance(idValidation.extractedId!, 'practice', `topRecommendedPanel.orderedTopPractices[${i}]`);
+          const distanceValidation = await validateDistance(idValidation.extractedId!, 'practice', `topRecommendedPanel.orderedTopPractices[${i}]`);
           if (!distanceValidation.isValid) {
             return {
               isValid: false,
@@ -3358,7 +3453,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
             };
           }
           
-          const distanceValidation = validateDistance(idValidation.extractedId!, 'activity', `topRecommendedPanel.orderedTopActivities[${i}]`);
+          const distanceValidation = await validateDistance(idValidation.extractedId!, 'activity', `topRecommendedPanel.orderedTopActivities[${i}]`);
           if (!distanceValidation.isValid) {
             return {
               isValid: false,
@@ -3388,7 +3483,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
               };
             }
             
-            const distanceValidation = validateDistance(idValidation.extractedId!, 'practice', `byFamilyRecommendedPanel[${familyIndex}].orderedRecommendedPractices[${practiceIndex}]`);
+            const distanceValidation = await validateDistance(idValidation.extractedId!, 'practice', `byFamilyRecommendedPanel[${familyIndex}].orderedRecommendedPractices[${practiceIndex}]`);
             if (!distanceValidation.isValid) {
               return {
                 isValid: false,
@@ -3411,7 +3506,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
               };
             }
             
-            const distanceValidation = validateDistance(idValidation.extractedId!, 'activity', `byFamilyRecommendedPanel[${familyIndex}].orderedRecommendedActivities[${activityIndex}]`);
+            const distanceValidation = await validateDistance(idValidation.extractedId!, 'activity', `byFamilyRecommendedPanel[${familyIndex}].orderedRecommendedActivities[${activityIndex}]`);
             if (!distanceValidation.isValid) {
               return {
                 isValid: false,

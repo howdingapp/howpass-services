@@ -1,4 +1,4 @@
-import { ActivitySearchResult } from '../types/search';
+import { ActivitySearchResult, HowerAngelSearchResult } from '../types/search';
 import { GeolocationService, GeolocationPosition, DistanceResult } from './GeolocationService';
 
 /**
@@ -105,16 +105,61 @@ export class ActivityService {
   }
 
   /**
+   * Détermine si une activité devrait avoir une distance explicable
+   * @param activity Activité à vérifier
+   * @param howerAngelsMap Map des hower angels par ID (optionnel) pour trouver le créateur
+   * @returns true si l'activité devrait avoir une distance, false sinon
+   */
+  haveExplanableDistance(
+    activity: ActivitySearchResult,
+    howerAngelsMap?: Map<string, HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>
+  ): boolean {
+    // Si l'activité est en remote, c'est normal qu'elle n'ait pas de distance
+    if (activity.locationType === 'remote') {
+      return false;
+    }
+
+    // Si l'activité a sa propre adresse, elle devrait avoir une distance
+    if (activity.address) {
+      return true;
+    }
+
+    // Si l'activité n'a pas d'adresse, chercher l'adresse du créateur (hower angel)
+    if (howerAngelsMap) {
+      // Chercher le hower angel qui propose cette activité
+      for (const howerAngel of howerAngelsMap.values()) {
+        if (howerAngel.activities && howerAngel.activities.some(a => a.id === activity.id)) {
+          // Si le hower angel a une distance (donc une adresse), l'activité devrait aussi en avoir une
+          if (howerAngel.distanceFromOrigin) {
+            return true;
+          }
+          // Si le hower angel n'a pas d'adresse, c'est normal que l'activité n'en ait pas non plus
+          return false;
+        }
+      }
+    }
+
+    // Si on ne trouve pas le créateur ou qu'il n'a pas d'adresse, c'est normal qu'il n'y ait pas de distance
+    return false;
+  }
+
+  /**
    * Associe les distances aux activités depuis une adresse
+   * Logique :
+   * - Si une activité n'a pas d'adresse et qu'elle est en remote, c'est normal (pas de distance)
+   * - Sinon, si elle a une adresse propre, l'utiliser
+   * - Sinon, utiliser l'adresse de son créateur (hower angel)
    * @param activities Liste des activités
    * @param address Adresse d'origine (string)
    * @param supabaseClient Client Supabase optionnel pour le cache de géocodage
+   * @param howerAngels Liste des hower angels avec leurs distances (optionnel) pour trouver les créateurs
    * @returns Liste des activités avec leurs distances
    */
   async associateDistancesFromAddress(
     activities: ActivitySearchResult[],
     address: string,
-    supabaseClient?: any
+    supabaseClient?: any,
+    howerAngels?: Array<HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>
   ): Promise<Array<ActivitySearchResult & { distanceFromOrigin?: DistanceResult }>> {
     // 1. Géocoder l'adresse en coordonnées GPS
     const originCoordinates = await this.geolocationService.geocodeAddress(address, supabaseClient);
@@ -124,18 +169,59 @@ export class ActivityService {
       return activities.map(activity => ({ ...activity }));
     }
 
-    // 2. Calculer les distances pour chaque activité
+    // 2. Créer une map des hower angels par ID pour recherche rapide
+    const howerAngelsMap = new Map<string, HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>();
+    if (howerAngels) {
+      howerAngels.forEach(ha => {
+        howerAngelsMap.set(ha.id, ha);
+        // Aussi indexer par userId pour recherche alternative
+        if (ha.userId) {
+          howerAngelsMap.set(ha.userId, ha);
+        }
+      });
+    }
+
+    // 3. Calculer les distances pour chaque activité
     const results = await Promise.all(
       activities.map(async (activity) => {
-        const distance = await this.getDistanceForActivity(activity, originCoordinates, supabaseClient);
-        return {
-          ...activity,
-          ...(distance && { distanceFromOrigin: distance })
-        };
+        // Si l'activité est en remote, pas de distance
+        if (activity.locationType === 'remote') {
+          return { ...activity };
+        }
+
+        // Si l'activité a sa propre adresse, l'utiliser
+        if (activity.address) {
+          const distance = await this.getDistanceForActivity(activity, originCoordinates, supabaseClient);
+          return {
+            ...activity,
+            ...(distance && { distanceFromOrigin: distance })
+          };
+        }
+
+        // Sinon, chercher l'adresse du créateur (hower angel)
+        if (howerAngelsMap) {
+          // Chercher le hower angel qui propose cette activité
+          for (const howerAngel of howerAngelsMap.values()) {
+            if (howerAngel.activities && howerAngel.activities.some(a => a.id === activity.id)) {
+              // Si le hower angel a une distance, utiliser cette distance pour l'activité
+              if (howerAngel.distanceFromOrigin) {
+                return {
+                  ...activity,
+                  distanceFromOrigin: howerAngel.distanceFromOrigin
+                };
+              }
+              // Si le hower angel n'a pas de distance, l'activité n'en a pas non plus
+              return { ...activity };
+            }
+          }
+        }
+
+        // Si on ne trouve pas le créateur, pas de distance
+        return { ...activity };
       })
     );
 
-    // 3. Trier par distance croissante
+    // 4. Trier par distance croissante
     return results.sort((a, b) => {
       const distanceA = a.distanceFromOrigin?.distance || Infinity;
       const distanceB = b.distanceFromOrigin?.distance || Infinity;
@@ -145,28 +231,75 @@ export class ActivityService {
 
   /**
    * Associe les distances aux activités depuis des coordonnées GPS
+   * Logique :
+   * - Si une activité n'a pas d'adresse et qu'elle est en remote, c'est normal (pas de distance)
+   * - Sinon, si elle a une adresse propre, l'utiliser
+   * - Sinon, utiliser l'adresse de son créateur (hower angel)
    * @param activities Liste des activités
    * @param coordinates Coordonnées GPS d'origine
    * @param supabaseClient Client Supabase optionnel pour le géocodage
+   * @param howerAngels Liste des hower angels avec leurs distances (optionnel) pour trouver les créateurs
    * @returns Liste des activités avec leurs distances
    */
   async associateDistancesFromCoordinates(
     activities: ActivitySearchResult[],
     coordinates: GeolocationPosition,
-    supabaseClient?: any
+    supabaseClient?: any,
+    howerAngels?: Array<HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>
   ): Promise<Array<ActivitySearchResult & { distanceFromOrigin?: DistanceResult }>> {
-    // Calculer les distances pour chaque activité
+    // 1. Créer une map des hower angels par ID pour recherche rapide
+    const howerAngelsMap = new Map<string, HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>();
+    if (howerAngels) {
+      howerAngels.forEach(ha => {
+        howerAngelsMap.set(ha.id, ha);
+        // Aussi indexer par userId pour recherche alternative
+        if (ha.userId) {
+          howerAngelsMap.set(ha.userId, ha);
+        }
+      });
+    }
+
+    // 2. Calculer les distances pour chaque activité
     const results = await Promise.all(
       activities.map(async (activity) => {
-        const distance = await this.getDistanceForActivity(activity, coordinates, supabaseClient);
-        return {
-          ...activity,
-          ...(distance && { distanceFromOrigin: distance })
-        };
+        // Si l'activité est en remote, pas de distance
+        if (activity.locationType === 'remote') {
+          return { ...activity };
+        }
+
+        // Si l'activité a sa propre adresse, l'utiliser
+        if (activity.address) {
+          const distance = await this.getDistanceForActivity(activity, coordinates, supabaseClient);
+          return {
+            ...activity,
+            ...(distance && { distanceFromOrigin: distance })
+          };
+        }
+
+        // Sinon, chercher l'adresse du créateur (hower angel)
+        if (howerAngelsMap) {
+          // Chercher le hower angel qui propose cette activité
+          for (const howerAngel of howerAngelsMap.values()) {
+            if (howerAngel.activities && howerAngel.activities.some(a => a.id === activity.id)) {
+              // Si le hower angel a une distance, utiliser cette distance pour l'activité
+              if (howerAngel.distanceFromOrigin) {
+                return {
+                  ...activity,
+                  distanceFromOrigin: howerAngel.distanceFromOrigin
+                };
+              }
+              // Si le hower angel n'a pas de distance, l'activité n'en a pas non plus
+              return { ...activity };
+            }
+          }
+        }
+
+        // Si on ne trouve pas le créateur, pas de distance
+        return { ...activity };
       })
     );
 
-    // Trier par distance croissante
+    // 3. Trier par distance croissante
     return results.sort((a, b) => {
       const distanceA = a.distanceFromOrigin?.distance || Infinity;
       const distanceB = b.distanceFromOrigin?.distance || Infinity;

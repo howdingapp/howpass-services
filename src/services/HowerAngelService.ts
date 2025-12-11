@@ -135,6 +135,35 @@ export class HowerAngelService {
   }
 
   /**
+   * Détermine si un hower angel devrait avoir une distance explicable
+   * @param howerAngel Hower angel à vérifier
+   * @param supabaseClient Client Supabase optionnel pour vérifier les coordonnées depuis open_map_data
+   * @returns true si le hower angel devrait avoir une distance, false sinon
+   */
+  async haveExplanableDistance(
+    howerAngel: HowerAngelSearchResult,
+    supabaseClient?: any
+  ): Promise<boolean> {
+    // Vérifier si le hower angel a des coordonnées (depuis les activités ou open_map_data)
+    const coordinates = this.extractCoordinates(howerAngel);
+    
+    if (coordinates) {
+      return true;
+    }
+    
+    // Si pas trouvé et qu'on a un supabaseClient, essayer de récupérer depuis open_map_data
+    if (supabaseClient && howerAngel.id) {
+      const coordsFromDb = await this.getCoordinatesFromOpenMapData(howerAngel.id, supabaseClient);
+      if (coordsFromDb) {
+        return true;
+      }
+    }
+    
+    // Si aucune coordonnée n'est trouvée, c'est normal qu'il n'y ait pas de distance
+    return false;
+  }
+
+  /**
    * Associe à une liste de hower angels une distance à une adresse
    * @param howerAngels Liste des hower angels
    * @param address Adresse d'origine (string)

@@ -1,4 +1,4 @@
-import { PracticeSearchResult } from '../types/search';
+import { PracticeSearchResult, HowerAngelSearchResult } from '../types/search';
 import { DistanceResult } from './GeolocationService';
 import { HowerAngelWithDistance } from './HowerAngelService';
 
@@ -8,6 +8,39 @@ import { HowerAngelWithDistance } from './HowerAngelService';
 export class PracticeService {
   constructor() {
     // Pas besoin de GeolocationService car on utilise les distances déjà calculées des hower angels
+  }
+
+  /**
+   * Détermine si une pratique devrait avoir une distance explicable
+   * @param practice Pratique à vérifier
+   * @param howerAngels Liste des hower angels avec distances (optionnel) pour trouver ceux qui proposent cette pratique
+   * @returns true si la pratique devrait avoir une distance, false sinon
+   */
+  haveExplanableDistance(
+    practice: PracticeSearchResult,
+    howerAngels?: Array<HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>
+  ): boolean {
+    // Si on n'a pas de hower angels, on ne peut pas déterminer
+    if (!howerAngels || howerAngels.length === 0) {
+      return false;
+    }
+
+    // Trouver tous les hower angels qui proposent cette pratique (via leurs spécialités)
+    const howerAngelsWithPractice = howerAngels.filter(howerAngel => {
+      if (!howerAngel.specialties || howerAngel.specialties.length === 0) {
+        return false;
+      }
+      // Vérifier si une spécialité correspond à la pratique
+      return howerAngel.specialties.some(specialty => specialty.id === practice.id);
+    });
+
+    // Si aucun hower angel ne propose cette pratique, c'est normal qu'il n'y ait pas de distance
+    if (howerAngelsWithPractice.length === 0) {
+      return false;
+    }
+
+    // Si au moins un hower angel qui propose cette pratique a une distance, la pratique devrait en avoir une
+    return howerAngelsWithPractice.some(ha => ha.distanceFromOrigin !== undefined);
   }
 
   /**
