@@ -3294,77 +3294,35 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       }
     });
 
-    // Convertir les hower angels en HowerAngelWithDistance[] pour les pratiques
-    const howerAngelsWithDistances: Array<HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }> = Array.from(howerAngelsMap.values());
-
-    // Fonction pour vérifier qu'un élément a une distance
+    // Fonction pour vérifier qu'un élément existe dans le contexte
+    // Note: Les distances ne sont jamais fournies par l'IA, elles sont calculées et ajoutées après
     const validateDistance = async (id: string, type: 'activity' | 'practice' | 'howerAngel', elementName: string): Promise<{ isValid: boolean; reason?: string }> => {
       if (!id) {
         return { isValid: false, reason: `${elementName} : l'ID est manquant` };
       }
       
-      // Pour les activités, vérifier si elles devraient avoir une distance
+      // Pour les activités, vérifier qu'elles existent dans le contexte
       if (type === 'activity') {
-        const activity = (globalIntentInfos.activities || []).find(a => a.id === id);
-        if (activity) {
-          const shouldHaveDistance = this.activityService.haveExplanableDistance(
-            activity as ActivitySearchResult,
-            howerAngelsMap
-          );
-          
-          // Si l'activité ne devrait pas avoir de distance, c'est valide
-          if (!shouldHaveDistance) {
-            return { isValid: true };
-          }
+        if (!activityIds.has(id)) {
+          return { isValid: false, reason: `${elementName} : l'activityId "${id}" n'existe pas dans le contexte` };
         }
+        return { isValid: true };
       }
       
-      // Pour les pratiques, vérifier si elles devraient avoir une distance
+      // Pour les pratiques, vérifier qu'elles existent dans le contexte
       if (type === 'practice') {
-        const practice = (globalIntentInfos.practices || []).find(p => p.id === id);
-        if (practice) {
-          const shouldHaveDistance = this.practiceService.haveExplanableDistance(
-            practice as PracticeSearchResult,
-            howerAngelsWithDistances
-          );
-          
-          // Si la pratique ne devrait pas avoir de distance, c'est valide
-          if (!shouldHaveDistance) {
-            return { isValid: true };
-          }
+        if (!practiceIds.has(id)) {
+          return { isValid: false, reason: `${elementName} : le practiceId "${id}" n'existe pas dans le contexte` };
         }
+        return { isValid: true };
       }
       
-      // Pour les hower angels, vérifier s'ils devraient avoir une distance
+      // Pour les hower angels, vérifier qu'ils existent dans le contexte
       if (type === 'howerAngel') {
-        const howerAngel = howerAngelsMap.get(id);
-        if (howerAngel) {
-          // Accéder au client Supabase pour vérifier les coordonnées
-          const supabaseClient = (this.supabaseService as any).supabase;
-          const shouldHaveDistance = await this.howerAngelService.haveExplanableDistance(
-            howerAngel,
-            supabaseClient
-          );
-          
-          // Si le hower angel ne devrait pas avoir de distance, c'est valide
-          if (!shouldHaveDistance) {
-            return { isValid: true };
-          }
+        if (!howerAngelsMap.has(id)) {
+          return { isValid: false, reason: `${elementName} : le howerAngelId "${id}" n'existe pas dans le contexte` };
         }
-      }
-      
-      const distance = distancesMap.get(id);
-      if (!distance) {
-        // Si l'élément devrait avoir une distance mais n'en a pas, c'est une erreur
-        if (type === 'activity' || type === 'practice' || type === 'howerAngel') {
-          return { isValid: false, reason: `${elementName} : la distance est manquante pour ${type}Id "${id}" alors qu'elle devrait en avoir une` };
-        }
-        return { isValid: false, reason: `${elementName} : la distance est manquante pour ${type}Id "${id}"` };
-      }
-      
-      // Vérifier que la distance a les propriétés requises
-      if (typeof distance.distance !== 'number' || !distance.formattedDistance) {
-        return { isValid: false, reason: `${elementName} : la distance pour ${type}Id "${id}" est invalide (distance: ${distance.distance}, formattedDistance: ${distance.formattedDistance})` };
+        return { isValid: true };
       }
       
       return { isValid: true };
