@@ -3171,6 +3171,55 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       return { isValid: true };
     };
 
+    // Vérifier recommendedCategories (pratiques) - propriétés dynamiques qui peuvent être enrichies
+    const recommendationAny = recommendation as any;
+    if (recommendationAny.recommendedCategories && Array.isArray(recommendationAny.recommendedCategories)) {
+      for (let i = 0; i < recommendationAny.recommendedCategories.length; i++) {
+        const category = recommendationAny.recommendedCategories[i];
+        if (!category || !category.id) continue;
+        
+        const idValidation = validateAndExtractId(category.id, 'practice');
+        if (!idValidation.isValid) {
+          return {
+            isValid: false,
+            reason: `recommendedCategories[${i}] : ${idValidation.reason || 'ID invalide'}`
+          };
+        }
+        
+        const distanceValidation = validateDistance(idValidation.extractedId!, 'practice', `recommendedCategories[${i}]`);
+        if (!distanceValidation.isValid) {
+          return {
+            isValid: false,
+            reason: distanceValidation.reason || `Distance manquante pour recommendedCategories[${i}]`
+          };
+        }
+      }
+    }
+
+    // Vérifier recommendedActivities - propriétés dynamiques qui peuvent être enrichies
+    if (recommendationAny.recommendedActivities && Array.isArray(recommendationAny.recommendedActivities)) {
+      for (let i = 0; i < recommendationAny.recommendedActivities.length; i++) {
+        const activity = recommendationAny.recommendedActivities[i];
+        if (!activity || !activity.id) continue;
+        
+        const idValidation = validateAndExtractId(activity.id, 'activity');
+        if (!idValidation.isValid) {
+          return {
+            isValid: false,
+            reason: `recommendedActivities[${i}] : ${idValidation.reason || 'ID invalide'}`
+          };
+        }
+        
+        const distanceValidation = validateDistance(idValidation.extractedId!, 'activity', `recommendedActivities[${i}]`);
+        if (!distanceValidation.isValid) {
+          return {
+            isValid: false,
+            reason: distanceValidation.reason || `Distance manquante pour recommendedActivities[${i}]`
+          };
+        }
+      }
+    }
+
     // Vérifier top1Recommandation
     if (recommendation.top1Recommandation) {
       const top1 = recommendation.top1Recommandation;
