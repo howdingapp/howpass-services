@@ -349,10 +349,110 @@ export class IAController {
 
     } catch (error) {
       console.error('❌ Erreur lors du traitement de la tâche IA:', error);
+      
+      // Déclarer taskData pour le nettoyage et la réponse d'erreur
+      const taskData = req.body as IATaskRequest;
+      
+      // Nettoyer la réponse IA associée à la tâche
+      try {
+        await this.cleanLastAiResponse(taskData, error);
+      } catch (cleanupError) {
+        console.error('❌ Erreur lors du nettoyage de la réponse IA:', cleanupError);
+      }
+      
       res.status(500).json({
-        error: 'Erreur interne',
-        message: 'Une erreur est survenue lors du traitement de la tâche IA'
+        success: false,
+        error: error instanceof Error ? error.message : 'Erreur interne',
+        message: 'Une erreur est survenue lors du traitement de la tâche IA',
+        conversationId: taskData?.conversationId,
+        type: taskData?.type,
+        details: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: process.env['NODE_ENV'] === 'development' ? error.stack : undefined
+        } : undefined
       });
+    }
+  }
+
+  /**
+   * Nettoie et met à jour la réponse IA associée à la tâche en cas d'erreur
+   * Marque la réponse comme ayant échoué avec les détails de l'erreur
+   */
+  private async cleanLastAiResponse(
+    taskData: IATaskRequest,
+    error: unknown
+  ): Promise<void> {
+    try {
+      console.log('🧹 Nettoyage de la réponse IA en cas d\'erreur...');
+      
+      // Récupérer l'ID de la réponse IA
+      let aiResponseId: string | undefined = taskData.aiResponseId;
+      
+      // Si pas d'ID dans la tâche, essayer de le récupérer depuis le contexte
+      if (!aiResponseId) {
+        try {
+          const context = await this.conversationService.getContext(taskData.conversationId);
+          if (context?.metadata?.['lastIntermediateAiResponseId']) {
+            aiResponseId = context.metadata['lastIntermediateAiResponseId'] as string;
+          }
+        } catch (contextError) {
+          console.warn('⚠️ Impossible de récupérer le contexte pour obtenir lastIntermediateAiResponseId:', contextError);
+        }
+      }
+      
+      if (!aiResponseId) {
+        console.warn('⚠️ Aucun aiResponseId disponible pour le nettoyage');
+        return;
+      }
+      
+      // Préparer les données de mise à jour avec le statut d'erreur
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      const errorName = error instanceof Error ? error.name : 'Error';
+      const errorTimestamp = new Date().toISOString();
+      
+      // Créer un messageId qui commence par "error-" pour que le frontend puisse le détecter
+      const errorMessageId = `error-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      
+      // Préparer la réponse d'erreur au format JSON pour response_text
+      const errorResponse = {
+        messageId: errorMessageId,
+        response: `Une erreur est survenue lors du traitement de votre demande: ${errorMessage}`,
+        type: 'error',
+        error: {
+          name: errorName,
+          message: errorMessage,
+          timestamp: errorTimestamp,
+          taskType: taskData.type,
+          conversationId: taskData.conversationId
+        }
+      };
+      
+      const updateData: any = {
+        response_text: JSON.stringify(errorResponse),
+        metadata: {
+          status: 'error',
+          error: {
+            name: errorName,
+            message: errorMessage,
+            timestamp: errorTimestamp,
+            taskType: taskData.type,
+            conversationId: taskData.conversationId
+          }
+        }
+      };
+      
+      // Mettre à jour la réponse IA
+      const updateResult = await this.supabaseService.updateAIResponse(aiResponseId, updateData);
+      
+      if (!updateResult.success) {
+        console.error('❌ Erreur lors de la mise à jour de la réponse IA en cas d\'erreur:', updateResult.error);
+      } else {
+        console.log(`✅ Réponse IA ${aiResponseId} marquée comme erreur`);
+      }
+    } catch (cleanupError) {
+      // Ne pas faire échouer la requête si le nettoyage échoue
+      console.error('❌ Erreur lors du nettoyage de la réponse IA:', cleanupError);
     }
   }
 
