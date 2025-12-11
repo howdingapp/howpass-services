@@ -3555,6 +3555,159 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       }
     }
 
+    // Enrichir la réponse avec les distances depuis globalIntentInfos
+    // Les distances sont déjà dans distancesMap, on les ajoute maintenant au summary
+    try {
+      const responseText = response.response;
+      if (responseText && typeof responseText === 'string') {
+        let parsedResponse: any;
+        try {
+          parsedResponse = JSON.parse(responseText);
+        } catch {
+          // Si ce n'est pas du JSON, retourner la réponse telle quelle
+          return {
+            isValid: true,
+            finalObject: response
+          };
+        }
+        
+        // Détecter la structure du summary (même logique qu'au début de la fonction)
+        let summaryToEnrich: any = null;
+        if (parsedResponse.summary && typeof parsedResponse.summary === 'object') {
+          summaryToEnrich = parsedResponse.summary;
+        } else if (parsedResponse.recommendation && typeof parsedResponse.recommendation === 'object') {
+          summaryToEnrich = parsedResponse;
+        }
+        
+        if (summaryToEnrich && summaryToEnrich.recommendation) {
+          const recommendationToEnrich = summaryToEnrich.recommendation;
+          
+          // Enrichir top1Recommandation avec la distance
+          if (recommendationToEnrich.top1Recommandation) {
+            const top1 = recommendationToEnrich.top1Recommandation;
+            const idValidation = validateAndExtractId(top1.id, top1.type === 'activity' ? 'activity' : 'practice');
+            if (idValidation.isValid && idValidation.extractedId) {
+              const distance = distancesMap.get(idValidation.extractedId);
+              if (distance) {
+                top1.distance = distance;
+              }
+            }
+          }
+          
+          // Enrichir topRecommendedPanel avec les distances
+          if (recommendationToEnrich.topRecommendedPanel) {
+            const panel = recommendationToEnrich.topRecommendedPanel;
+            
+            if (panel.orderedTopPractices && Array.isArray(panel.orderedTopPractices)) {
+              panel.orderedTopPractices.forEach((practice: any) => {
+                if (practice && practice.id) {
+                  const idValidation = validateAndExtractId(practice.id, 'practice');
+                  if (idValidation.isValid && idValidation.extractedId) {
+                    const distance = distancesMap.get(idValidation.extractedId);
+                    if (distance) {
+                      practice.distance = distance;
+                    }
+                  }
+                }
+              });
+            }
+            
+            if (panel.orderedTopActivities && Array.isArray(panel.orderedTopActivities)) {
+              panel.orderedTopActivities.forEach((activity: any) => {
+                if (activity && activity.id) {
+                  const idValidation = validateAndExtractId(activity.id, 'activity');
+                  if (idValidation.isValid && idValidation.extractedId) {
+                    const distance = distancesMap.get(idValidation.extractedId);
+                    if (distance) {
+                      activity.distance = distance;
+                    }
+                  }
+                }
+              });
+            }
+          }
+          
+          // Enrichir byFamilyRecommendedPanel avec les distances
+          if (recommendationToEnrich.byFamilyRecommendedPanel && Array.isArray(recommendationToEnrich.byFamilyRecommendedPanel)) {
+            recommendationToEnrich.byFamilyRecommendedPanel.forEach((family: any) => {
+              if (family && family.orderedRecommendedPractices && Array.isArray(family.orderedRecommendedPractices)) {
+                family.orderedRecommendedPractices.forEach((practice: any) => {
+                  if (practice && practice.id) {
+                    const idValidation = validateAndExtractId(practice.id, 'practice');
+                    if (idValidation.isValid && idValidation.extractedId) {
+                      const distance = distancesMap.get(idValidation.extractedId);
+                      if (distance) {
+                        practice.distance = distance;
+                      }
+                    }
+                  }
+                });
+              }
+              
+              if (family && family.orderedRecommendedActivities && Array.isArray(family.orderedRecommendedActivities)) {
+                family.orderedRecommendedActivities.forEach((activity: any) => {
+                  if (activity && activity.id) {
+                    const idValidation = validateAndExtractId(activity.id, 'activity');
+                    if (idValidation.isValid && idValidation.extractedId) {
+                      const distance = distancesMap.get(idValidation.extractedId);
+                      if (distance) {
+                        activity.distance = distance;
+                      }
+                    }
+                  }
+                });
+              }
+            });
+          }
+          
+          // Enrichir recommendedCategories avec les distances (si présent)
+          if (recommendationToEnrich.recommendedCategories && Array.isArray(recommendationToEnrich.recommendedCategories)) {
+            recommendationToEnrich.recommendedCategories.forEach((category: any) => {
+              if (category && category.id) {
+                const idValidation = validateAndExtractId(category.id, 'practice');
+                if (idValidation.isValid && idValidation.extractedId) {
+                  const distance = distancesMap.get(idValidation.extractedId);
+                  if (distance) {
+                    category.distance = distance;
+                  }
+                }
+              }
+            });
+          }
+          
+          // Enrichir recommendedActivities avec les distances (si présent)
+          if (recommendationToEnrich.recommendedActivities && Array.isArray(recommendationToEnrich.recommendedActivities)) {
+            recommendationToEnrich.recommendedActivities.forEach((activity: any) => {
+              if (activity && activity.id) {
+                const idValidation = validateAndExtractId(activity.id, 'activity');
+                if (idValidation.isValid && idValidation.extractedId) {
+                  const distance = distancesMap.get(idValidation.extractedId);
+                  if (distance) {
+                    activity.distance = distance;
+                  }
+                }
+              }
+            });
+          }
+          
+          // Reconstruire la réponse avec les distances enrichies
+          const enrichedResponse: RecommendationMessageResponse = {
+            ...response,
+            response: JSON.stringify(parsedResponse)
+          };
+          
+          console.log('✅ [BILAN] Distances enrichies dans le summary');
+          
+          return {
+            isValid: true,
+            finalObject: enrichedResponse
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ [BILAN] Erreur lors de l\'enrichissement des distances dans validateSummaryResponse:', error);
+    }
+
     // Toutes les validations sont passées
     return {
       isValid: true,
