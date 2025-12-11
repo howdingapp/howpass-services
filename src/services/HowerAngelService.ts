@@ -135,6 +135,123 @@ export class HowerAngelService {
   }
 
   /**
+   * Récupère l'adresse depuis open_map_data pour un user_data_id
+   * @param userDataId ID du user_data
+   * @param supabaseClient Client Supabase
+   * @returns Adresse ou null
+   */
+  async getAddressFromOpenMapData(
+    userDataId: string,
+    supabaseClient: any
+  ): Promise<any | null> {
+    try {
+      const { data, error } = await supabaseClient
+        .from('open_map_data')
+        .select('address, gps_location')
+        .eq('user_data_id', userDataId)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+
+      // Si on a une adresse, la retourner
+      if (data.address) {
+        return data.address;
+      }
+
+      // Si on a des coordonnées GPS mais pas d'adresse, retourner les coordonnées
+      if (data.gps_location) {
+        const gpsLocation = data.gps_location;
+        if (gpsLocation.lat && gpsLocation.lng) {
+          return {
+            latitude: gpsLocation.lat,
+            longitude: gpsLocation.lng,
+            gpsLocation: {
+              lat: gpsLocation.lat,
+              lng: gpsLocation.lng
+            }
+          };
+        }
+        if (gpsLocation.latitude && gpsLocation.longitude) {
+          return {
+            latitude: gpsLocation.latitude,
+            longitude: gpsLocation.longitude,
+            gpsLocation: {
+              lat: gpsLocation.latitude,
+              lng: gpsLocation.longitude
+            }
+          };
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération de l\'adresse depuis open_map_data:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Enrichit une liste de hower angels avec leurs adresses depuis open_map_data
+   * @param howerAngels Liste des hower angels à enrichir
+   * @param supabaseClient Client Supabase
+   * @returns Liste des hower angels enrichis avec leurs adresses
+   */
+  async enrichHowerAngelsWithAddresses(
+    howerAngels: HowerAngelSearchResult[],
+    supabaseClient: any
+  ): Promise<HowerAngelSearchResult[]> {
+    if (!supabaseClient || howerAngels.length === 0) {
+      return howerAngels;
+    }
+
+    try {
+      // Récupérer les adresses en parallèle pour tous les hower angels
+      const enrichmentPromises = howerAngels.map(async (howerAngel) => {
+        // Si le hower angel a déjà une adresse dans ses activités, ne pas le modifier
+        if (howerAngel.activities && howerAngel.activities.length > 0) {
+          const hasAddress = howerAngel.activities.some(activity => activity.address);
+          if (hasAddress) {
+            return howerAngel;
+          }
+        }
+
+        // Récupérer l'adresse depuis open_map_data
+        const address = await this.getAddressFromOpenMapData(howerAngel.id, supabaseClient);
+        
+        if (address) {
+          // Enrichir les activités du hower angel avec l'adresse si elles n'en ont pas
+          const enrichedActivities = (howerAngel.activities || []).map(activity => {
+            if (!activity.address) {
+              return {
+                ...activity,
+                address: address
+              };
+            }
+            return activity;
+          });
+
+          return {
+            ...howerAngel,
+            activities: enrichedActivities
+          };
+        }
+
+        return howerAngel;
+      });
+
+      const enrichedHowerAngels = await Promise.all(enrichmentPromises);
+      console.log(`✅ [HowerAngelService] ${enrichedHowerAngels.length} hower angels enrichis avec leurs adresses`);
+      
+      return enrichedHowerAngels;
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'enrichissement des hower angels avec les adresses:', error);
+      return howerAngels;
+    }
+  }
+
+  /**
    * Détermine si un hower angel devrait avoir une distance explicable
    * @param howerAngel Hower angel à vérifier
    * @param supabaseClient Client Supabase optionnel pour vérifier les coordonnées depuis open_map_data

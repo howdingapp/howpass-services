@@ -306,5 +306,83 @@ export class ActivityService {
       return distanceA - distanceB;
     });
   }
+
+  /**
+   * Récupère l'adresse depuis la base de données pour une activité
+   * @param activityId ID de l'activité
+   * @param supabaseClient Client Supabase
+   * @returns Adresse ou null
+   */
+  async getAddressFromDatabase(
+    activityId: string,
+    supabaseClient: any
+  ): Promise<any | null> {
+    try {
+      const { data, error } = await supabaseClient
+        .from('activities')
+        .select('address')
+        .eq('id', activityId)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+
+      return data.address || null;
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération de l\'adresse depuis la base de données:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Enrichit une liste d'activités avec leurs adresses depuis la base de données
+   * @param activities Liste des activités à enrichir
+   * @param supabaseClient Client Supabase
+   * @returns Liste des activités enrichies avec leurs adresses
+   */
+  async enrichActivitiesWithAddresses(
+    activities: ActivitySearchResult[],
+    supabaseClient: any
+  ): Promise<ActivitySearchResult[]> {
+    if (!supabaseClient || activities.length === 0) {
+      return activities;
+    }
+
+    try {
+      // Récupérer les adresses en parallèle pour toutes les activités qui n'en ont pas
+      const enrichmentPromises = activities.map(async (activity) => {
+        // Si l'activité a déjà une adresse, ne pas la modifier
+        if (activity.address) {
+          return activity;
+        }
+
+        // Si l'activité est en remote, c'est normal qu'elle n'ait pas d'adresse
+        if (activity.locationType === 'remote') {
+          return activity;
+        }
+
+        // Récupérer l'adresse depuis la base de données
+        const address = await this.getAddressFromDatabase(activity.id, supabaseClient);
+        
+        if (address) {
+          return {
+            ...activity,
+            address: address
+          };
+        }
+
+        return activity;
+      });
+
+      const enrichedActivities = await Promise.all(enrichmentPromises);
+      console.log(`✅ [ActivityService] ${enrichedActivities.length} activités enrichies avec leurs adresses`);
+      
+      return enrichedActivities;
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'enrichissement des activités avec les adresses:', error);
+      return activities;
+    }
+  }
 }
 

@@ -2212,7 +2212,44 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
     let activities: ActivitySearchResult[] = semanticResults.activities;
     let howerAngels: HowerAngelSearchResult[] | HowerAngelWithDistance[] = semanticResults.howerAngels;
     const workerPractices: PracticeSearchResult[] = workerPracticesResult;
-    const workerHowerAngels: HowerAngelSearchResult[] = workerHowerAngelsResult;
+    let workerHowerAngels: HowerAngelSearchResult[] = workerHowerAngelsResult;
+
+    // Enrichir les données avec les adresses depuis la base de données
+    try {
+      const supabaseClient = (this.supabaseService as any).supabase;
+      
+      if (supabaseClient) {
+        console.log(`📍 [BILAN] Enrichissement des données avec les adresses depuis la base de données`);
+        
+        // Enrichir les hower angels avec leurs adresses
+        if (howerAngels.length > 0) {
+          howerAngels = await this.howerAngelService.enrichHowerAngelsWithAddresses(
+            howerAngels as HowerAngelSearchResult[],
+            supabaseClient
+          );
+        }
+        
+        // Enrichir les hower angels workers avec leurs adresses
+        if (workerHowerAngels.length > 0) {
+          workerHowerAngels = await this.howerAngelService.enrichHowerAngelsWithAddresses(
+            workerHowerAngels,
+            supabaseClient
+          );
+        }
+        
+        // Enrichir les activités avec leurs adresses
+        if (activities.length > 0) {
+          activities = await this.activityService.enrichActivitiesWithAddresses(
+            activities,
+            supabaseClient
+          );
+        }
+        
+        console.log(`✅ [BILAN] Données enrichies avec les adresses`);
+      }
+    } catch (error) {
+      console.warn('⚠️ [BILAN] Erreur lors de l\'enrichissement des données avec les adresses:', error);
+    }
     
     // 2. Calculer les distances pour les hower angels trouvés par recherche sémantique
     // et réordonnancer par distance si une adresse ou GPS est disponible
