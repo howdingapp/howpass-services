@@ -1797,26 +1797,18 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
    */
   protected async retrieveDataFromAgentWorkerSearchForHowerAngels(
     allChunksTexts: string[],
-    context: HowanaContext
+    context: HowanaContext,
+    allHowerAngels: HowerAngelSearchResult[]
   ): Promise<HowerAngelSearchResult[]> {
     console.log(`🔍 [WORKER] Démarrage de la recherche agentique pour les hower angels`);
     
-    // Récupérer tous les hower angels avec leurs informations complètes
-    // Note: On utilise searchHowerAngelsByUserSituation avec un limit élevé pour avoir plus de résultats
-    // puis on les filtre via les workers IA
-    const allHowerAngelsResult = await this.supabaseService.searchHowerAngelsByUserSituation(
-      allChunksTexts,
-      50, // Récupérer plus de résultats pour avoir un pool plus large
-      true // withMatchInfos = true
-    );
-    
-    if (!allHowerAngelsResult.success || !allHowerAngelsResult.data || allHowerAngelsResult.data.length === 0) {
-      console.warn('⚠️ [WORKER] Impossible de récupérer les hower angels, retour d\'un tableau vide');
+    // Utiliser les hower angels passés en paramètre (déjà récupérés depuis la base de données)
+    if (!allHowerAngels || allHowerAngels.length === 0) {
+      console.warn('⚠️ [WORKER] Aucun hower angel fourni, retour d\'un tableau vide');
       return [];
     }
     
-    const allHowerAngels = allHowerAngelsResult.data;
-    console.log(`🔍 [WORKER] Analyse de ${allHowerAngels.length} hower angels via workers IA`);
+    console.log(`🔍 [WORKER] Analyse de ${allHowerAngels.length} hower angels via workers IA (full database search)`);
     
     // Fonction pour extraire le texte d'un hower angel
     const howerAngelToText = (howerAngel: HowerAngelSearchResult | HowerAngelWithDistance): string => {
@@ -1905,22 +1897,27 @@ Retourne uniquement les praticiens avec un score de pertinence >= 7/10.`;
   protected async retrieveDataFromAgentWorkerSearchForPractices(
     allChunksTexts: string[],
     context: HowanaContext,
-    semanticPractices: PracticeSearchResult[]
+    semanticPractices: PracticeSearchResult[],
+    allPractices: Array<{
+      id: string;
+      title: string;
+      longDescription: string | null;
+      benefits: string[] | undefined;
+      typicalSituations: string[] | undefined;
+    }>
   ): Promise<PracticeSearchResult[]> {
     console.log(`🔍 [WORKER] Démarrage de la recherche agentique pour les pratiques`);
     
-    // Récupérer toutes les pratiques avec leurs informations complètes
-    const allPracticesResult = await this.supabaseService.getAllPracticesWithFullInfo();
-    
-    if (!allPracticesResult.success || !allPracticesResult.data) {
-      console.warn('⚠️ [WORKER] Impossible de récupérer les pratiques, retour d\'un tableau vide');
+    // Utiliser les pratiques passées en paramètre (déjà récupérées depuis la base de données)
+    if (!allPractices || allPractices.length === 0) {
+      console.warn('⚠️ [WORKER] Aucune pratique fournie, retour d\'un tableau vide');
       return [];
     }
     
-    console.log(`🔍 [WORKER] Analyse de ${allPracticesResult.data.length} pratiques via workers IA`);
+    console.log(`🔍 [WORKER] Analyse de ${allPractices.length} pratiques via workers IA`);
     
     // Fonction pour extraire le texte d'une pratique
-    const practiceToText = (practice: typeof allPracticesResult.data[0]): string => {
+    const practiceToText = (practice: typeof allPractices[0]): string => {
       const parts: string[] = [];
       parts.push(`Titre: ${practice.title}`);
       if (practice.longDescription) {
@@ -1942,7 +1939,7 @@ Retourne uniquement les praticiens avec un score de pertinence >= 7/10.`;
     };
     
     // Construire les instructions spécifiques pour les workers de pratiques
-    const totalPractices = allPracticesResult.data.length;
+    const totalPractices = allPractices.length;
     const itemsPerWorker = 10;
     const workerInstruction = `Tu es un assistant spécialisé dans l'analyse de pertinence de pratiques de bien-être.
 
@@ -1963,7 +1960,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
 
     // Appeler la fonction générique de worker
     const workerResults = await this.retrieveDataFromAgentWorkerSearch(
-      allPracticesResult.data,
+      allPractices,
       allChunksTexts, // Contexte utilisateur = chunks
       practiceToText,
       context,
@@ -2005,6 +2002,128 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
     console.log(`✅ [WORKER] ${workerPractices.length} pratiques pertinentes trouvées via workers IA`);
     
     return workerPractices;
+  }
+
+  /**
+   * Récupère les activités depuis la recherche agentique via workers IA
+   * @param allChunksTexts Les textes des chunks pour le contexte utilisateur
+   * @param context Le contexte de la conversation
+   * @param allActivities Les activités récupérées depuis la base de données (full database search)
+   * @returns Les activités pertinentes trouvées par les workers IA
+   */
+  protected async retrieveDataFromAgentWorkerSearchForActivities(
+    allChunksTexts: string[],
+    context: HowanaContext,
+    allActivities: Array<{
+      id: string;
+      title: string;
+      shortDescription: string | null;
+      longDescription: string | null;
+      benefits: any;
+      typicalSituations: string | null;
+      locationType: string | null;
+      address: any;
+      practiceId: string | null;
+      creatorId: string | null;
+    }>
+  ): Promise<ActivitySearchResult[]> {
+    console.log(`🔍 [WORKER] Démarrage de la recherche agentique pour les activités`);
+    
+    // Utiliser les activités passées en paramètre (déjà récupérées depuis la base de données)
+    if (!allActivities || allActivities.length === 0) {
+      console.warn('⚠️ [WORKER] Aucune activité fournie, retour d\'un tableau vide');
+      return [];
+    }
+    
+    console.log(`🔍 [WORKER] Analyse de ${allActivities.length} activités via workers IA`);
+    
+    // Fonction pour extraire le texte d'une activité
+    const activityToText = (activity: typeof allActivities[0]): string => {
+      const parts: string[] = [];
+      parts.push(`Titre: ${activity.title}`);
+      if (activity.shortDescription) {
+        parts.push(`Description courte: ${activity.shortDescription}`);
+      }
+      if (activity.longDescription) {
+        parts.push(`Description longue: ${activity.longDescription}`);
+      }
+      if (activity.benefits) {
+        const benefitsText = Array.isArray(activity.benefits) 
+          ? activity.benefits.join(', ')
+          : JSON.stringify(activity.benefits);
+        parts.push(`Bénéfices: ${benefitsText}`);
+      }
+      if (activity.typicalSituations) {
+        parts.push(`Situations typiques: ${activity.typicalSituations}`);
+      }
+      if (activity.locationType) {
+        parts.push(`Type de localisation: ${activity.locationType}`);
+      }
+      return parts.join('\n\n');
+    };
+    
+    // Construire les instructions spécifiques pour les workers d'activités
+    const totalActivities = allActivities.length;
+    const itemsPerWorker = 10;
+    const workerInstruction = `Tu es un assistant spécialisé dans l'analyse de pertinence d'activités de bien-être.
+
+OBJECTIF:
+Tu dois identifier les activités les plus adaptées parmi un total de ${totalActivities} activités disponibles sur la plateforme HOW PASS.
+
+TA MISSION:
+Tu es en charge d'analyser ${itemsPerWorker} activités parmi les ${totalActivities} disponibles. Pour chaque activité, tu dois évaluer sa pertinence globale en fonction du contexte utilisateur fourni.
+
+CRITÈRES D'ÉVALUATION:
+- Analyse la correspondance entre les besoins exprimés dans le contexte utilisateur et les bénéfices de l'activité
+- Évalue la pertinence des situations typiques de l'activité par rapport au profil de l'utilisateur
+- Considère la description de l'activité pour comprendre son champ d'application
+- Prends en compte le type de localisation (en personne, à distance, hybride) si pertinent
+- Évalue la pertinence globale, pas seulement une correspondance partielle
+- IMPORTANT: Ne te base PAS QUE sur la notoriété ou la déclaration de l'activité. Certaines activités peuvent être créées et pas forcément connues du grand public, mais si les mots-clés et les bénéfices semblent pertinents par rapport au contexte utilisateur, tu dois les mettre en avant. La pertinence se juge principalement sur la correspondance des mots-clés et des bénéfices, pas uniquement sur la popularité.
+
+Retourne uniquement les activités avec un score de pertinence >= 7/10.`;
+
+    // Appeler la fonction générique de worker
+    const workerResults = await this.retrieveDataFromAgentWorkerSearch(
+      allActivities,
+      allChunksTexts, // Contexte utilisateur = chunks
+      activityToText,
+      context,
+      workerInstruction,
+      itemsPerWorker, // 10 activités par worker
+      0.7, // Score minimum 7/10
+      15  // Top 15 résultats
+    );
+    
+    // Convertir les résultats en ActivitySearchResult
+    const workerActivities = workerResults.results.map(result => {
+      const activity = result.item;
+      
+      return {
+        type: 'activity' as const,
+        id: activity.id,
+        title: activity.title,
+        shortDescription: activity.shortDescription || undefined,
+        longDescription: activity.longDescription || undefined,
+        benefits: activity.benefits,
+        locationType: activity.locationType || undefined,
+        address: activity.address || undefined,
+        practiceId: activity.practiceId || null,
+        creatorId: activity.creatorId || null,
+        relevanceScore: result.confidenceScore, // Score de confiance du worker (0-1)
+        similarity: result.confidenceScore,
+        vectorSimilarity: null,
+        bm25Similarity: null,
+        matchCount: 1,
+        workerReasons: result.reasons, // Raisons du worker
+        source: 'worker' as const, // Indiquer la provenance
+        typicalSituations: activity.typicalSituations || undefined
+      } as ActivitySearchResult & { workerReasons?: string[]; source?: 'semantic' | 'worker' };
+    });
+    
+    console.log(`✅ [WORKER] ${workerActivities.length} activités pertinentes trouvées via workers IA`);
+    
+    return workerActivities;
   }
 
   /**
@@ -2198,16 +2317,31 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
       console.log(`📍 [BILAN] Aucune adresse ou position GPS trouvée pour la recherche`);
     }
     
-    // 1. Recherche sémantique et agentique en parallèle pour optimiser les coûts dans le cloud
+    // 1. Récupérer toutes les données de la base de données pour les recherches agentiques
+    console.log(`🔍 [BILAN] Récupération de toutes les données depuis la base de données`);
+    const [allHowerAngelsResult, allPracticesResult, allActivitiesResult] = await Promise.all([
+      this.supabaseService.getAllHowerAngels(),
+      this.supabaseService.getAllPracticesWithFullInfo(),
+      this.supabaseService.getAllActivitiesWithFullInfo()
+    ]);
+    
+    const allHowerAngels = allHowerAngelsResult.success && allHowerAngelsResult.data ? allHowerAngelsResult.data : [];
+    const allPractices = allPracticesResult.success && allPracticesResult.data ? allPracticesResult.data : [];
+    const allActivities = allActivitiesResult.success && allActivitiesResult.data ? allActivitiesResult.data : [];
+    console.log(`✅ [BILAN] ${allHowerAngels.length} hower angels, ${allPractices.length} pratiques et ${allActivities.length} activités récupérés`);
+    
+    // 2. Recherche sémantique et agentique en parallèle pour optimiser les coûts dans le cloud
     console.log(`🚀 [BILAN] Lancement des recherches sémantique et agentique en parallèle`);
     
-    const [semanticResults, workerPracticesResult, workerHowerAngelsResult] = await Promise.all([
+    const [semanticResults, workerPracticesResult, workerHowerAngelsResult, workerActivitiesResult] = await Promise.all([
       // Recherche sémantique (méthode actuelle)
       this.retrieveDataFromSemanticSearch(allChunksTexts),
       // Recherche via workers IA pour les pratiques - seulement si context est disponible
-      context ? this.retrieveDataFromAgentWorkerSearchForPractices(allChunksTexts, context, []) : Promise.resolve([]),
+      context ? this.retrieveDataFromAgentWorkerSearchForPractices(allChunksTexts, context, [], allPractices) : Promise.resolve([]),
       // Recherche via workers IA pour les hower angels - seulement si context est disponible
-      context ? this.retrieveDataFromAgentWorkerSearchForHowerAngels(allChunksTexts, context) : Promise.resolve([])
+      context ? this.retrieveDataFromAgentWorkerSearchForHowerAngels(allChunksTexts, context, allHowerAngels) : Promise.resolve([]),
+      // Recherche via workers IA pour les activités - seulement si context est disponible
+      context ? this.retrieveDataFromAgentWorkerSearchForActivities(allChunksTexts, context, allActivities) : Promise.resolve([])
     ]);
     
     const semanticPractices: PracticeSearchResult[] = semanticResults.practices;
@@ -2215,6 +2349,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
     let howerAngels: HowerAngelSearchResult[] | HowerAngelWithDistance[] = semanticResults.howerAngels;
     const workerPractices: PracticeSearchResult[] = workerPracticesResult;
     let workerHowerAngels: HowerAngelSearchResult[] = workerHowerAngelsResult;
+    let workerActivities: ActivitySearchResult[] = workerActivitiesResult;
 
     // Enrichir les données avec les adresses depuis la base de données
     try {
@@ -2245,6 +2380,14 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
             activities,
             supabaseClient
           );
+        }
+        
+        // Enrichir les activités workers avec leurs adresses
+        if (workerActivities.length > 0) {
+          workerActivities = await this.activityService.enrichActivitiesWithAddresses(
+            workerActivities,
+            supabaseClient
+          ) as ActivitySearchResult[];
         }
         
         console.log(`✅ [BILAN] Données enrichies avec les adresses`);
@@ -2408,46 +2551,130 @@ Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
     
     let practices: Array<PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[]; distanceFromOrigin?: DistanceResult }> = Array.from(practicesMap.values());
     
-    // 4. Calculer les distances pour les pratiques pertinentes
+    // Type pour les activités avec source et workerReasons
+    type ActivityWithSource = ActivitySearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[] };
+    
+    // Enrichir les activités workers avec les infos sémantiques si disponibles
+    const enrichedWorkerActivities = workerActivities.map(workerActivity => {
+      const semanticActivity = activities.find(a => a.id === workerActivity.id);
+      if (semanticActivity) {
+        return {
+          ...workerActivity,
+          categoryId: semanticActivity.categoryId ?? workerActivity.categoryId ?? null,
+          categoryName: semanticActivity.categoryName ?? workerActivity.categoryName ?? null,
+          categoryDescription: semanticActivity.categoryDescription ?? workerActivity.categoryDescription ?? null,
+          familyId: semanticActivity.familyId ?? workerActivity.familyId ?? null,
+          familyName: semanticActivity.familyName ?? workerActivity.familyName ?? null,
+          familyDescription: semanticActivity.familyDescription ?? workerActivity.familyDescription ?? null,
+          practiceId: semanticActivity.practiceId ?? workerActivity.practiceId ?? null,
+          practiceTitle: semanticActivity.practiceTitle ?? workerActivity.practiceTitle ?? null,
+          practiceShortDescription: semanticActivity.practiceShortDescription ?? workerActivity.practiceShortDescription ?? null
+        } as ActivityWithSource;
+      }
+      return workerActivity;
+    });
+    
+    // Utiliser les activités enrichies
+    const finalWorkerActivities: ActivityWithSource[] = enrichedWorkerActivities;
+    
+    // Combiner les deux sources d'activités avec leur provenance
+    // Marquer les activités sémantiques avec leur source
+    const semanticActivitiesWithSource: ActivityWithSource[] = activities.map(a => ({
+      ...a,
+      source: 'semantic' as const
+    })) as ActivityWithSource[];
+    
+    // Combiner les deux listes (en évitant les doublons par ID)
+    const activitiesMap = new Map<string, ActivityWithSource>();
+    
+    // Ajouter d'abord les activités sémantiques
+    semanticActivitiesWithSource.forEach(a => {
+      activitiesMap.set(a.id, a);
+    });
+    
+    // Ajouter les activités workers (peuvent compléter les sémantiques)
+    finalWorkerActivities.forEach(a => {
+      const existing = activitiesMap.get(a.id);
+      if (existing) {
+        // Si l'activité existe déjà, on garde la sémantique et on ajoute les infos du worker
+        if (a.workerReasons !== undefined) {
+          existing.workerReasons = a.workerReasons;
+        }
+        // On garde 'semantic' comme source principale, mais on note qu'on a aussi les raisons du worker
+      } else {
+        activitiesMap.set(a.id, a);
+      }
+    });
+    
+    activities = Array.from(activitiesMap.values());
+    
+    // 4. Calculer les distances pour tous les hower angels récupérés précédemment
+    // pour les utiliser dans les calculs de distances des pratiques et activités
+    let allHowerAngelsWithDistances: HowerAngelWithDistance[] = [];
+    if ((address || gpsPosition) && allHowerAngels.length > 0) {
+      try {
+        console.log(`📍 [BILAN] Calcul des distances pour ${allHowerAngels.length} hower angels`);
+        
+        const supabaseClient = (this.supabaseService as any).supabase;
+        
+        // Enrichir avec les adresses
+        let enrichedHowerAngels = await this.howerAngelService.enrichHowerAngelsWithAddresses(
+          allHowerAngels,
+          supabaseClient
+        );
+        
+        // Calculer les distances pour tous les hower angels
+        if (address) {
+          allHowerAngelsWithDistances = await this.howerAngelService.associateDistancesFromAddress(
+            enrichedHowerAngels,
+            address,
+            supabaseClient
+          );
+        } else if (gpsPosition) {
+          allHowerAngelsWithDistances = await this.howerAngelService.associateDistancesFromCoordinates(
+            enrichedHowerAngels,
+            { lat: gpsPosition.latitude, lng: gpsPosition.longitude },
+            supabaseClient
+          );
+        }
+        
+        console.log(`✅ [BILAN] ${allHowerAngelsWithDistances.length} hower angels avec distances calculées`);
+      } catch (error) {
+        console.warn('⚠️ [BILAN] Erreur lors de la récupération de tous les hower angels:', error);
+      }
+    }
+    
+    // 5. Calculer les distances pour les pratiques pertinentes
     // en trouvant les hower angels qui les proposent et en prenant la distance la plus courte
-    if ((address || gpsPosition) && practices.length > 0 && howerAngels.length > 0) {
+    // Utiliser tous les hower angels de la base de données (pas seulement ceux de la recherche sémantique)
+    if ((address || gpsPosition) && practices.length > 0 && allHowerAngelsWithDistances.length > 0) {
       console.log(`📍 [BILAN] Calcul des distances pour ${practices.length} pratiques`);
       
       try {
-        // Convertir howerAngels en HowerAngelWithDistance si nécessaire
-        const howerAngelsWithDistances = howerAngels.filter(ha => 
-          'distanceFromOrigin' in ha && ha.distanceFromOrigin
-        ) as HowerAngelWithDistance[];
-        
-        if (howerAngelsWithDistances.length > 0) {
-          const practicesBefore = practices.filter((p: any) => p.distanceFromOrigin).length;
-          practices = this.practiceService.associateDistancesToPractices(
-            practices,
-            howerAngelsWithDistances
-          );
-          const practicesAfter = practices.filter((p: any) => p.distanceFromOrigin).length;
-          console.log(`✅ [BILAN] Distances calculées pour les pratiques: ${practicesBefore} -> ${practicesAfter} pratiques avec distance`);
-        } else {
-          console.warn('⚠️ [BILAN] Aucun hower angel avec distance trouvé, impossible de calculer les distances des pratiques');
-        }
+        const practicesBefore = practices.filter((p: any) => p.distanceFromOrigin).length;
+        practices = this.practiceService.associateDistancesToPractices(
+          practices,
+          allHowerAngelsWithDistances
+        );
+        const practicesAfter = practices.filter((p: any) => p.distanceFromOrigin).length;
+        console.log(`✅ [BILAN] Distances calculées pour les pratiques: ${practicesBefore} -> ${practicesAfter} pratiques avec distance`);
       } catch (error) {
         console.warn('⚠️ [BILAN] Erreur lors du calcul des distances pour les pratiques:', error);
       }
     }
     
-    // 5. Calculer les distances pour les activités pertinentes
+    // 6. Calculer les distances pour les activités pertinentes
     // Logique : utiliser l'adresse de l'activité si disponible, sinon celle du créateur (hower angel)
-    if ((address || gpsPosition) && activities.length > 0) {
+    // Utiliser tous les hower angels de la base de données (pas seulement ceux de la recherche sémantique)
+    if ((address || gpsPosition) && activities.length > 0 && allHowerAngelsWithDistances.length > 0) {
       console.log(`📍 [BILAN] Calcul des distances pour ${activities.length} activités`);
       
       try {
         // Accéder au client Supabase via une propriété protégée ou une méthode publique
         const supabaseClient = (this.supabaseService as any).supabase;
         
-        // Convertir howerAngels en format attendu (avec distanceFromOrigin si disponible)
-        const howerAngelsForActivities = howerAngels.filter(ha => 
-          'distanceFromOrigin' in ha || ha.id
-        ) as Array<HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>;
+        // Convertir allHowerAngelsWithDistances en format attendu
+        const howerAngelsForActivities = allHowerAngelsWithDistances as Array<HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult }>;
         
         const activitiesBefore = activities.filter((a: any) => a.distanceFromOrigin).length;
         if (address) {

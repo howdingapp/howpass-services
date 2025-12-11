@@ -2238,6 +2238,80 @@ export class SupabaseService {
    * Récupère toutes les pratiques actives avec leurs informations complètes
    * (benefits, typical_situation, long_description, title)
    */
+  async getAllActivitiesWithFullInfo(): Promise<{
+    success: boolean;
+    data?: Array<{
+      id: string;
+      title: string;
+      shortDescription: string | null;
+      longDescription: string | null;
+      benefits: any;
+      typicalSituations: string | null;
+      locationType: string | null;
+      address: any;
+      practiceId: string | null;
+      creatorId: string | null;
+    }>;
+    error?: string;
+  }> {
+    try {
+      console.log(`🔍 Récupération de toutes les activités avec informations complètes`);
+
+      const { data, error } = await this.supabase
+        .from('activities')
+        .select(`
+          id,
+          title,
+          short_description,
+          long_description,
+          benefits,
+          typical_situations,
+          location_type,
+          address,
+          practice_id,
+          creator_id,
+          status,
+          is_active
+        `)
+        .eq('is_active', true)
+        .eq('status', 'approved');
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des activités:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      const activities = (data || []).map((activity: any) => ({
+        id: activity.id,
+        title: activity.title,
+        shortDescription: activity.short_description || null,
+        longDescription: activity.long_description || null,
+        benefits: activity.benefits || null,
+        typicalSituations: activity.typical_situations || null,
+        locationType: activity.location_type || null,
+        address: activity.address || null,
+        practiceId: activity.practice_id || null,
+        creatorId: activity.creator_id || null,
+      }));
+
+      console.log(`✅ ${activities.length} activités récupérées avec informations complètes`);
+      return {
+        success: true,
+        data: activities
+      };
+
+    } catch (error: any) {
+      console.error('❌ Erreur lors de la récupération des activités:', error);
+      return {
+        success: false,
+        error: error?.message || 'Erreur interne du service'
+      };
+    }
+  }
+
   async getAllPracticesWithFullInfo(): Promise<{
     success: boolean;
     data?: Array<{
@@ -2452,6 +2526,151 @@ export class SupabaseService {
         searchTerm: situationChunks.join(' '),
         total: 0,
         error: 'Erreur interne du service'
+      };
+    }
+  }
+
+  /**
+   * Récupère tous les hower angels de la base de données avec leurs activités et spécialités
+   * @returns Liste de tous les hower angels
+   */
+  async getAllHowerAngels(): Promise<{
+    success: boolean;
+    data?: HowerAngelSearchResult[];
+    error?: string;
+  }> {
+    try {
+      console.log(`🔍 Récupération de tous les hower angels depuis la base de données`);
+
+      // Récupérer tous les user_data qui sont des hower angels
+      // specialties est un JSONB avec un champ choice qui contient un array d'IDs de pratiques
+      // activities.creator_id référence user_data.user_id (pas user_data.id)
+      const { data, error } = await this.supabase
+        .from('user_data')
+        .select(`
+          id,
+          user_id,
+          first_name,
+          last_name,
+          email,
+          experience,
+          profil,
+          specialties,
+          activities:activities!activities_creator_id_user_data_fkey(
+            id,
+            title,
+            short_description,
+            long_description,
+            duration_minutes,
+            participants,
+            rating,
+            price,
+            benefits,
+            location_type,
+            address,
+            selected_keywords,
+            presentation_image_public_url,
+            presentation_video_public_url,
+            status,
+            is_active
+          )
+        `);
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des hower angels:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+
+      // Récupérer toutes les pratiques pour mapper les IDs depuis specialties.choice
+      const { data: practicesData, error: practicesError } = await this.supabase
+        .from('practices')
+        .select('id, title, short_description')
+        .eq('is_active', true);
+
+      if (practicesError) {
+        console.warn('⚠️ Erreur lors de la récupération des pratiques pour les spécialités:', practicesError);
+      }
+
+      // Créer une map des pratiques par ID pour accès rapide
+      const practicesMap = new Map<string, { id: string; title: string; shortDescription?: string }>();
+      (practicesData || []).forEach((practice: any) => {
+        practicesMap.set(practice.id, {
+          id: practice.id,
+          title: practice.title,
+          shortDescription: practice.short_description
+        });
+      });
+
+      // Mapper les résultats au format HowerAngelSearchResult
+      const howerAngels: HowerAngelSearchResult[] = (data || []).map((user: any) => {
+        // Extraire les spécialités depuis le JSONB specialties.choice
+        let specialties: Array<{ id: string; title: string; shortDescription?: string }> = [];
+        if (user.specialties && typeof user.specialties === 'object') {
+          const choice = user.specialties.choice;
+          if (Array.isArray(choice)) {
+            // Mapper les IDs de pratiques vers les objets HowerAngelSpecialty
+            specialties = choice
+              .filter((practiceId: string) => practicesMap.has(practiceId))
+              .map((practiceId: string) => {
+                const practice = practicesMap.get(practiceId)!;
+                return {
+                  id: practice.id,
+                  title: practice.title,
+                  ...(practice.shortDescription && { shortDescription: practice.shortDescription })
+                };
+              });
+          }
+        }
+
+        const result: HowerAngelSearchResult = {
+          id: user.id,
+          userId: user.user_id,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          email: user.email,
+          specialties: specialties,
+          experience: user.experience,
+          profile: user.profil,
+          activities: (user.activities || []).map((activity: any) => ({
+            id: activity.id,
+            title: activity.title,
+            shortDescription: activity.short_description,
+            longDescription: activity.long_description,
+            durationMinutes: activity.duration_minutes,
+            participants: activity.participants,
+            rating: activity.rating,
+            price: activity.price,
+            benefits: activity.benefits,
+            locationType: activity.location_type,
+            address: activity.address,
+            selectedKeywords: activity.selected_keywords,
+            presentationImagePublicUrl: activity.presentation_image_public_url,
+            presentationVideoPublicUrl: activity.presentation_video_public_url,
+            status: activity.status,
+            isActive: activity.is_active
+          })),
+          relevanceScore: 1.0, // Pas de score de pertinence pour une récupération complète
+          similarity: 1.0,
+          vectorSimilarity: null,
+          bm25Similarity: null
+        };
+        return result;
+      });
+
+      console.log(`✅ ${howerAngels.length} hower angels récupérés depuis la base de données`);
+      return {
+        success: true,
+        data: howerAngels
+      };
+
+    } catch (error: any) {
+      console.error('❌ Erreur lors de la récupération de tous les hower angels:', error);
+      return {
+        success: false,
+        error: error?.message || 'Erreur interne du service'
       };
     }
   }
