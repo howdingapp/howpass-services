@@ -1787,7 +1787,7 @@ CRITÈRES D'ÉVALUATION:
 - Évalue la pertinence globale, pas seulement une correspondance partielle
 - IMPORTANT: Ne te base PAS QUE sur la notoriété ou la déclaration du praticien. La pertinence se juge principalement sur la correspondance des spécialités et activités avec les besoins exprimés par l'utilisateur.
 
-Retourne uniquement les praticiens avec un score de pertinence >= 6/10.`;
+Retourne uniquement les praticiens avec un score de pertinence >= 7/10.`;
 
     // Appeler la fonction générique de worker (héritée de BaseChatBotService)
     const workerResults = await this.retrieveDataFromAgentWorkerSearch(
@@ -1797,7 +1797,7 @@ Retourne uniquement les praticiens avec un score de pertinence >= 6/10.`;
       context,
       workerInstruction,
       itemsPerWorker, // 10 hower angels par worker
-      0.6, // Score minimum 6/10
+      0.7, // Score minimum 7/10
       15  // Top 15 résultats
     );
     
@@ -1883,7 +1883,7 @@ CRITÈRES D'ÉVALUATION:
 - Évalue la pertinence globale, pas seulement une correspondance partielle
 - IMPORTANT: Ne te base PAS QUE sur la notoriété ou la déclaration de la pratique. Certaines pratiques peuvent être créées et pas forcément connues du grand public, mais si les mots-clés et les bénéfices semblent pertinents par rapport au contexte utilisateur, tu dois les mettre en avant. La pertinence se juge principalement sur la correspondance des mots-clés et des bénéfices, pas uniquement sur la popularité.
 
-Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
+Retourne uniquement les pratiques avec un score de pertinence >= 7/10.`;
 
     // Appeler la fonction générique de worker
     const workerResults = await this.retrieveDataFromAgentWorkerSearch(
@@ -1893,7 +1893,7 @@ Retourne uniquement les pratiques avec un score de pertinence >= 6/10.`;
       context,
       workerInstruction,
       itemsPerWorker, // 10 pratiques par worker
-      0.6, // Score minimum 6/10
+      0.7, // Score minimum 7/10
       10  // Top 10 résultats
     );
     
@@ -3379,6 +3379,9 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
     reason?: string;
     finalObject?: RecommendationMessageResponse;
   }> {
+
+    console.log("validateFirstResponse - start");
+
     // Utiliser validateSummaryResponse pour valider le format, les IDs et les distances
     const summaryValidationResult = await this.validateSummaryResponse(
       response,
