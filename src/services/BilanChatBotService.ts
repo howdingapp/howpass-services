@@ -3081,7 +3081,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
 
     // Créer des Sets pour vérifier rapidement l'existence des IDs
     const activityIds = new Set((globalIntentInfos.activities || []).map(a => a.id));
-    globalIntentInfos.howerAngels.forEach(howerAngel => {
+    (globalIntentInfos.howerAngels || []).forEach(howerAngel => {
       if (howerAngel.activities) {
         howerAngel.activities.forEach(activity => {
           if (activity.id) {
@@ -3092,7 +3092,7 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
     });
 
     const practiceIds = new Set((globalIntentInfos.practices || []).map(p => p.id));
-    globalIntentInfos.howerAngels.forEach(howerAngel => {
+    (globalIntentInfos.howerAngels || []).forEach(howerAngel => {
       if (howerAngel.specialties) {
         howerAngel.specialties.forEach(specialty => {
           if (specialty.id) {
