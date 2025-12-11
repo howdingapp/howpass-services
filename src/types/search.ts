@@ -66,6 +66,7 @@ export interface ActivitySearchResult {
   locationType?: string;
   address?: any;
   selectedKeywords?: any;
+  creatorId?: string | null;
   relevanceScore: number;
   similarity: number;
   vectorSimilarity: number | null;

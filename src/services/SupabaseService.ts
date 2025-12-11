@@ -1291,6 +1291,7 @@ export class SupabaseService {
           locationType: r?.location_type,
           address: r?.address,
           selectedKeywords: r?.selected_keywords,
+          creatorId: r?.creator_id ?? null,
           relevanceScore
         };
         if (withMatchInfos) {
@@ -1506,6 +1507,7 @@ export class SupabaseService {
           locationType: r?.location_type,
           address: r?.address,
           selectedKeywords: r?.selected_keywords,
+          creatorId: r?.creator_id ?? null,
           relevanceScore,
           similarity: relevanceScore,
           vectorSimilarity: r?.vector_similarity ?? null,

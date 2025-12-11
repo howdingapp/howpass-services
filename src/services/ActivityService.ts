@@ -149,18 +149,17 @@ export class ActivityService {
       return true;
     }
 
-    // Si l'activité n'a pas d'adresse, chercher l'adresse du créateur (hower angel)
-    if (howerAngelsMap) {
-      // Chercher le hower angel qui propose cette activité
-      for (const howerAngel of howerAngelsMap.values()) {
-        if (howerAngel.activities && howerAngel.activities.some(a => a.id === activity.id)) {
-          // Si le hower angel a une distance (donc une adresse), l'activité devrait aussi en avoir une
-          if (howerAngel.distanceFromOrigin) {
-            return true;
-          }
-          // Si le hower angel n'a pas d'adresse, c'est normal que l'activité n'en ait pas non plus
-          return false;
+    // Si l'activité n'a pas d'adresse, chercher l'adresse du créateur (hower angel) via creatorId
+    if (activity.creatorId && howerAngelsMap) {
+      // Chercher le hower angel par userId (qui correspond au creatorId de l'activité)
+      const creatorHowerAngel = howerAngelsMap.get(activity.creatorId);
+      if (creatorHowerAngel) {
+        // Si le hower angel créateur a une distance (donc une adresse), l'activité devrait aussi en avoir une
+        if (creatorHowerAngel.distanceFromOrigin) {
+          return true;
         }
+        // Si le hower angel créateur n'a pas d'adresse, c'est normal que l'activité n'en ait pas non plus
+        return false;
       }
     }
 
@@ -226,21 +225,20 @@ export class ActivityService {
           console.log(`[ActivityService] associateDistancesFromAddress - Activité ${activity.id} n'a PAS d'adresse`);
         }
 
-        // Sinon, chercher l'adresse du créateur (hower angel)
-        if (howerAngelsMap) {
-          // Chercher le hower angel qui propose cette activité
-          for (const howerAngel of howerAngelsMap.values()) {
-            if (howerAngel.activities && howerAngel.activities.some(a => a.id === activity.id)) {
-              // Si le hower angel a une distance, utiliser cette distance pour l'activité
-              if (howerAngel.distanceFromOrigin) {
-                return {
-                  ...activity,
-                  distanceFromOrigin: howerAngel.distanceFromOrigin
-                };
-              }
-              // Si le hower angel n'a pas de distance, l'activité n'en a pas non plus
-              return { ...activity };
+        // Sinon, chercher l'adresse du créateur (hower angel) via creatorId
+        if (activity.creatorId && howerAngelsMap) {
+          // Chercher le hower angel par userId (qui correspond au creatorId de l'activité)
+          const creatorHowerAngel = howerAngelsMap.get(activity.creatorId);
+          if (creatorHowerAngel) {
+            // Si le hower angel créateur a une distance, utiliser cette distance pour l'activité
+            if (creatorHowerAngel.distanceFromOrigin) {
+              return {
+                ...activity,
+                distanceFromOrigin: creatorHowerAngel.distanceFromOrigin
+              };
             }
+            // Si le hower angel créateur n'a pas de distance, l'activité n'en a pas non plus
+            return { ...activity };
           }
         }
 
@@ -307,21 +305,20 @@ export class ActivityService {
           console.log(`[ActivityService] associateDistancesFromCoordinates - Activité ${activity.id} n'a PAS d'adresse`);
         }
 
-        // Sinon, chercher l'adresse du créateur (hower angel)
-        if (howerAngelsMap) {
-          // Chercher le hower angel qui propose cette activité
-          for (const howerAngel of howerAngelsMap.values()) {
-            if (howerAngel.activities && howerAngel.activities.some(a => a.id === activity.id)) {
-              // Si le hower angel a une distance, utiliser cette distance pour l'activité
-              if (howerAngel.distanceFromOrigin) {
-                return {
-                  ...activity,
-                  distanceFromOrigin: howerAngel.distanceFromOrigin
-                };
-              }
-              // Si le hower angel n'a pas de distance, l'activité n'en a pas non plus
-              return { ...activity };
+        // Sinon, chercher l'adresse du créateur (hower angel) via creatorId
+        if (activity.creatorId && howerAngelsMap) {
+          // Chercher le hower angel par userId (qui correspond au creatorId de l'activité)
+          const creatorHowerAngel = howerAngelsMap.get(activity.creatorId);
+          if (creatorHowerAngel) {
+            // Si le hower angel créateur a une distance, utiliser cette distance pour l'activité
+            if (creatorHowerAngel.distanceFromOrigin) {
+              return {
+                ...activity,
+                distanceFromOrigin: creatorHowerAngel.distanceFromOrigin
+              };
             }
+            // Si le hower angel créateur n'a pas de distance, l'activité n'en a pas non plus
+            return { ...activity };
           }
         }
 
