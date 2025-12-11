@@ -1,6 +1,6 @@
 
 import { HowanaBilanContext, HowanaContext, HowanaRecommandationContext } from '../types/repositories';
-import { ChatBotOutputSchema, ExtractedRecommandations, GlobalRecommendationIntentInfos, OpenAIToolsDescription, RecommendationIntent, RecommendationMessageResponse, BilanSummary, BilanRecommendation } from '../types';
+import { ChatBotOutputSchema, ExtractedRecommandations, GlobalRecommendationIntentInfos, OpenAIToolsDescription, RecommendationIntent, RecommendationMessageResponse, BilanSummary, BilanRecommendation, ActivityItem, PracticeItem, HowerAngelItem } from '../types';
 import {
   BilanChunk,
   BilanQuestionIntent,
@@ -1660,7 +1660,68 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       context // Passer le contexte pour accéder aux questionnaireAnswers
     );
     
+    // Convertir les résultats de l'univers en format GlobalRecommendationIntentInfos
+    // pour que validateSummaryResponse puisse les récupérer
+    // Les données incluent déjà distanceFromOrigin si les distances ont été calculées
+    type PracticeWithDistance = PracticeSearchResult & { source?: 'semantic' | 'worker'; workerReasons?: string[]; distanceFromOrigin?: DistanceResult };
+    type ActivityWithDistance = ActivitySearchResult & { distanceFromOrigin?: DistanceResult };
+    type HowerAngelWithDistance = HowerAngelSearchResult & { distanceFromOrigin?: DistanceResult };
+    
+    const practicesFromUniverse = (universe.practices?.value || []) as PracticeWithDistance[];
+    const activitiesFromUniverse = (universe.activities?.value || []) as ActivityWithDistance[];
+    const howerAngelsFromUniverse = (universe.howerAngels?.value || []) as HowerAngelWithDistance[];
+    
+    // Convertir PracticeSearchResult[] en PracticeItem[] avec distance
+    const practiceItems = practicesFromUniverse.map((practice: PracticeWithDistance) => ({
+      type: 'practice' as const,
+      id: practice.id,
+      title: practice.title,
+      shortDescription: practice.shortDescription,
+      longDescription: practice.longDescription,
+      benefits: practice.benefits,
+      typicalSituations: practice.typicalSituations,
+      relevanceScore: practice.relevanceScore || 0,
+      distanceFromOrigin: practice.distanceFromOrigin // Inclure la distance
+    }));
+    
+    // Convertir ActivitySearchResult[] en ActivityItem[] avec distance
+    const activityItems = activitiesFromUniverse.map((activity: ActivityWithDistance) => ({
+      type: 'activity' as const,
+      id: activity.id,
+      title: activity.title,
+      shortDescription: activity.shortDescription,
+      longDescription: activity.longDescription,
+      durationMinutes: activity.durationMinutes,
+      participants: activity.participants,
+      rating: activity.rating,
+      price: activity.price,
+      benefits: activity.benefits,
+      locationType: activity.locationType,
+      address: activity.address,
+      selectedKeywords: activity.selectedKeywords,
+      typicalSituations: activity.typicalSituations,
+      relevanceScore: activity.relevanceScore || 0,
+      distanceFromOrigin: activity.distanceFromOrigin // Inclure la distance
+    }));
+    
+    // Convertir HowerAngelSearchResult[] en HowerAngelItem[] avec distance
+    const howerAngelItems = howerAngelsFromUniverse.map((howerAngel: HowerAngelWithDistance) => ({
+      id: howerAngel.id,
+      userId: howerAngel.userId,
+      firstName: howerAngel.firstName,
+      lastName: howerAngel.lastName,
+      email: howerAngel.email,
+      specialties: howerAngel.specialties,
+      experience: howerAngel.experience,
+      profile: howerAngel.profile || '',
+      activities: howerAngel.activities,
+      relevanceScore: howerAngel.relevanceScore || 0,
+      distanceFromOrigin: howerAngel.distanceFromOrigin // Inclure la distance
+    }));
+    
     // Créer globalIntentInfos avec les résultats de l'univers
+    // Inclure à la fois bilanUniverContext ET les champs activities, practices, howerAngels
+    // pour que validateSummaryResponse puisse les récupérer
     return {
       bilanUniverContext: {
         families: universe.families,
@@ -1674,7 +1735,22 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           value: questionnaires
         },
         computedAt: new Date().toISOString()
-      }
+      },
+      // Ajouter les données converties pour que validateSummaryResponse puisse les utiliser
+      activities: activityItems,
+      practices: practiceItems,
+      howerAngels: howerAngelItems,
+      faqs: [], // Pas de FAQs pour les bilans
+      focusedHowerAngel: null,
+      focusedActivity: null,
+      focusedPractice: null,
+      focusedFaqs: [],
+      pendingConfirmations: {
+        focusedHowerAngel: null,
+        focusedActivity: null,
+        focusedPractice: null
+      },
+      unknownFocused: null
     };
 
   }
@@ -3069,16 +3145,6 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       };
     }
 
-    // Récupérer l'univers pour vérifier les distances
-    const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;
-    
-    if (!bilanUniverContext) {
-      return {
-        isValid: false,
-        reason: 'Impossible de valider les distances : bilanUniverContext non disponible dans le contexte'
-      };
-    }
-
     // Créer des Sets pour vérifier rapidement l'existence des IDs
     const activityIds = new Set((globalIntentInfos.activities || []).map(a => a.id));
     (globalIntentInfos.howerAngels || []).forEach(howerAngel => {
@@ -3103,24 +3169,25 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
     });
 
     // Créer une map des distances : ID -> DistanceResult
+    // Utiliser globalIntentInfos au lieu de bilanUniverContext
     const distancesMap = new Map<string, DistanceResult>();
     
-    const practices = bilanUniverContext.practices?.value || [];
-    practices.forEach((practice: any) => {
-      if (practice.id && practice.distanceFromOrigin) {
-        distancesMap.set(practice.id, practice.distanceFromOrigin);
-      }
-    });
-    
-    const activities = bilanUniverContext.activities?.value || [];
-    activities.forEach((activity: any) => {
+    // Récupérer les distances depuis globalIntentInfos.activities
+    (globalIntentInfos.activities || []).forEach((activity: ActivityItem & { distanceFromOrigin?: DistanceResult }) => {
       if (activity.id && activity.distanceFromOrigin) {
         distancesMap.set(activity.id, activity.distanceFromOrigin);
       }
     });
     
-    const howerAngels = bilanUniverContext.howerAngels?.value || [];
-    howerAngels.forEach((howerAngel: any) => {
+    // Récupérer les distances depuis globalIntentInfos.practices
+    (globalIntentInfos.practices || []).forEach((practice: PracticeItem & { distanceFromOrigin?: DistanceResult }) => {
+      if (practice.id && practice.distanceFromOrigin) {
+        distancesMap.set(practice.id, practice.distanceFromOrigin);
+      }
+    });
+    
+    // Récupérer les distances depuis globalIntentInfos.howerAngels
+    (globalIntentInfos.howerAngels || []).forEach((howerAngel: HowerAngelItem & { distanceFromOrigin?: DistanceResult }) => {
       if (howerAngel.id && howerAngel.distanceFromOrigin) {
         distancesMap.set(howerAngel.id, howerAngel.distanceFromOrigin);
       }
