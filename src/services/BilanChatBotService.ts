@@ -3550,10 +3550,11 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       context
     );
     
-    // Si la validation du summary a échoué, retourner le résultat
+    // Si la validation du summary a échoué, lancer une erreur
     if (!summaryValidationResult.isValid) {
-      console.log("Invalid sumarry detected", summaryValidationResult.reason );
-      return summaryValidationResult;
+      const errorMessage = summaryValidationResult.reason || 'La validation du summary a échoué';
+      console.error("❌ [BILAN] Invalid summary detected:", errorMessage);
+      throw new Error(errorMessage);
     }
     
     // Vérifier que la réponse respecte le format Summary avant de la marquer comme "summary"
