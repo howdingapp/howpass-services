@@ -774,6 +774,25 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     const bilanUniverContext = context.metadata?.['globalIntentInfos']?.bilanUniverContext as BilanUniverContext | undefined;
     const families = bilanUniverContext?.families?.value || [];
     
+    // Récupérer globalIntentInfos pour filtrer les IDs à moins de 60 km
+    const globalIntentInfos = context.metadata?.['globalIntentInfos'] as GlobalRecommendationIntentInfos | undefined;
+    
+    // Filtrer les activités à moins de 60 km
+    const aroundYouActivityIds = (globalIntentInfos?.activities || [])
+      .filter((activity: ActivityItem & { distanceFromOrigin?: DistanceResult }) => {
+        if (!activity.distanceFromOrigin) return false;
+        return activity.distanceFromOrigin.distance < 60;
+      })
+      .map((activity: ActivityItem) => activity.id);
+    
+    // Filtrer les pratiques à moins de 60 km
+    const aroundYouPracticeIds = (globalIntentInfos?.practices || [])
+      .filter((practice: PracticeItem & { distanceFromOrigin?: DistanceResult }) => {
+        if (!practice.distanceFromOrigin) return false;
+        return practice.distanceFromOrigin.distance < 60;
+      })
+      .map((practice: PracticeItem) => practice.id);
+    
     // Construire la description avec les pourcentages de dominance
     let recommendationDescription = "Recommandation personnalisée basée sur l'analyse du bilan de bien-être. ";
     
@@ -793,6 +812,8 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       availablePracticeIds,
       allAvailableIds
     });
+    
+    console.log(`📍 [BILANS] AroundYou: ${aroundYouActivityIds.length} activités et ${aroundYouPracticeIds.length} pratiques à moins de 60 km`);
 
     return {
       format: { 
@@ -806,7 +827,9 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
               availableActivityIds,
               availablePracticeIds,
               recommendationDescription,
-              families
+              families,
+              aroundYouActivityIds,
+              aroundYouPracticeIds
             ),
             importanteKnowledge: {
               type: "array",
@@ -831,7 +854,9 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     availableActivityIds: string[],
     availablePracticeIds: string[],
     description: string = "Recommandation personnalisée basée sur l'analyse du bilan de bien-être",
-    families: BilanFamily[] = []
+    families: BilanFamily[] = [],
+    aroundYouActivityIds: string[] = [],
+    aroundYouPracticeIds: string[] = []
   ): any {
     const allAvailableIds = [...availableActivityIds, ...availablePracticeIds];
     
@@ -1002,6 +1027,53 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         description: "Message destiné à l'utilisateur expliquant pourquoi ces choix spécifiques ont été faits pour cette famille et pourquoi cet ordre de recommandation (du plus pertinent au moins pertinent), formulé en vous parlant directement"
       };
       byFamilyPanelItemRequired.push("reason");
+      
+      // Ajouter aroundYouRecommended si on a des IDs disponibles à moins de 60 km
+      const hasAroundYouActivities = aroundYouActivityIds.length > 0;
+      const hasAroundYouPractices = aroundYouPracticeIds.length > 0;
+      
+      if (hasAroundYouActivities || hasAroundYouPractices) {
+        const aroundYouProperties: any = {};
+        const aroundYouRequired: string[] = [];
+        
+        if (hasAroundYouPractices) {
+          aroundYouProperties.orderedRecommendedPractices = {
+            type: "array",
+            items: recommendationItemSchema(
+              aroundYouPracticeIds,
+              "Identifiant unique de la pratique recommandée pour cette famille, située à moins de 60 km"
+            ),
+            description: "Pratiques recommandées pour cette famille situées à moins de 60 km, ordonnées par pertinence décroissante"
+          };
+          aroundYouRequired.push("orderedRecommendedPractices");
+        }
+        
+        if (hasAroundYouActivities) {
+          aroundYouProperties.orderedRecommendedActivities = {
+            type: "array",
+            items: recommendationItemSchema(
+              aroundYouActivityIds,
+              "Identifiant unique de l'activité recommandée pour cette famille, située à moins de 60 km"
+            ),
+            description: "Activités recommandées pour cette famille situées à moins de 60 km, ordonnées par pertinence décroissante"
+          };
+          aroundYouRequired.push("orderedRecommendedActivities");
+        }
+        
+        aroundYouProperties.reason = {
+          type: "string",
+          description: "Message destiné à l'utilisateur expliquant pourquoi ces recommandations à proximité (moins de 60 km) ont été choisies pour cette famille, formulé en vous parlant directement"
+        };
+        aroundYouRequired.push("reason");
+        
+        byFamilyPanelItemProperties.aroundYouRecommended = {
+          type: "object",
+          properties: aroundYouProperties,
+          required: aroundYouRequired,
+          additionalProperties: false,
+          description: "Recommandations à proximité (moins de 60 km) pour cette famille"
+        };
+      }
       
       // Construire l'objet avec une propriété par famille (clé = familyId)
       const byFamilyPanelProperties: any = {};
@@ -3995,6 +4067,75 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
             }
           }
         }
+        
+        // Vérifier aroundYouRecommended si présent
+        if (family.aroundYouRecommended) {
+          const aroundYou = family.aroundYouRecommended;
+          
+          if (aroundYou.orderedRecommendedPractices && Array.isArray(aroundYou.orderedRecommendedPractices)) {
+            for (let practiceIndex = 0; practiceIndex < aroundYou.orderedRecommendedPractices.length; practiceIndex++) {
+              const practice = aroundYou.orderedRecommendedPractices[practiceIndex];
+              if (!practice || !practice.id) continue;
+              
+              const idValidation = validateAndExtractId(practice.id, 'practice');
+              if (!idValidation.isValid) {
+                return {
+                  isValid: false,
+                  reason: `byFamilyRecommendedPanel[${familyIndex}].aroundYouRecommended.orderedRecommendedPractices[${practiceIndex}] : ${idValidation.reason || 'ID invalide'}`
+                };
+              }
+              
+              const distanceValidation = await validateDistance(idValidation.extractedId!, 'practice', `byFamilyRecommendedPanel[${familyIndex}].aroundYouRecommended.orderedRecommendedPractices[${practiceIndex}]`);
+              if (!distanceValidation.isValid) {
+                return {
+                  isValid: false,
+                  reason: distanceValidation.reason || `Distance manquante pour byFamilyRecommendedPanel[${familyIndex}].aroundYouRecommended.orderedRecommendedPractices[${practiceIndex}]`
+                };
+              }
+              
+              // Vérifier que la distance est bien < 60 km
+              const distance = distancesMap.get(idValidation.extractedId!);
+              if (distance && distance.distance >= 60) {
+                return {
+                  isValid: false,
+                  reason: `byFamilyRecommendedPanel[${familyIndex}].aroundYouRecommended.orderedRecommendedPractices[${practiceIndex}] : La pratique doit être à moins de 60 km (distance actuelle: ${distance.distance} km)`
+                };
+              }
+            }
+          }
+          
+          if (aroundYou.orderedRecommendedActivities && Array.isArray(aroundYou.orderedRecommendedActivities)) {
+            for (let activityIndex = 0; activityIndex < aroundYou.orderedRecommendedActivities.length; activityIndex++) {
+              const activity = aroundYou.orderedRecommendedActivities[activityIndex];
+              if (!activity || !activity.id) continue;
+              
+              const idValidation = validateAndExtractId(activity.id, 'activity');
+              if (!idValidation.isValid) {
+                return {
+                  isValid: false,
+                  reason: `byFamilyRecommendedPanel[${familyIndex}].aroundYouRecommended.orderedRecommendedActivities[${activityIndex}] : ${idValidation.reason || 'ID invalide'}`
+                };
+              }
+              
+              const distanceValidation = await validateDistance(idValidation.extractedId!, 'activity', `byFamilyRecommendedPanel[${familyIndex}].aroundYouRecommended.orderedRecommendedActivities[${activityIndex}]`);
+              if (!distanceValidation.isValid) {
+                return {
+                  isValid: false,
+                  reason: distanceValidation.reason || `Distance manquante pour byFamilyRecommendedPanel[${familyIndex}].aroundYouRecommended.orderedRecommendedActivities[${activityIndex}]`
+                };
+              }
+              
+              // Vérifier que la distance est bien < 60 km
+              const distance = distancesMap.get(idValidation.extractedId!);
+              if (distance && distance.distance >= 60) {
+                return {
+                  isValid: false,
+                  reason: `byFamilyRecommendedPanel[${familyIndex}].aroundYouRecommended.orderedRecommendedActivities[${activityIndex}] : L'activité doit être à moins de 60 km (distance actuelle: ${distance.distance} km)`
+                };
+              }
+            }
+          }
+        }
       }
     }
 
@@ -4112,6 +4253,39 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
                     }
                   }
                 });
+              }
+              
+              // Enrichir aroundYouRecommended avec les distances
+              if (family && family.aroundYouRecommended) {
+                const aroundYou = family.aroundYouRecommended;
+                
+                if (aroundYou.orderedRecommendedPractices && Array.isArray(aroundYou.orderedRecommendedPractices)) {
+                  aroundYou.orderedRecommendedPractices.forEach((practice: any) => {
+                    if (practice && practice.id) {
+                      const idValidation = validateAndExtractId(practice.id, 'practice');
+                      if (idValidation.isValid && idValidation.extractedId) {
+                        const distance = distancesMap.get(idValidation.extractedId);
+                        if (distance) {
+                          practice.distance = distance;
+                        }
+                      }
+                    }
+                  });
+                }
+                
+                if (aroundYou.orderedRecommendedActivities && Array.isArray(aroundYou.orderedRecommendedActivities)) {
+                  aroundYou.orderedRecommendedActivities.forEach((activity: any) => {
+                    if (activity && activity.id) {
+                      const idValidation = validateAndExtractId(activity.id, 'activity');
+                      if (idValidation.isValid && idValidation.extractedId) {
+                        const distance = distancesMap.get(idValidation.extractedId);
+                        if (distance) {
+                          activity.distance = distance;
+                        }
+                      }
+                    }
+                  });
+                }
               }
             });
           }

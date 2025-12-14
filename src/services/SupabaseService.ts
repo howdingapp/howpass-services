@@ -389,6 +389,7 @@ export class SupabaseService {
     cost_output?: number | null; // Nombre de tokens output utilisés
     user_input_text?: string | null; // Message utilisateur qui a déclenché cette réponse
     valid_for_limit?: boolean; // Indique si ce message compte dans la limite journalière
+    notify_on_response?: boolean; // Indique si l'utilisateur doit être notifié quand la réponse est prête
   }): Promise<{
     success: boolean;
     data?: AIResponse;
@@ -444,11 +445,17 @@ export class SupabaseService {
         updatePayload.valid_for_limit = updateData.valid_for_limit;
       }
 
+      // Ajouter notify_on_response si fourni
+      if (updateData.notify_on_response !== undefined) {
+        updatePayload.notify_on_response = updateData.notify_on_response;
+      }
+
+      // Spécifier explicitement les colonnes à sélectionner pour éviter updated_at qui n'existe pas
       const { data, error } = await this.supabase
         .from('ai_responses')
         .update(updatePayload)
         .eq('id', aiResponseId)
-        .select()
+        .select('id, conversation_id, user_id, response_text, message_type, created_at, metadata, next_response_id, user_input_text, valid_for_limit, final_price, cost_input, cost_cached_input, cost_output, notify_on_response')
         .single();
 
       if (error) {
