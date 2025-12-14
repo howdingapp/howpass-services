@@ -364,6 +364,15 @@ export interface BilanGlobalIntentInfos {
 }
 
 /**
+ * Statut de la réponse concernant les animaux dans le questionnaire de bilan
+ */
+export enum AnimalResponseStatus {
+  NoAnimal = "NoAnimal",
+  Animal = "Animal",
+  NotAnswered = "NotAnswered"
+}
+
+/**
  * Messages d'erreur pour l'échec du calcul du bilan
  * 10 variations différentes du message "Je n'ai pas réussi à calculer ton bilan"
  */

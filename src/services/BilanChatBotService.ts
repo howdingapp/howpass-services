@@ -11,7 +11,8 @@ import {
   BilanQuestionnaireUserMessage,
   BilanQuestionnaireAnswers,
   INITIAL_BILAN_QUESTIONS,
-  BILAN_ERROR_MESSAGES
+  BILAN_ERROR_MESSAGES,
+  AnimalResponseStatus
 } from '../types/bilan';
 import {
   PracticeSearchResult,
@@ -495,6 +496,18 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
         console.log(`✅ [BILAN] ${quickReplyChunks.length} chunks cumulés depuis les quickReplies`);
         console.log(`📝 [BILAN] ${customResponses.length} réponse(s) custom détectée(s)`);
         
+        // Vérifier la réponse à la question sur les animaux (index 6)
+        const animalResponseStatus = this.checkAnimalResponse(questionResponses, currentQuestionnaire);
+        
+        // Stocker dans le contexte pour utilisation ultérieure (dans computeUniverse)
+        if (animalResponseStatus !== AnimalResponseStatus.NotAnswered) {
+          context.metadata = {
+            ...context.metadata,
+            ['animalUniverseStatus']: animalResponseStatus
+          };
+          console.log(`🐾 [BILAN] Statut des animaux déterminé: ${animalResponseStatus}`);
+        }
+        
         // Si on a des réponses custom, appeler super.computeIntent sur ces réponses
         let customChunks: BilanChunk[] = [];
         let intentCost: number | null = null;
@@ -946,60 +959,73 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
       };
     }
     
-    // byFamilyRecommendedPanel avec propriétés conditionnelles
-    const byFamilyPanelItemProperties: any = {
-      familyId: {
-        type: "string",
-        enum: families.map((f: BilanFamily) => f.id),
-        description: "Identifiant de la famille de bien-être"
-      },
-      familyName: {
-        type: "string",
-        description: "Nom de la famille de bien-être"
+    // byFamilyRecommendedPanel : objet avec une propriété par famille (pourcentage > 0)
+    // Filtrer les familles avec pourcentage > 0 (pet-care sera exclu si l'utilisateur a répondu négativement aux animaux)
+    const familiesWithPercentage = families.filter((f: BilanFamily) => f.dominancePercentage > 0);
+    
+    if (familiesWithPercentage.length > 0) {
+      // Schéma réutilisable pour une famille
+      const byFamilyPanelItemProperties: any = {
+        familyName: {
+          type: "string",
+          description: "Nom de la famille de bien-être"
+        }
+      };
+      const byFamilyPanelItemRequired: string[] = ["familyName"];
+      
+      if (hasPractices) {
+        byFamilyPanelItemProperties.orderedRecommendedPractices = {
+          type: "array",
+          items: recommendationItemSchema(
+            availablePracticeIds,
+            "Identifiant unique de la pratique recommandée pour cette famille"
+          ),
+          description: "Pratiques recommandées pour cette famille, ordonnées par pertinence décroissante (idéalement représentatives du pourcentage de dominance de la famille)"
+        };
+        byFamilyPanelItemRequired.push("orderedRecommendedPractices");
       }
-    };
-    const byFamilyPanelItemRequired: string[] = ["familyId", "familyName"];
-    
-    if (hasPractices) {
-      byFamilyPanelItemProperties.orderedRecommendedPractices = {
-        type: "array",
-        items: recommendationItemSchema(
-          availablePracticeIds,
-          "Identifiant unique de la pratique recommandée pour cette famille"
-        ),
-        description: "Pratiques recommandées pour cette famille, ordonnées par pertinence décroissante (idéalement représentatives du pourcentage de dominance de la famille)"
+      
+      if (hasActivities) {
+        byFamilyPanelItemProperties.orderedRecommendedActivities = {
+          type: "array",
+          items: recommendationItemSchema(
+            availableActivityIds,
+            "Identifiant unique de l'activité recommandée pour cette famille"
+          ),
+          description: "Activités recommandées pour cette famille, ordonnées par pertinence décroissante (idéalement représentatives du pourcentage de dominance de la famille)"
+        };
+        byFamilyPanelItemRequired.push("orderedRecommendedActivities");
+      }
+      
+      byFamilyPanelItemProperties.reason = {
+        type: "string",
+        description: "Message destiné à l'utilisateur expliquant pourquoi ces choix spécifiques ont été faits pour cette famille et pourquoi cet ordre de recommandation (du plus pertinent au moins pertinent), formulé en vous parlant directement"
       };
-      byFamilyPanelItemRequired.push("orderedRecommendedPractices");
-    }
-    
-    if (hasActivities) {
-      byFamilyPanelItemProperties.orderedRecommendedActivities = {
-        type: "array",
-        items: recommendationItemSchema(
-          availableActivityIds,
-          "Identifiant unique de l'activité recommandée pour cette famille"
-        ),
-        description: "Activités recommandées pour cette famille, ordonnées par pertinence décroissante (idéalement représentatives du pourcentage de dominance de la famille)"
-      };
-      byFamilyPanelItemRequired.push("orderedRecommendedActivities");
-    }
-    
-    byFamilyPanelItemProperties.reason = {
-      type: "string",
-      description: "Message destiné à l'utilisateur expliquant pourquoi ces choix spécifiques ont été faits pour cette famille et pourquoi cet ordre de recommandation (du plus pertinent au moins pertinent), formulé en vous parlant directement"
-    };
-    byFamilyPanelItemRequired.push("reason");
-    
-    properties.byFamilyRecommendedPanel = {
-      type: "array",
-      items: {
+      byFamilyPanelItemRequired.push("reason");
+      
+      // Construire l'objet avec une propriété par famille (clé = familyId)
+      const byFamilyPanelProperties: any = {};
+      const byFamilyPanelRequired: string[] = [];
+      
+      familiesWithPercentage.forEach((family: BilanFamily) => {
+        byFamilyPanelProperties[family.id] = {
+          type: "object",
+          properties: byFamilyPanelItemProperties,
+          required: byFamilyPanelItemRequired,
+          additionalProperties: false,
+          description: `Recommandations pour la famille ${family.name} (${family.dominancePercentage.toFixed(1)}% de dominance)`
+        };
+        byFamilyPanelRequired.push(family.id);
+      });
+      
+      properties.byFamilyRecommendedPanel = {
         type: "object",
-        properties: byFamilyPanelItemProperties,
-        required: byFamilyPanelItemRequired,
-        additionalProperties: false
-      },
-      description: "Recommandations organisées par famille de bien-être, permettant de structurer les suggestions selon les domaines identifiés"
-    };
+        properties: byFamilyPanelProperties,
+        required: byFamilyPanelRequired,
+        additionalProperties: false,
+        description: "Recommandations organisées par famille de bien-être. Chaque propriété correspond à une famille identifiée dans le contexte (avec pourcentage > 0). L'identifiant de la famille sert de clé."
+      };
+    }
     
     // Champs conditionnels pour les raisons
     if (hasActivities) {
@@ -1435,7 +1461,6 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
    * Retourne un schéma de chunks typés pour extraire les informations des réponses
    */
   protected override getIntentSchema(_context: HowanaContext): ChatBotOutputSchema {
-
     return {
       format: { 
         type: "json_schema",
@@ -2135,6 +2160,115 @@ Retourne uniquement les activités avec un score de pertinence >= 7/10.`;
    * @param totalQuestions Le nombre total de questions dans le dernier questionnaire
    * @param answeredQuestions Le nombre de questions répondues dans le dernier questionnaire
    */
+  /**
+   * Vérifie la réponse à la question sur les animaux (index 6) et détermine si on doit considérer les animaux
+   * @param questionResponses Les réponses aux questions du questionnaire
+   * @param _currentQuestionnaire Le questionnaire courant (non utilisé pour le moment)
+   * @returns Le statut de la réponse concernant les animaux
+   */
+  protected checkAnimalResponse(
+    questionResponses: BilanQuestionnaireAnswers,
+    _currentQuestionnaire: BilanQuestionnaireWithChunks
+  ): AnimalResponseStatus {
+    // Identifier la question sur les animaux dans INITIAL_BILAN_QUESTIONS
+    // C'est la question à l'index 6 : "🐾 Avez-vous un compagnon à quatre pattes ?"
+    const animalQuestionIndex = 6;
+    
+    // Trouver la réponse correspondante à cette question
+    const animalResponse = questionResponses.find(qr => qr.questionIndex === animalQuestionIndex);
+    
+    if (!animalResponse) {
+      // Si aucune réponse n'a été donnée à cette question
+      return AnimalResponseStatus.NotAnswered;
+    }
+    
+    // Vérifier si la réponse correspond à "🚫 Non, pas pour l'instant" (answerIndex = 1)
+    // Dans INITIAL_BILAN_QUESTIONS, l'index 0 = "Oui, j'aimerais aussi prendre soin de mon animal"
+    // et l'index 1 = "Non, pas pour l'instant"
+    if (animalResponse.answerIndex === 1) {
+      console.log(`🐾 [BILAN] Réponse négative aux animaux détectée: "Non, pas pour l'instant"`);
+      return AnimalResponseStatus.NoAnimal;
+    }
+    
+    // Si answerIndex === 0 ou autre réponse positive
+    if (animalResponse.answerIndex === 0) {
+      console.log(`🐾 [BILAN] Réponse positive aux animaux détectée: "Oui, j'aimerais aussi prendre soin de mon animal"`);
+      return AnimalResponseStatus.Animal;
+    }
+    
+    // Par défaut, considérer comme positif si une réponse existe
+    return AnimalResponseStatus.Animal;
+  }
+
+  /**
+   * Vérifie si un élément (pratique, spécialité, activité) appartient à pet-care
+   * @param item L'élément à vérifier
+   * @returns true si l'élément appartient à pet-care
+   */
+  protected isPetCare(item: any): boolean {
+    const familyId = (item.familyId || '').toLowerCase();
+    const familyName = (item.familyName || '').toLowerCase();
+    return familyId.includes('pet') || familyId.includes('animal') || 
+           familyName.includes('pet') || familyName.includes('animal');
+  }
+
+  /**
+   * Filtre les pratiques pour exclure celles de pet-care
+   * @param practices Liste des pratiques à filtrer
+   * @returns Liste des pratiques sans pet-care
+   */
+  protected filterPracticesPetCare<T = any>(practices: T[]): T[] {
+    return practices.filter((p: any) => !this.isPetCare(p));
+  }
+
+  /**
+   * Filtre les howerAngels en excluant complètement ceux qui ont des spécialités ou activités pet-care
+   * @param howerAngels Liste des howerAngels à filtrer
+   * @returns Liste des howerAngels sans ceux qui ont pet-care
+   */
+  protected filterHowerAngelsPetCareExclude(howerAngels: any[]): any[] {
+    return howerAngels.filter(howerAngel => {
+      // Vérifier les spécialités
+      if (howerAngel.specialties && Array.isArray(howerAngel.specialties)) {
+        const hasPetCareSpecialty = howerAngel.specialties.some((specialty: any) => this.isPetCare(specialty));
+        if (hasPetCareSpecialty) return false;
+      }
+      
+      // Vérifier les activités
+      if (howerAngel.activities && Array.isArray(howerAngel.activities)) {
+        const hasPetCareActivity = howerAngel.activities.some((activity: any) => this.isPetCare(activity));
+        if (hasPetCareActivity) return false;
+      }
+      
+      return true;
+    });
+  }
+
+  /**
+   * Filtre les howerAngels en excluant les spécialités et activités pet-care, puis exclut ceux qui n'ont plus de spécialités
+   * @param howerAngelsList Liste des howerAngels à filtrer
+   * @returns Liste des howerAngels avec spécialités/activités pet-care filtrées
+   */
+  protected filterHowerAngelsPetCareFilter(howerAngelsList: HowerAngelSearchResult[]): HowerAngelSearchResult[] {
+    return howerAngelsList.map(ha => {
+      // Filtrer les spécialités pet-care
+      if (ha.specialties && Array.isArray(ha.specialties)) {
+        ha.specialties = ha.specialties.filter((s: any) => !this.isPetCare(s));
+      }
+      // Filtrer les activités pet-care
+      if (ha.activities && Array.isArray(ha.activities)) {
+        ha.activities = ha.activities.filter((a: any) => !this.isPetCare(a));
+      }
+      return ha;
+    }).filter(ha => {
+      // Exclure le howerAngel si après filtrage il n'a plus de spécialités
+      if (ha.specialties && Array.isArray(ha.specialties)) {
+        return ha.specialties.length > 0;
+      }
+      return true;
+    });
+  }
+
   protected async computeUniverse(
     intent: BilanQuestionIntent, 
     questionResponses?: Array<{ question: string; index: number; response: string }>,
@@ -2317,6 +2451,14 @@ Retourne uniquement les activités avec un score de pertinence >= 7/10.`;
       console.log(`📍 [BILAN] Aucune adresse ou position GPS trouvée pour la recherche`);
     }
     
+    // Vérifier si on doit exclure pet-care
+    const animalUniverseStatus = context?.metadata?.['animalUniverseStatus'] as AnimalResponseStatus | undefined;
+    const shouldExcludePetCare = animalUniverseStatus === AnimalResponseStatus.NoAnimal;
+    
+    if (shouldExcludePetCare) {
+      console.log(`🐾 [BILAN] Exclusion de pet-care: pas d'animaux à considérer`);
+    }
+    
     // 1. Récupérer toutes les données de la base de données pour les recherches agentiques
     console.log(`🔍 [BILAN] Récupération de toutes les données depuis la base de données`);
     const [allHowerAngelsResult, allPracticesResult, allActivitiesResult] = await Promise.all([
@@ -2325,9 +2467,17 @@ Retourne uniquement les activités avec un score de pertinence >= 7/10.`;
       this.supabaseService.getAllActivitiesWithFullInfo()
     ]);
     
-    const allHowerAngels = allHowerAngelsResult.success && allHowerAngelsResult.data ? allHowerAngelsResult.data : [];
-    const allPractices = allPracticesResult.success && allPracticesResult.data ? allPracticesResult.data : [];
+    let allHowerAngels = allHowerAngelsResult.success && allHowerAngelsResult.data ? allHowerAngelsResult.data : [];
+    let allPractices = allPracticesResult.success && allPracticesResult.data ? allPracticesResult.data : [];
     const allActivities = allActivitiesResult.success && allActivitiesResult.data ? allActivitiesResult.data : [];
+    
+    // Filtrer pet-care avant les recherches si nécessaire
+    if (shouldExcludePetCare) {
+      allPractices = this.filterPracticesPetCare(allPractices);
+      allHowerAngels = this.filterHowerAngelsPetCareExclude(allHowerAngels);
+      console.log(`🐾 [BILAN] Filtrage pet-care: ${allPractices.length} pratiques et ${allHowerAngels.length} hower angels restants`);
+    }
+    
     console.log(`✅ [BILAN] ${allHowerAngels.length} hower angels, ${allPractices.length} pratiques et ${allActivities.length} activités récupérés`);
     
     // 2. Recherche sémantique et agentique en parallèle pour optimiser les coûts dans le cloud
@@ -2344,12 +2494,25 @@ Retourne uniquement les activités avec un score de pertinence >= 7/10.`;
       context ? this.retrieveDataFromAgentWorkerSearchForActivities(allChunksTexts, context, allActivities) : Promise.resolve([])
     ]);
     
-    const semanticPractices: PracticeSearchResult[] = semanticResults.practices;
+    let semanticPractices: PracticeSearchResult[] = semanticResults.practices;
     let activities: ActivitySearchResult[] = semanticResults.activities;
     let howerAngels: HowerAngelSearchResult[] | HowerAngelWithDistance[] = semanticResults.howerAngels;
-    const workerPractices: PracticeSearchResult[] = workerPracticesResult;
+    let workerPractices: PracticeSearchResult[] = workerPracticesResult;
     let workerHowerAngels: HowerAngelSearchResult[] = workerHowerAngelsResult;
     let workerActivities: ActivitySearchResult[] = workerActivitiesResult;
+    
+    // Filtrer pet-care des résultats si nécessaire
+    if (shouldExcludePetCare) {
+      // Filtrer les pratiques sémantiques et des workers
+      semanticPractices = this.filterPracticesPetCare(semanticPractices);
+      workerPractices = this.filterPracticesPetCare(workerPractices);
+      
+      // Filtrer les howerAngels sémantiques et des workers (filtrer les spécialités/activités pet-care)
+      howerAngels = this.filterHowerAngelsPetCareFilter(howerAngels as HowerAngelSearchResult[]);
+      workerHowerAngels = this.filterHowerAngelsPetCareFilter(workerHowerAngels);
+      
+      console.log(`🐾 [BILAN] Filtrage pet-care des résultats: ${semanticPractices.length} pratiques sémantiques, ${workerPractices.length} pratiques workers, ${howerAngels.length} hower angels sémantiques, ${workerHowerAngels.length} hower angels workers`);
+    }
 
     // Enrichir les données avec les adresses depuis la base de données
     try {
@@ -2813,6 +2976,23 @@ Retourne uniquement les activités avec un score de pertinence >= 7/10.`;
     
     // Trier par score de dominance décroissant
     familiesWithDominance.sort((a, b) => b.dominanceScore - a.dominanceScore);
+    
+    // Vérifier si on doit exclure pet-care (utiliser l'information du contexte)
+    const animalUniverseStatusForFamily = context?.metadata?.['animalUniverseStatus'] as AnimalResponseStatus | undefined;
+    const shouldExcludePetCareForFamily = animalUniverseStatusForFamily === AnimalResponseStatus.NoAnimal;
+    
+    if (shouldExcludePetCareForFamily) {
+      // Trouver la famille pet-care et mettre son score à 0
+      const petCareFamily = familiesWithDominance.find(f => 
+        f.id.toLowerCase().includes('pet') || 
+        f.name.toLowerCase().includes('pet') || 
+        f.name.toLowerCase().includes('animal')
+      );
+      if (petCareFamily) {
+        petCareFamily.dominanceScore = 0;
+        console.log(`🐾 [BILAN] Famille pet-care trouvée (${petCareFamily.name}), score mis à 0 car pas d'animaux à considérer`);
+      }
+    }
     
     // Calculer les pourcentages de dominance (somme = 100%)
     const totalDominanceScore = familiesWithDominance.reduce((sum, family) => sum + family.dominanceScore, 0);
@@ -3359,9 +3539,22 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
               }
             }
             
-            // Enrichir byFamilyRecommendedPanel avec les distances
+            // Enrichir byFamilyRecommendedPanel avec les distances (convertir en array si nécessaire)
             if (summary.recommendation.byFamilyRecommendedPanel) {
-              summary.recommendation.byFamilyRecommendedPanel.forEach((family: any) => {
+              let byFamilyPanelToEnrich: any[] = [];
+              if (Array.isArray(summary.recommendation.byFamilyRecommendedPanel)) {
+                byFamilyPanelToEnrich = summary.recommendation.byFamilyRecommendedPanel;
+              } else if (typeof summary.recommendation.byFamilyRecommendedPanel === 'object') {
+                // Convertir l'objet en array avec familyId comme propriété
+                byFamilyPanelToEnrich = Object.entries(summary.recommendation.byFamilyRecommendedPanel).map(([familyId, familyData]: [string, any]) => ({
+                  familyId,
+                  ...familyData
+                }));
+                // Mettre à jour pour que le frontend reçoive un array
+                summary.recommendation.byFamilyRecommendedPanel = byFamilyPanelToEnrich;
+              }
+              
+              byFamilyPanelToEnrich.forEach((family: any) => {
                 if (family.orderedRecommendedPractices) {
                   family.orderedRecommendedPractices.forEach((practice: any) => {
                     const distance = distancesMap.get(`practice:${practice.id}`);
@@ -3735,10 +3928,26 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
       }
     }
 
-    // Vérifier byFamilyRecommendedPanel
-    if (recommendation.byFamilyRecommendedPanel && Array.isArray(recommendation.byFamilyRecommendedPanel)) {
-      for (let familyIndex = 0; familyIndex < recommendation.byFamilyRecommendedPanel.length; familyIndex++) {
-        const family = recommendation.byFamilyRecommendedPanel[familyIndex];
+    // Vérifier byFamilyRecommendedPanel et convertir l'objet en array si nécessaire
+    let byFamilyPanelArray: any[] = [];
+    if (recommendation.byFamilyRecommendedPanel) {
+      if (Array.isArray(recommendation.byFamilyRecommendedPanel)) {
+        // Déjà un array, utiliser tel quel
+        byFamilyPanelArray = recommendation.byFamilyRecommendedPanel;
+      } else if (typeof recommendation.byFamilyRecommendedPanel === 'object') {
+        // C'est un objet, convertir en array avec familyId comme propriété
+        byFamilyPanelArray = Object.entries(recommendation.byFamilyRecommendedPanel).map(([familyId, familyData]: [string, any]) => ({
+          familyId,
+          ...familyData
+        }));
+        // Mettre à jour recommendation.byFamilyRecommendedPanel pour la suite
+        (recommendation as any).byFamilyRecommendedPanel = byFamilyPanelArray;
+      }
+    }
+    
+    if (byFamilyPanelArray.length > 0) {
+      for (let familyIndex = 0; familyIndex < byFamilyPanelArray.length; familyIndex++) {
+        const family = byFamilyPanelArray[familyIndex];
         if (!family) continue;
         
         if (family.orderedRecommendedPractices && Array.isArray(family.orderedRecommendedPractices)) {
@@ -3861,9 +4070,22 @@ Tu peux utiliser les deux sources pour enrichir tes recommandations. Les pratiqu
             }
           }
           
-          // Enrichir byFamilyRecommendedPanel avec les distances
-          if (recommendationToEnrich.byFamilyRecommendedPanel && Array.isArray(recommendationToEnrich.byFamilyRecommendedPanel)) {
-            recommendationToEnrich.byFamilyRecommendedPanel.forEach((family: any) => {
+          // Enrichir byFamilyRecommendedPanel avec les distances (convertir en array si nécessaire)
+          if (recommendationToEnrich.byFamilyRecommendedPanel) {
+            let byFamilyPanelToEnrich: any[] = [];
+            if (Array.isArray(recommendationToEnrich.byFamilyRecommendedPanel)) {
+              byFamilyPanelToEnrich = recommendationToEnrich.byFamilyRecommendedPanel;
+            } else if (typeof recommendationToEnrich.byFamilyRecommendedPanel === 'object') {
+              // Convertir l'objet en array avec familyId comme propriété
+              byFamilyPanelToEnrich = Object.entries(recommendationToEnrich.byFamilyRecommendedPanel).map(([familyId, familyData]: [string, any]) => ({
+                familyId,
+                ...familyData
+              }));
+              // Mettre à jour pour que le frontend reçoive un array
+              recommendationToEnrich.byFamilyRecommendedPanel = byFamilyPanelToEnrich;
+            }
+            
+            byFamilyPanelToEnrich.forEach((family: any) => {
               if (family && family.orderedRecommendedPractices && Array.isArray(family.orderedRecommendedPractices)) {
                 family.orderedRecommendedPractices.forEach((practice: any) => {
                   if (practice && practice.id) {
