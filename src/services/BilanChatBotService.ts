@@ -1073,6 +1073,8 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
           additionalProperties: false,
           description: "Recommandations à proximité (moins de 60 km) pour cette famille"
         };
+        // Ajouter aroundYouRecommended dans le tableau required si présent
+        byFamilyPanelItemRequired.push("aroundYouRecommended");
       }
       
       // Construire l'objet avec une propriété par famille (clé = familyId)
