@@ -989,105 +989,132 @@ export class BilanChatBotService extends BaseChatBotService<RecommendationMessag
     const familiesWithPercentage = families.filter((f: BilanFamily) => f.dominancePercentage > 0);
     
     if (familiesWithPercentage.length > 0) {
-      // Schéma réutilisable pour une famille
-      const byFamilyPanelItemProperties: any = {
-        familyName: {
-          type: "string",
-          description: "Nom de la famille de bien-être"
-        }
-      };
-      const byFamilyPanelItemRequired: string[] = ["familyName"];
-      
-      if (hasPractices) {
-        byFamilyPanelItemProperties.orderedRecommendedPractices = {
-          type: "array",
-          items: recommendationItemSchema(
-            availablePracticeIds,
-            "Identifiant unique de la pratique recommandée pour cette famille"
-          ),
-          description: "Pratiques recommandées pour cette famille, ordonnées par pertinence décroissante (idéalement représentatives du pourcentage de dominance de la famille)"
-        };
-        byFamilyPanelItemRequired.push("orderedRecommendedPractices");
-      }
-      
-      if (hasActivities) {
-        byFamilyPanelItemProperties.orderedRecommendedActivities = {
-          type: "array",
-          items: recommendationItemSchema(
-            availableActivityIds,
-            "Identifiant unique de l'activité recommandée pour cette famille"
-          ),
-          description: "Activités recommandées pour cette famille, ordonnées par pertinence décroissante (idéalement représentatives du pourcentage de dominance de la famille)"
-        };
-        byFamilyPanelItemRequired.push("orderedRecommendedActivities");
-      }
-      
-      byFamilyPanelItemProperties.reason = {
-        type: "string",
-        description: "Message destiné à l'utilisateur expliquant pourquoi ces choix spécifiques ont été faits pour cette famille et pourquoi cet ordre de recommandation (du plus pertinent au moins pertinent), formulé en vous parlant directement"
-      };
-      byFamilyPanelItemRequired.push("reason");
-      
-      // Ajouter aroundYouRecommended si on a des IDs disponibles à moins de 60 km
-      const hasAroundYouActivities = aroundYouActivityIds.length > 0;
-      const hasAroundYouPractices = aroundYouPracticeIds.length > 0;
-      
-      if (hasAroundYouActivities || hasAroundYouPractices) {
-        const aroundYouProperties: any = {};
-        const aroundYouRequired: string[] = [];
-        
-        if (hasAroundYouPractices) {
-          aroundYouProperties.orderedRecommendedPractices = {
-            type: "array",
-            items: recommendationItemSchema(
-              aroundYouPracticeIds,
-              "Identifiant unique de la pratique recommandée pour cette famille, située à moins de 60 km"
-            ),
-            description: "Pratiques recommandées pour cette famille situées à moins de 60 km, ordonnées par pertinence décroissante"
-          };
-          aroundYouRequired.push("orderedRecommendedPractices");
-        }
-        
-        if (hasAroundYouActivities) {
-          aroundYouProperties.orderedRecommendedActivities = {
-            type: "array",
-            items: recommendationItemSchema(
-              aroundYouActivityIds,
-              "Identifiant unique de l'activité recommandée pour cette famille, située à moins de 60 km"
-            ),
-            description: "Activités recommandées pour cette famille situées à moins de 60 km, ordonnées par pertinence décroissante"
-          };
-          aroundYouRequired.push("orderedRecommendedActivities");
-        }
-        
-        aroundYouProperties.reason = {
-          type: "string",
-          description: "Message destiné à l'utilisateur expliquant pourquoi ces recommandations à proximité (moins de 60 km) ont été choisies pour cette famille, formulé en vous parlant directement"
-        };
-        aroundYouRequired.push("reason");
-        
-        byFamilyPanelItemProperties.aroundYouRecommended = {
-          type: "object",
-          properties: aroundYouProperties,
-          required: aroundYouRequired,
-          additionalProperties: false,
-          description: "Recommandations à proximité (moins de 60 km) pour cette famille"
-        };
-        // Ajouter aroundYouRecommended dans le tableau required si présent
-        byFamilyPanelItemRequired.push("aroundYouRecommended");
-      }
-      
       // Construire l'objet avec une propriété par famille (clé = familyId)
+      // Chaque famille a son propre schéma avec uniquement les IDs de ses pratiques/activités
       const byFamilyPanelProperties: any = {};
       const byFamilyPanelRequired: string[] = [];
       
       familiesWithPercentage.forEach((family: BilanFamily) => {
+        // Extraire les IDs des pratiques de cette famille (topPractices uniquement)
+        const familyPracticeIds: string[] = [];
+        if (family.topPractices && Array.isArray(family.topPractices)) {
+          family.topPractices.forEach((practice: any) => {
+            if (practice.id) {
+              familyPracticeIds.push(practice.id);
+            }
+          });
+        }
+        
+        // Extraire les IDs des activités de cette famille (topActivities uniquement)
+        const familyActivityIds: string[] = [];
+        if (family.topActivities && Array.isArray(family.topActivities)) {
+          family.topActivities.forEach((activity: any) => {
+            if (activity.id) {
+              familyActivityIds.push(activity.id);
+            }
+          });
+        }
+        
+        // Filtrer les IDs aroundYou pour cette famille uniquement
+        const familyAroundYouPracticeIds = aroundYouPracticeIds.filter(id => familyPracticeIds.includes(id));
+        const familyAroundYouActivityIds = aroundYouActivityIds.filter(id => familyActivityIds.includes(id));
+        
+        // Construire le schéma spécifique pour cette famille
+        const familyPanelItemProperties: any = {
+          familyName: {
+            type: "string",
+            description: "Nom de la famille de bien-être"
+          }
+        };
+        const familyPanelItemRequired: string[] = ["familyName"];
+        
+        // Ajouter orderedRecommendedPractices seulement si cette famille a des pratiques
+        if (familyPracticeIds.length > 0) {
+          familyPanelItemProperties.orderedRecommendedPractices = {
+            type: "array",
+            items: recommendationItemSchema(
+              familyPracticeIds,
+              "Identifiant unique de la pratique recommandée pour cette famille"
+            ),
+            description: "Pratiques recommandées pour cette famille, ordonnées par pertinence décroissante (idéalement représentatives du pourcentage de dominance de la famille)"
+          };
+          familyPanelItemRequired.push("orderedRecommendedPractices");
+        }
+        
+        // Ajouter orderedRecommendedActivities seulement si cette famille a des activités
+        if (familyActivityIds.length > 0) {
+          familyPanelItemProperties.orderedRecommendedActivities = {
+            type: "array",
+            items: recommendationItemSchema(
+              familyActivityIds,
+              "Identifiant unique de l'activité recommandée pour cette famille"
+            ),
+            description: "Activités recommandées pour cette famille, ordonnées par pertinence décroissante (idéalement représentatives du pourcentage de dominance de la famille)"
+          };
+          familyPanelItemRequired.push("orderedRecommendedActivities");
+        }
+        
+        familyPanelItemProperties.reason = {
+          type: "string",
+          description: "Message destiné à l'utilisateur expliquant pourquoi ces choix spécifiques ont été faits pour cette famille et pourquoi cet ordre de recommandation (du plus pertinent au moins pertinent), formulé en vous parlant directement"
+        };
+        familyPanelItemRequired.push("reason");
+        
+        // Ajouter aroundYouRecommended si on a des IDs disponibles à moins de 60 km pour cette famille
+        const hasFamilyAroundYouActivities = familyAroundYouActivityIds.length > 0;
+        const hasFamilyAroundYouPractices = familyAroundYouPracticeIds.length > 0;
+        
+        if (hasFamilyAroundYouActivities || hasFamilyAroundYouPractices) {
+          const aroundYouProperties: any = {};
+          const aroundYouRequired: string[] = [];
+          
+          if (hasFamilyAroundYouPractices) {
+            aroundYouProperties.orderedRecommendedPractices = {
+              type: "array",
+              items: recommendationItemSchema(
+                familyAroundYouPracticeIds,
+                "Identifiant unique de la pratique recommandée pour cette famille, située à moins de 60 km"
+              ),
+              description: "Pratiques recommandées pour cette famille situées à moins de 60 km, ordonnées par pertinence décroissante"
+            };
+            aroundYouRequired.push("orderedRecommendedPractices");
+          }
+          
+          if (hasFamilyAroundYouActivities) {
+            aroundYouProperties.orderedRecommendedActivities = {
+              type: "array",
+              items: recommendationItemSchema(
+                familyAroundYouActivityIds,
+                "Identifiant unique de l'activité recommandée pour cette famille, située à moins de 60 km"
+              ),
+              description: "Activités recommandées pour cette famille situées à moins de 60 km, ordonnées par pertinence décroissante"
+            };
+            aroundYouRequired.push("orderedRecommendedActivities");
+          }
+          
+          aroundYouProperties.reason = {
+            type: "string",
+            description: "Message destiné à l'utilisateur expliquant pourquoi ces recommandations à proximité (moins de 60 km) ont été choisies pour cette famille, formulé en vous parlant directement"
+          };
+          aroundYouRequired.push("reason");
+          
+          familyPanelItemProperties.aroundYouRecommended = {
+            type: "object",
+            properties: aroundYouProperties,
+            required: aroundYouRequired,
+            additionalProperties: false,
+            description: "Recommandations à proximité (moins de 60 km) pour cette famille"
+          };
+          // Ajouter aroundYouRecommended dans le tableau required si présent
+          familyPanelItemRequired.push("aroundYouRecommended");
+        }
+        
         byFamilyPanelProperties[family.id] = {
           type: "object",
-          properties: byFamilyPanelItemProperties,
-          required: byFamilyPanelItemRequired,
+          properties: familyPanelItemProperties,
+          required: familyPanelItemRequired,
           additionalProperties: false,
-          description: `Recommandations pour la famille ${family.name} (${family.dominancePercentage.toFixed(1)}% de dominance)`
+          description: `Recommandations pour la famille ${family.name} (${family.dominancePercentage.toFixed(1)}% de dominance). Les pratiques et activités proposées sont limitées à celles appartenant à cette famille.`
         };
         byFamilyPanelRequired.push(family.id);
       });
